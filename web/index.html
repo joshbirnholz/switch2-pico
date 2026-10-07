@@ -45,11 +45,12 @@ main{max-width:980px;margin:0 auto;padding:0 16px 40px;display:grid;gap:16px}
 .pad .g-ls{grid-area:ls}.pad .g-rs{grid-area:rs}.pad .g-dpad{grid-area:dpad}.pad .g-face{grid-area:face}
 .pad .g-lsh{grid-area:lsh}.pad .g-rsh{grid-area:rsh}.pad .g-cen{grid-area:cen}.pad .g-img{grid-area:img}
 @media (min-width:760px){
-  .pad{grid-template-columns:minmax(0,1.45fr) minmax(0,.75fr) minmax(0,1.1fr) minmax(0,.75fr) minmax(0,1.45fr);
-    grid-template-areas:"ls lsh cen rsh face" "dpad img img img rs"}
-  .pad .g-ls,.pad .g-lsh,.pad .g-cen,.pad .g-rsh{align-self:start}
+  .pad{grid-template-columns:minmax(0,1fr) minmax(0,1.9fr) minmax(0,1fr);
+    grid-template-areas:"lsh cen rsh" "ls img face" "dpad img rs"}
+  .pad .g-ls,.pad .g-face{align-self:start}
   .pad .g-dpad,.pad .g-rs{align-self:end}
   .pad .g-img{align-self:center}
+  .pad .g-cen{align-self:end}
 }
 /* D-pad and face buttons as diamonds. */
 .diamonds{display:flex;flex-wrap:wrap;gap:16px 40px}
@@ -94,7 +95,6 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
   <h2>Controller</h2>
   <dl class="kv" id="ctrl"></dl>
   <div class="row" style="margin-top:12px">
-    <button onclick="act('rumble')">Test rumble</button>
     <button onclick="act('disconnect')">Disconnect</button>
     <button class="danger" onclick="if(confirm('Forget the paired controller? Hold Sync on a controller to pair again.'))act('forget')">Forget pairing</button>
   </div>
@@ -104,8 +104,8 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
 <section class="card">
   <h2>USB and system</h2>
   <div class="grid">
-    <label>Appear on USB as
-      <select data-k="usb_mode"><option value="0">Switch Pro Controller (Switch consoles, PC)</option><option value="1">DualSense Edge (PC: GL/GR/C as paddles / Fn)</option><option value="2">DualSense</option><option value="3">Xbox 360 controller</option></select></label>
+    <label>Current mode
+      <select data-k="usb_mode"><option value="0">Switch Pro Controller</option><option value="1">DualSense Edge</option><option value="2">DualSense</option><option value="3">Xbox 360 controller</option></select></label>
     <label>Report interval (ms)<input type="number" min="4" max="16" data-k="usb_interval"></label>
     <label class="check"><input type="checkbox" data-k="led_follow_host">Player LEDs follow the host</label>
     <label class="check"><input type="checkbox" data-k="usb_detach">Only appear on USB while a controller is connected</label>
@@ -119,14 +119,17 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
 </section>
 
 <section class="card">
-  <h2>Button mapping <span class="note" id="map-mode"></span></h2>
-  <p class="note" style="margin-top:0">Choose what each physical button sends to the host, in the current USB mode (each mode keeps its own mapping). The drawing shows the controller live: pressed buttons light up and the sticks move.</p>
+  <h2>Button mapping</h2>
+  <div class="row" style="align-items:flex-end;gap:12px">
+    <label>Mapping for<select id="map-sel" onchange="switchMapMode(this.value)"></select></label>
+    <span class="note" style="flex:1;min-width:220px">Each mode keeps its own mapping; this follows the current mode unless you pick another. The picture shows the controller live: pressed buttons light up and the sticks move.</span>
+  </div>
   <div class="pad" id="map"></div>
   <div class="row" style="margin-top:12px">
     <button id="preset-reset" onclick="presetIdentity()">Reset to labels</button>
     <button id="preset-swap" onclick="presetSwapFace()">Swap A/B and X/Y (positional)</button>
   </div>
-  <label class="check" style="margin-top:12px"><input type="checkbox" data-k="quick_remap">Remap GL/GR from the controller (all modes): hold C + GL (or GR) and press a button. Do it again to clear.</label>
+  <label class="check" style="margin-top:12px"><input type="checkbox" data-k="quick_remap">Remap GL/GR from the controller (all modes): hold C + GL or GR and press a button. Do it again to clear.</label>
 </section>
 
 <section class="card">
@@ -184,6 +187,7 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
   <h2>Haptics test</h2>
   <p class="note" style="margin-top:0">Plays feedback on the connected controller. The effects are the ones the shortcuts use; the built-in samples are stored in the controller (number 1 is the old remap buzz).</p>
   <div class="row">
+    <button onclick="act('rumble')">Test rumble</button>
     <button onclick="haptic('ba_thump')">Mode select (ba-thump)</button>
     <button onclick="haptic('thump')">Mode chosen (thump)</button>
     <button onclick="haptic('tick')">Remap (tick)</button>
@@ -307,8 +311,8 @@ async function playSample(step){const el=$('sample-n');const n=Math.max(0,Math.m
 async function act(what){try{const r=await api('/api/action?do='+what,{method:'POST'});toast(r.ok?'Done':'Failed');setTimeout(loadSettings,700)}catch(e){toast('Failed')}}
 function buildStatic(){
 }
-// The mapping grid shows the mode picked in "Appear on USB as" (each mode has
-// its own map and button names), even before the change is saved.
+// The mapping grid shows the mode picked in "Mapping for" (each mode has
+// its own map and button names); it follows "Current mode" when that changes.
 let MAP_MODE=0;
 // Where each button sits in the controller-shaped grid (see .pad).
 // Picture of the controller (web/controller.png) with overlays: data-b
@@ -332,9 +336,9 @@ const PAD_SVG=`<svg viewBox="0 -56 983 758" aria-hidden="true">
 <rect class="b" data-b="Left" x="272" y="326" width="53" height="52" rx="6"/><rect class="b" data-b="Right" x="373" y="326" width="53" height="52" rx="6"/>
 <circle class="b" data-b="LStick" cx="227.5" cy="214.5" r="81"/><circle class="b" data-b="RStick" cx="609" cy="351.5" r="81"/>
 <circle class="dot" id="dot-l" cx="227.5" cy="214.5" r="24"/><circle class="dot" id="dot-r" cx="609" cy="351.5" r="24"/>
-<rect class="pill back" x="72" y="590" width="110" height="38" rx="19"/><text x="127" y="609">GL</text>
-<rect class="pill back" x="801" y="590" width="110" height="38" rx="19"/><text x="856" y="609">GR</text>
-<rect class="b" data-b="GL" x="72" y="590" width="110" height="38" rx="19"/><rect class="b" data-b="GR" x="801" y="590" width="110" height="38" rx="19"/>
+<rect class="pill back" x="32" y="420" width="104" height="38" rx="19"/><text x="84" y="439">GL</text>
+<rect class="pill back" x="847" y="420" width="104" height="38" rx="19"/><text x="899" y="439">GR</text>
+<rect class="b" data-b="GL" x="32" y="420" width="104" height="38" rx="19"/><rect class="b" data-b="GR" x="847" y="420" width="104" height="38" rx="19"/>
 </svg>`;
 // Groups as in Yuzu's input screen: [title, [[button, label, area]...], layout]
 const PAD_GROUPS={
@@ -353,9 +357,9 @@ function renderMap(mode){
   const grp=k=>{const [t,cells,lay]=PAD_GROUPS[k];
     return `<div class="grp g-${k}"><h4>${t}</h4><div class="${lay||''}">${cells.map(c=>cell(...c)).join('')}</div></div>`};
   m.innerHTML=grp('ls')+grp('dpad')+grp('face')+grp('rs')+
-    `<div class="col g-lsh">${cell('L','L')}${cell('ZL','ZL')}${cell('GL','GL (back)')}</div>`+
+    `<div class="col g-lsh">${cell('L','L')}${cell('ZL','ZL')}${cell('GL','GL')}</div>`+
     `<div class="cen g-cen">${[['Minus','minus'],['Plus','plus'],['Capture','cap'],['Home','home'],['C','c']].map(([n,a])=>cell(n,n,a)).join('')}</div>`+
-    `<div class="col g-rsh">${cell('R','R')}${cell('ZR','ZR')}${cell('GR','GR (back)')}</div>`+
+    `<div class="col g-rsh">${cell('R','R')}${cell('ZR','ZR')}${cell('GR','GR')}</div>`+
     `<div class="g-img">${PAD_SVG}<div class="mono note" id="imu" style="text-align:center;min-height:2.6em"></div></div>`;
   // Light up the drawing for the button being edited.
   m.querySelectorAll('select[data-map]').forEach(sel=>{
@@ -366,13 +370,21 @@ function renderMap(mode){
   IN.forEach((n,i)=>m.querySelector(`[data-map="${n}"]`).value=M.map[i]);
   $('preset-swap').style.display=M.family==='switch'?'':'none';
   $('preset-reset').textContent=M.family==='switch'?'Reset to labels':'Reset to defaults';
-  const sel=document.querySelector('[data-k="usb_mode"]');
-  $('map-mode').textContent=sel?sel.options[MAP_MODE].text.replace(/ \(.*\)$/,''):'';
+  $('map-sel').value=MAP_MODE;
 }
+// Grid values -> S.modes (unsaved edits survive switching between modes).
+let MAP_DIRTY=new Set();
+function stashMap(){
+  if(!S||!$('map').querySelector('[data-map]'))return;
+  const M=mapMode();let changed=false;
+  IN.forEach((n,i)=>{const v=+$('map').querySelector(`[data-map="${n}"]`).value;if(M.map[i]!==v){M.map[i]=v;changed=true}});
+  if(changed)MAP_DIRTY.add(MAP_MODE);
+}
+function switchMapMode(m){stashMap();renderMap(m)}
 const SLOTS=['A','B','X','Y','Up','Down','Left','Right'];
 function renderSlots(){
   const sel=document.querySelector('[data-k="usb_mode"]');
-  const names=[...sel.options].map(o=>o.text.replace(/ \(.*\)$/,''));
+  const names=[...sel.options].map(o=>o.text);
   const opts='<option value="0">–</option>'+names.map((n,i)=>`<option value="${i+1}">${n}</option>`).join('');
   const dia=(cells)=>'<div class="diamond">'+cells.map(([n,a])=>`<label style="--a:${a}">${n}<select data-slot="${n}">${opts}</select></label>`).join('')+'</div>';
   $('slots').innerHTML=dia([['Up','n'],['Left','w'],['Right','e'],['Down','s']])+dia([['X','n'],['Y','w'],['A','e'],['B','s']]);
@@ -388,15 +400,18 @@ function render(){
   });
   $('bias').textContent='bias: '+S.gyro_bias.join(', ');
   const sel=document.querySelector('[data-k="usb_mode"]');
-  sel.onchange=()=>renderMap(sel.value);
+  $('map-sel').innerHTML=[...sel.options].map(o=>`<option value="${o.value}">${o.text}</option>`).join('');
+  sel.onchange=()=>switchMapMode(sel.value);
+  MAP_DIRTY=new Set();
   renderMap(S.usb_mode);
   renderSlots();
 }
 async function loadSettings(){S=(await api('/api/settings')).json();render()}
 async function save(){
   const p=new URLSearchParams();
-  p.append('map_mode',MAP_MODE);   // the grid holds this mode's map
-  document.querySelectorAll('[data-map]').forEach(el=>p.append('map_'+el.dataset.map,el.value));
+  // Every mode whose map was edited (map_mode applies to the map_* keys after it).
+  stashMap();MAP_DIRTY.add(MAP_MODE);
+  for(const m of MAP_DIRTY){p.append('map_mode',m);IN.forEach((n,i)=>p.append('map_'+n,S.modes[m].map[i]))}
   document.querySelectorAll('[data-slot]').forEach(el=>p.append('slot_'+el.dataset.slot,el.value));
   document.querySelectorAll('[data-k]').forEach(el=>p.append(el.dataset.k,el.type==='checkbox'?(el.checked?1:0):el.value));
   const pw=$('wifi_pass').value;if(pw)p.append('wifi_pass',pw);

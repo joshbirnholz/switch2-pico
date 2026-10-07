@@ -138,7 +138,7 @@ game.
 
 ### USB modes (DualSense Edge, DualSense, Xbox 360)
 
-Under **USB and system → Appear on USB as** the dongle can present itself as:
+Under **USB and system → Current mode** the dongle can present itself as:
 
 | Mode | Use it for | GL / GR / C |
 | --- | --- | --- |
