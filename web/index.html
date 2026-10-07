@@ -22,6 +22,20 @@ main{max-width:980px;margin:0 auto;padding:0 16px 40px;display:grid;gap:16px}
 .card.collapsed>h2::before{transform:rotate(-90deg)}
 .card.collapsed>:not(h2){display:none!important}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px 16px}
+/* Button mapping laid out like the controller (wide screens; a plain grid otherwise). */
+.pad{display:grid;gap:10px 12px;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-areas:
+  "zl . zr" "l . r" "minus . plus" "cap c home" "ls . rs" ". x ." "y . a" ". b ." ". up ." "left . right" ". down ." "gl . gr"}
+.pad>label{grid-area:var(--a)}
+@media (min-width:760px){
+  .pad{grid-template-columns:repeat(7,minmax(0,1fr));grid-template-areas:
+    "zl l . . . r zr" ". . minus . plus . ." ". . cap . home . ." ". ls . c . x ."
+    ". up . . y . a" "left . right . . b ." ". down . . . rs ." ". . gl . gr . ."}
+}
+/* D-pad and face buttons as diamonds. */
+.diamonds{display:flex;flex-wrap:wrap;gap:16px 40px}
+.diamond{flex:1 1 280px;max-width:440px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+  grid-template-areas:". n ." "w . e" ". s .";gap:6px 10px}
+.diamond>label{grid-area:var(--a)}
 label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
 label.check{flex-direction:row;align-items:center;gap:8px;color:var(--fg)}
 input,select,button{font:inherit;color:inherit}
@@ -87,13 +101,13 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
   </div>
   <h3 style="margin:16px 0 4px;font-size:15px">Mode shortcut</h3>
   <p class="note" style="margin-top:0">On the controller, hold <b>C + Home</b> until its lights blink, then press a button below to switch to that mode (the dongle restarts). C + Home again, or a few seconds without pressing anything, leaves without a change. Buttons set to – are ignored; with every button set to – the shortcut is off.</p>
-  <div class="grid" id="slots"></div>
+  <div class="diamonds" id="slots"></div>
 </section>
 
 <section class="card">
   <h2>Button mapping <span class="note" id="map-mode"></span></h2>
   <p class="note" style="margin-top:0">Choose what each physical button sends to the host, in the current USB mode (each mode keeps its own mapping). Shortcut: hold C + GL (or GR) and press a button.</p>
-  <div class="grid" id="map"></div>
+  <div class="pad" id="map"></div>
   <div class="row" style="margin-top:12px">
     <button id="preset-reset" onclick="presetIdentity()">Reset to labels</button>
     <button id="preset-swap" onclick="presetSwapFace()">Swap A/B and X/Y (positional)</button>
@@ -293,12 +307,17 @@ function buildStatic(){
 // The mapping grid shows the mode picked in "Appear on USB as" (each mode has
 // its own map and button names), even before the change is saved.
 let MAP_MODE=0;
+// Where each button sits in the controller-shaped grid (see .pad).
+const PAD_AREA={ZL:'zl',L:'l',R:'r',ZR:'zr',Minus:'minus',Plus:'plus',Capture:'cap',Home:'home',C:'c',LStick:'ls',
+  X:'x',Y:'y',A:'a',B:'b',Up:'up',Left:'left',Right:'right',Down:'down',RStick:'rs',GL:'gl',GR:'gr'};
+const PAD_ORDER=Object.keys(PAD_AREA);
+const PAD_LABEL={LStick:'L stick click',RStick:'R stick click',GL:'GL (back)',GR:'GR (back)'};
 function mapMode(){return S.modes[MAP_MODE]}
 function renderMap(mode){
   MAP_MODE=+mode;
   const M=mapMode(),m=$('map');
   // Outputs a mode lacks come back as null.
-  m.innerHTML=IN.map(n=>`<label>${n}<select data-map="${n}">${M.outputs.map((o,i)=>o===null?'':`<option value="${i}">${o}</option>`).join('')}</select></label>`).join('');
+  m.innerHTML=PAD_ORDER.map(n=>`<label style="--a:${PAD_AREA[n]}">${PAD_LABEL[n]||n}<select data-map="${n}">${M.outputs.map((o,i)=>o===null?'':`<option value="${i}">${o}</option>`).join('')}</select></label>`).join('');
   IN.forEach((n,i)=>m.querySelector(`[data-map="${n}"]`).value=M.map[i]);
   $('preset-swap').style.display=M.family==='switch'?'':'none';
   $('preset-reset').textContent=M.family==='switch'?'Reset to labels':'Reset to defaults';
@@ -310,7 +329,8 @@ function renderSlots(){
   const sel=document.querySelector('[data-k="usb_mode"]');
   const names=[...sel.options].map(o=>o.text.replace(/ \(.*\)$/,''));
   const opts='<option value="0">–</option>'+names.map((n,i)=>`<option value="${i+1}">${n}</option>`).join('');
-  $('slots').innerHTML=SLOTS.map(n=>`<label>${n}<select data-slot="${n}">${opts}</select></label>`).join('');
+  const dia=(cells)=>'<div class="diamond">'+cells.map(([n,a])=>`<label style="--a:${a}">${n}<select data-slot="${n}">${opts}</select></label>`).join('')+'</div>';
+  $('slots').innerHTML=dia([['Up','n'],['Left','w'],['Right','e'],['Down','s']])+dia([['X','n'],['Y','w'],['A','e'],['B','s']]);
   const v=S.mode_slots||{};
   SLOTS.forEach(n=>$('slots').querySelector(`[data-slot="${n}"]`).value=v[n]||0);
 }
