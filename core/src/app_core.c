@@ -5,6 +5,8 @@
 
 #include "app_core.h"
 
+#include <string.h>
+
 #include "tusb.h"
 
 #include "app.h"
@@ -90,10 +92,12 @@ void s2_link_hook_controller_colors(const uint8_t rgb[12]) {
 static void update_input(void) {
     static uint32_t last_seq;
     static bool was_connected;
+    static mapping_macro_t macro;
     s2_input_t in;
     uint32_t seq;
     if (s2_link_get_input(&in, &seq)) {
-        if (was_connected && seq == last_seq) return;
+        // A running macro advances on time, not only on new reports.
+        if (was_connected && seq == last_seq && !mapping_macro_busy(&macro)) return;
         was_connected = true;
         last_seq = seq;
         procon_input_t out;
@@ -111,6 +115,7 @@ static void update_input(void) {
             // Keep the chord's buttons away from the host.
             if (mapping_quick_remap_held(in.buttons)) out.buttons = 0;
         }
+        out.buttons |= mapping_macro_step(&macro, &g_settings, prev, in.buttons, platform_millis());
         // A button press while the host sleeps (controller still connected,
         // i.e. within SUSPEND_DISCONNECT_MS) wakes it.
         if ((in.buttons & ~prev) && tud_suspended()) s2_link_hook_controller_seen();
@@ -119,6 +124,7 @@ static void update_input(void) {
     } else {
         if (!was_connected) return;
         was_connected = false;
+        memset(&macro, 0, sizeof macro);
         s_raw_buttons = 0;
         procon_set_input(NULL, false, 0, false);
     }

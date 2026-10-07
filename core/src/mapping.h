@@ -86,6 +86,23 @@ bool mapping_quick_remap(settings_t *s, uint32_t prev, uint32_t raw, in_button_t
 // True while a quick-remap chord is held (its buttons shouldn't reach the host).
 bool mapping_quick_remap_held(uint32_t raw);
 
+// Macro outputs (OUT_HOME_A). A button mapped to a macro fires it when tapped
+// on its own (released without another button being pressed meanwhile), so it
+// can double as a chord modifier (C + GL/GR quick remap). Call for every input
+// update and while mapping_macro_busy(); OR the result into the output.
+typedef struct {
+    uint32_t held;      // raw S2 bit of the macro button being held (0: none)
+    bool spoiled;       // another button was pressed while it was held
+    uint32_t start_ms;  // running macro start time
+    bool running;
+} mapping_macro_t;
+
+#define MACRO_HOME_MS    60    // Home alone, then
+#define MACRO_HOME_A_MS  100   // Home + A, then release
+
+uint32_t mapping_macro_step(mapping_macro_t *m, const settings_t *s, uint32_t prev, uint32_t raw, uint32_t now_ms);
+bool mapping_macro_busy(const mapping_macro_t *m);
+
 void mapping_pack_stick(const uint16_t v[2], uint8_t out[3]);
 
 #ifdef __cplusplus

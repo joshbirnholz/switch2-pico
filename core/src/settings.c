@@ -22,6 +22,7 @@ static const char *const IN_NAMES[IN_COUNT] = {
 static const char *const OUT_NAMES[OUT_COUNT] = {
     "None", "A", "B", "X", "Y", "L", "R", "ZL", "ZR", "Minus", "Plus", "LStick", "RStick",
     "Home", "Capture", "Up", "Down", "Left", "Right",
+    "Home+A (Steam quick access)",
 };
 
 const char *in_button_name(in_button_t b) {

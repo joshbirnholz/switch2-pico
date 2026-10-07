@@ -2,6 +2,7 @@
 
 #include <math.h>
 
+// Macros map to 0 here; see mapping_macro_step().
 static const uint32_t OUT_BITS[OUT_COUNT] = {
     [OUT_NONE] = 0,
     [OUT_A] = S1_BTN_A, [OUT_B] = S1_BTN_B, [OUT_X] = S1_BTN_X, [OUT_Y] = S1_BTN_Y,
@@ -146,4 +147,37 @@ bool mapping_quick_remap(settings_t *s, uint32_t prev, uint32_t raw, in_button_t
         return true;
     }
     return false;
+}
+
+bool mapping_macro_busy(const mapping_macro_t *m) {
+    return m->running || m->held;
+}
+
+uint32_t mapping_macro_step(mapping_macro_t *m, const settings_t *s, uint32_t prev, uint32_t raw, uint32_t now_ms) {
+    uint32_t pressed = raw & ~prev;
+    if (m->held) {
+        if (pressed & ~m->held) m->spoiled = true;
+        if (!(raw & m->held)) {
+            if (!m->spoiled && !m->running) {
+                m->running = true;
+                m->start_ms = now_ms;
+            }
+            m->held = 0;
+        }
+    } else {
+        for (int i = 0; i < IN_COUNT; i++) {
+            if (s->button_map[i] == OUT_HOME_A && (pressed & IN_BITS[i])) {
+                m->held = IN_BITS[i];
+                // Pressed together with others (e.g. already holding GL): not a tap.
+                m->spoiled = (raw & ~IN_BITS[i]) != 0;
+                break;
+            }
+        }
+    }
+    if (!m->running) return 0;
+    uint32_t t = now_ms - m->start_ms;
+    if (t < MACRO_HOME_MS) return S1_BTN_HOME;
+    if (t < MACRO_HOME_MS + MACRO_HOME_A_MS) return S1_BTN_HOME | S1_BTN_A;
+    m->running = false;
+    return 0;
 }

@@ -27,6 +27,8 @@ typedef enum {
     OUT_MINUS, OUT_PLUS, OUT_LSTICK, OUT_RSTICK,
     OUT_HOME, OUT_CAPTURE,
     OUT_UP, OUT_DOWN, OUT_LEFT, OUT_RIGHT,
+    // Macros (no single Pro Controller button; see mapping_macro_step()).
+    OUT_HOME_A,         // tap: Home, then Home + A (Steam quick access menu)
     OUT_COUNT
 } out_button_t;
 

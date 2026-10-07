@@ -260,6 +260,39 @@ static void test_quick_remap(void) {
     CHECK(!mapping_quick_remap(&s, chord, chord | S2_BTN_HOME, &changed));
 }
 
+static void test_macro(void) {
+    settings_t s;
+    test_defaults(&s);
+    s.button_map[IN_C] = OUT_HOME_A;
+    mapping_macro_t m;
+    memset(&m, 0, sizeof m);
+    uint32_t C = S2_BTN_C;
+
+    // Tap C: nothing while held, then Home, Home + A, release.
+    CHECK(mapping_macro_step(&m, &s, 0, C, 1000) == 0);
+    CHECK(mapping_macro_busy(&m));
+    CHECK(mapping_macro_step(&m, &s, C, C, 1100) == 0);
+    CHECK(mapping_macro_step(&m, &s, C, 0, 1150) == S1_BTN_HOME);
+    CHECK(mapping_macro_step(&m, &s, 0, 0, 1150 + MACRO_HOME_MS) == (S1_BTN_HOME | S1_BTN_A));
+    CHECK(mapping_macro_step(&m, &s, 0, 0, 1150 + MACRO_HOME_MS + MACRO_HOME_A_MS) == 0);
+    CHECK(!mapping_macro_busy(&m));
+
+    // C used as a chord modifier (C + GL ...): no macro.
+    CHECK(mapping_macro_step(&m, &s, 0, C, 2000) == 0);
+    CHECK(mapping_macro_step(&m, &s, C, C | S2_BTN_GL, 2010) == 0);
+    CHECK(mapping_macro_step(&m, &s, C | S2_BTN_GL, S2_BTN_GL, 2020) == 0);
+    CHECK(!mapping_macro_busy(&m));
+    // Pressed while another button is already held: no macro either.
+    CHECK(mapping_macro_step(&m, &s, S2_BTN_A, S2_BTN_A | C, 3000) == 0);
+    CHECK(mapping_macro_step(&m, &s, S2_BTN_A | C, S2_BTN_A, 3010) == 0);
+    CHECK(!mapping_macro_busy(&m));
+    // Not mapped: nothing.
+    s.button_map[IN_C] = OUT_NONE;
+    CHECK(mapping_macro_step(&m, &s, 0, C, 4000) == 0 && !mapping_macro_busy(&m));
+    // The macro output itself sets no button through the normal mapping.
+    CHECK(mapping_out_button_bit(OUT_HOME_A) == 0);
+}
+
 int main(void) {
     test_s1_rumble_classic();
     test_s1_rumble_packed();
@@ -269,6 +302,7 @@ int main(void) {
     test_input_report();
     test_mapping();
     test_quick_remap();
+    test_macro();
     printf("%d passed, %d failed\n", g_pass, g_fail);
     return g_fail ? 1 : 0;
 }

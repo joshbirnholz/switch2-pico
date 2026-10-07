@@ -113,6 +113,13 @@ controller buzzes. Do the same again to clear it. While C + GL/GR are held,
 nothing reaches the host. Turn it off on the configuration page if you use C
 as a regular button.
 
+**Steam quick access menu on C.** On the configuration page, map C (or any
+button) to *Home+A (Steam quick access)*. A tap then sends Home, then Home + A,
+which opens Steam's quick access menu. It fires when the button is released
+without another button pressed meanwhile, so C still works as the remap
+modifier above. Don't use it on a Switch, where Home + A launches the selected
+game.
+
 ### On a Switch 1 console
 
 Turn on **System Settings → Controllers and Sensors → Pro Controller Wired
