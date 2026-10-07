@@ -178,9 +178,9 @@ the C + GL/GR + button shortcut works in every mode.
 
 DualSense modes add these outputs to the map:
 
-* **Touchpad click (left / centre / right)**: a click plus a touch on that part
+* **Touchpad click (left / center / right)**: a click plus a touch on that part
   of the pad, so Steam Input sees left and right touchpad clicks. Capture
-  defaults to the centre click.
+  defaults to the center click.
 * **Mic (mute)** button.
 * **Left / right paddle** and **left / right Fn** (DualSense Edge only; the
   Edge defaults are GL → left paddle, GR → right paddle, C → right Fn).

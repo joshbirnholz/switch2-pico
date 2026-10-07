@@ -316,7 +316,7 @@ static void test_ds5(void) {
     st.stick_l[0] = st.stick_l[1] = st.stick_r[0] = st.stick_r[1] = S1_STICK_CENTER;
     uint8_t r[DS5_INPUT_REPORT_LEN];
 
-    // Neutral: centred sticks, hat released, no touches.
+    // Neutral: centered sticks, hat released, no touches.
     ds5_build_input(&st, 7, 3000, r);
     CHECK(r[0] == 0x01 && r[1] == 128 && r[2] == 128 && r[3] == 128 && r[4] == 128);
     CHECK(r[7] == 7 && (r[8] & 0x0F) == 8 && r[9] == 0 && r[10] == 0);

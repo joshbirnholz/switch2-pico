@@ -60,7 +60,7 @@ typedef enum {
     GP_L1, GP_R1, GP_L2, GP_R2,
     GP_SELECT, GP_START, GP_L3, GP_R3, GP_GUIDE,
     GP_UP, GP_DOWN, GP_LEFT, GP_RIGHT,
-    GP_TOUCHPAD,        // touchpad click, centre
+    GP_TOUCHPAD,        // touchpad click, center
     GP_TP_LEFT,         // touchpad click, left half
     GP_TP_RIGHT,        // touchpad click, right half
     GP_MIC,

@@ -210,7 +210,7 @@ static void update_input(void) {
         uint32_t prev = host_prev;
         in.buttons = host_prev = host_buttons(in.buttons);
         if (s_msel.active || s_mode_switch >= 0) {
-            // Selecting a mode: sticks centred, triggers released.
+            // Selecting a mode: sticks centered, triggers released.
             const mapping_ctx_t *c = s2_link_mapping_ctx();
             memcpy(in.stick_l, c->cal_l.center, sizeof in.stick_l);
             memcpy(in.stick_r, c->cal_r.center, sizeof in.stick_r);

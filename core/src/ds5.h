@@ -10,7 +10,7 @@ extern "C" {
 // from the mode's generic map (gp_out_t). Steam Input, SDL and the Linux
 // hid-playstation driver know the Edge's back paddles and Fn buttons, so the
 // default Edge map gives GL / GR / C to them. Touchpad clicks can be sent as a
-// left, centre or right touch.
+// left, center or right touch.
 //
 // Implements the USB input report 0x01, output report 0x02 (rumble, player
 // LEDs) and the feature reports hosts read at start-up (0x05 calibration,
@@ -44,7 +44,7 @@ typedef struct {
     uint32_t gp;                // GP_BIT() buttons
     bool edge;                  // render paddles / Fn (DualSense Edge)
     uint8_t touch_id;           // DualSense touch tracking id (7 bits)
-    uint16_t stick_l[2], stick_r[2];   // 12-bit, centre 2048, y up
+    uint16_t stick_l[2], stick_r[2];   // 12-bit, center 2048, y up
     uint8_t trigger_l, trigger_r;      // 0..255
     float accel_g[3], gyro_dps[3];     // SDL / DualSense frame
     uint8_t battery_pct;               // 0..100

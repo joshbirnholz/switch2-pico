@@ -69,7 +69,7 @@ const char *usb_mode_output_name(usb_mode_t m, gp_out_t g) {
     case GP_DOWN: return "Down";
     case GP_LEFT: return "Left";
     case GP_RIGHT: return "Right";
-    case GP_TOUCHPAD: return ds ? "Touchpad click (centre)" : NULL;
+    case GP_TOUCHPAD: return ds ? "Touchpad click (center)" : NULL;
     case GP_TP_LEFT: return ds ? "Touchpad click (left)" : NULL;
     case GP_TP_RIGHT: return ds ? "Touchpad click (right)" : NULL;
     case GP_MIC: return ds ? "Mic (mute)" : NULL;

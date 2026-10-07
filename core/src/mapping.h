@@ -35,7 +35,7 @@ extern "C" {
 #define S1_BTN_L        0x400000u
 #define S1_BTN_ZL       0x800000u
 
-// Stick values we emit are centred at 2048 and reach +-S1_STICK_RANGE at full
+// Stick values we emit are centered at 2048 and reach +-S1_STICK_RANGE at full
 // deflection; the emulated SPI factory calibration advertises the same range.
 #define S1_STICK_CENTER 2048
 #define S1_STICK_RANGE  1800
