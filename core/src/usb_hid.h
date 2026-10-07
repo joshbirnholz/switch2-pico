@@ -21,6 +21,8 @@ extern "C" {
 bool usb_hid_ready(void);
 // Send report `id` followed by `len` bytes of data.
 bool usb_hid_ep_ready(void);
+// Largest input report (with id) the current report descriptor declares.
+uint16_t usb_hid_max_input_report(void);
 bool usb_hid_suspended(void);
 bool usb_hid_send(uint8_t id, const uint8_t *data, uint16_t len);
 bool usb_hid_mounted(void);

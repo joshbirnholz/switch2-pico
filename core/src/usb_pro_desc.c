@@ -93,3 +93,9 @@ const uint8_t *usb_hid_report_descriptor(uint16_t *len) {
     return s_report_desc;
 }
 
+
+uint16_t usb_hid_max_input_report(void) {
+    // Must match the descriptor the host enumerated, i.e. the settings at
+    // enumeration time; settings changes that affect it re-enumerate.
+    return (g_settings.nfc_enabled && g_settings.nfc_report_in_descriptor) ? 362 : 64;
+}

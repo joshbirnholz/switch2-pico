@@ -44,6 +44,10 @@ typedef enum {
 #define SETTINGS_MAGIC   0x53325043u   // "S2PC"
 #define SETTINGS_VERSION 1
 
+// One-off changes applied to settings saved by older firmware.
+#define SETTINGS_MIG_NFC_DESC_OFF 0x01   // 0.2.7: 0x31 no longer declared by default
+#define SETTINGS_MIG_ALL          0x01
+
 #define SPI_USER_CAL_SIZE 0x40          // mirror of Pro Controller SPI 0x8000..0x803F
 
 typedef struct {
@@ -101,6 +105,7 @@ typedef struct {
     // ---- added later: new fields go here, just before `crc`, so settings
     // saved by older firmware still load (see settings_init) ----
     uint8_t webusb_enabled;             // expose the WebUSB configuration interface
+    uint8_t migrations_done;            // SETTINGS_MIG_* bits already applied to this image
 
     uint32_t crc;
 } settings_t;

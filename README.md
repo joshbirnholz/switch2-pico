@@ -182,7 +182,7 @@ I wrote this from the public protocol research listed under
 | HD rumble **amplitude** | Medium-high |
 | HD rumble **frequency** translation | **Low.** The Switch 2 frequency encoding hasn't been published. It is anchored on the console's idle frame (verified bit-exact in tests) with a configurable scale, and a *Fixed* fallback mode is available. |
 | Amiibo reading over the Switch 2 controller | **Low–medium.** The NFC command set is only partly documented. The reader searches its buffer for the tag's UID so the exact header layout doesn't matter, and every step is logged. |
-| Amiibo through USB to games and emulators | Medium. Uses the documented Switch 1 MCU protocol. Over USB it needs the extra `0x31` report in the HID descriptor (on by default; a genuine Pro Controller lacks it). If a console misbehaves, turn off *Declare NFC report on USB*. |
+| Amiibo through USB to games and emulators | Medium. Uses the documented Switch 1 MCU protocol. The Switch reads the `0x31` NFC report as is. PC software that reads amiibo needs it declared in the HID descriptor: turn on *Declare NFC report on USB* (off by default, like a genuine Pro Controller). |
 
 If something doesn't work, the log on the configuration page usually shows
 where it stopped. Please include it in bug reports.

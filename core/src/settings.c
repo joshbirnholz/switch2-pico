@@ -87,13 +87,17 @@ void settings_defaults(settings_t *s) {
     s->rumble_freq_slope = 117;
 
     s->nfc_enabled = 1;
-    s->nfc_report_in_descriptor = 1;
+    // Off, like a genuine controller: declaring the 361 byte 0x31 report makes
+    // PC hosts read the 64 byte endpoint in 362 byte transfers (see usb_hid.c).
+    // The Switch reads 0x31 either way.
+    s->nfc_report_in_descriptor = 0;
 
     s->usb_report_interval_ms = 8;
     s->led_follow_host = 1;
     s->usb_detach_when_idle = 0;
     s->usb_remote_wakeup = 1;
     s->webusb_enabled = 1;
+    s->migrations_done = SETTINGS_MIG_ALL;
 
     s->hotkey_enabled = 1;
     s->wifi_autostart = 1;
@@ -159,14 +163,23 @@ void settings_init(void) {
         settings_defaults(&g_settings);
         memcpy(&g_settings, raw, stored->size - 4u);
         g_settings.size = sizeof g_settings;
+        // Images from before `migrations_done` existed hold a zeroed padding
+        // byte there (settings_defaults() clears the whole struct), or end
+        // before it; either way they read as "no migrations applied".
+        if (stored->size - 4u <= offsetof(settings_t, migrations_done)) g_settings.migrations_done = 0;
+        if (!(g_settings.migrations_done & SETTINGS_MIG_NFC_DESC_OFF)) {
+            g_settings.nfc_report_in_descriptor = 0;
+            g_settings.migrations_done |= SETTINGS_MIG_NFC_DESC_OFF;
+            s_dirty = true;
+        }
         settings_sanitize(&g_settings);
         LOG("settings: loaded from flash (bonded=%d%s)", g_settings.bonded,
             stored->size != sizeof(settings_t) ? ", migrated" : "");
     } else {
         settings_defaults(&g_settings);
         LOG("settings: using defaults");
+        s_dirty = false;
     }
-    s_dirty = false;
 }
 
 void settings_save_now(void) {
