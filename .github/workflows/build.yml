@@ -99,8 +99,9 @@ jobs:
   # (fw/) to GitHub Pages: https://joshbirnholz.github.io/switch2-pico/. The
   # page is also the WebUSB landing page Chrome offers when the dongle is
   # plugged in, and its "Update" button downloads fw/latest.json and the
-  # .uf2 files from here (the site is public even though the repository is
-  # private). Enable once under Settings -> Pages -> Source: GitHub Actions.
+  # .uf2 files from here (GitHub release downloads can't be fetched from a
+  # web page: they send no CORS headers). Enable once under Settings ->
+  # Pages -> Source: GitHub Actions.
   pages:
     if: (github.event_name == 'push' && github.ref_name == github.event.repository.default_branch) || github.event_name == 'workflow_dispatch'
     needs: [test, firmware-pico2w, firmware-nrf52840]

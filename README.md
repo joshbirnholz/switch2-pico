@@ -144,8 +144,7 @@ it and double-click it; WebUSB works from a local file too).
 
 The hosted page, together with the latest firmware it offers as updates, is
 published by the `pages` job in `.github/workflows/build.yml`. On a fork,
-enable it once under **Settings → Pages → Source: GitHub Actions** (GitHub
-Pages for a private repository needs a paid plan).
+enable it once under **Settings → Pages → Source: GitHub Actions**.
 
 * **Linux:** allow your user to open the device first:
   `sudo cp tools/99-switch2-pico.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules`,
