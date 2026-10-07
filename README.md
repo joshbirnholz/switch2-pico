@@ -106,7 +106,12 @@ Communication**, then plug the dongle into the dock or the console.
 With the dongle plugged in, open **https://joshbirnholz.github.io/switch2-pico/**
 in Chrome or Edge (Chrome also offers this link in a notification when the
 dongle is plugged in), click **Connect over USB** and pick "Pro Controller".
-You can also open `web/index.html` from this repository directly.
+You can also open `web/index.html` from this repository directly (download
+it and double-click it; WebUSB works from a local file too).
+
+The hosted page is published by `.github/workflows/pages.yml`. On a fork,
+enable it once under **Settings → Pages → Source: GitHub Actions** and run the
+*Pages* workflow (GitHub Pages for a private repository needs a paid plan).
 
 * **Linux:** allow your user to open the device first:
   `sudo cp tools/99-switch2-pico.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules`,
