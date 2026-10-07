@@ -33,6 +33,7 @@ Switch 2 Pro Controller  ──BLE──▶  dongle    ──USB──▶  PC / 
 | HD rumble | The host's Switch 1 HD rumble frames, including the packed multi-sample formats, are decoded and re-encoded for the Switch 2 actuators, left and right separately. |
 | Player LEDs | Follow the player number the host assigns. |
 | Battery | Reported to the host. |
+| USB modes | **Switch Pro Controller** (default; Switch consoles and PCs) or **DualSense Edge** (PCs: GL, GR and C become the Edge's back paddles and Fn button, so Steam Input can map them). |
 | NSO GameCube controller | Basic support: buttons, sticks, analog triggers acting as L/R past a threshold, and rumble through built-in vibration presets. |
 | Configuration page | Over **WebUSB** in Chrome/Edge with the dongle plugged in, or (Pico 2 W only) over the dongle's own Wi-Fi from any phone or computer. |
 
@@ -126,6 +127,30 @@ which opens Steam's quick access menu. It fires when the button is released
 without another button pressed meanwhile, so C still works as the remap
 modifier above. Don't use it on a Switch, where Home + A launches the selected
 game.
+
+### DualSense Edge mode (Steam Input with GL / GR / C)
+
+The Switch Pro Controller has no spare buttons, so in the default mode GL, GR
+and C can only be mapped to existing buttons. To give them to Steam Input as
+buttons of their own, set **USB and system → Appear on USB as → DualSense
+Edge** on the configuration page and save. The dongle restarts as a DualSense
+Edge:
+
+| Switch 2 controller | DualSense Edge |
+| --- | --- |
+| A / B / X / Y | Circle / Cross / Triangle / Square (by position) |
+| L / R / ZL / ZR | L1 / R1 / L2 / R2 |
+| − / + | Create / Options |
+| Home / Capture | PS / touchpad click |
+| **GL / GR** | **left / right back paddle** |
+| **C** | **right Fn button** |
+
+The button mapping on the configuration page still applies to the other
+buttons. The C-button shortcuts (GL/GR remap, Home+A) are off in this mode,
+since Steam Input does that job. Rumble is the DualSense's two-motor rumble
+(played on the controller's HD rumble actuators), gyro and battery are
+reported, and the player LEDs follow the host. Switch consoles need the Switch
+Pro Controller mode.
 
 ### On a Switch 1 console
 

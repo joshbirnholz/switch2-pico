@@ -47,6 +47,7 @@ set(CORE ${CMAKE_CURRENT_LIST_DIR}/core/src)
 set(PICO_SRC ${CMAKE_CURRENT_LIST_DIR}/pico)
 add_executable(switch2_pico
         ${CORE}/app_core.c
+        ${CORE}/ds5.c
         ${CORE}/hd_rumble.c
         ${CORE}/log.c
         ${CORE}/mapping.c
@@ -55,6 +56,7 @@ add_executable(switch2_pico
         ${CORE}/s2_proto.c
         ${CORE}/settings.c
         ${CORE}/usb_hid.c
+        ${CORE}/usb_mode.c
         ${CORE}/usb_pro_desc.c
         ${CORE}/web_api.c
         ${CORE}/webusb.c

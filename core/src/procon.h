@@ -38,6 +38,10 @@ void procon_set_input(const procon_input_t *in, bool connected, uint16_t battery
 // Body / button / grip colours shown by the host (RGB, 4 x 3 bytes).
 void procon_set_colors(const uint8_t rgb[12]);
 
+// USB plumbing (dispatched by usb_mode.c).
+const uint8_t *procon_report_descriptor(uint16_t *len);
+void procon_on_output(const uint8_t *buf, uint16_t len, bool via_control, uint8_t control_report_id);
+
 // Hooks implemented by the firmware.
 void procon_hook_rumble(const rumble_sample_t *left, int nl, const rumble_sample_t *right, int nr);
 void procon_hook_player_lights(uint8_t lights);

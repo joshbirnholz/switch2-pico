@@ -32,7 +32,11 @@ uint32_t mapping_in_button_s2_bit(in_button_t b) {
 }
 
 uint32_t mapping_buttons(const settings_t *s, const mapping_ctx_t *ctx, const s2_input_t *in) {
-    uint32_t raw = in->buttons;
+    return mapping_buttons_except(s, ctx, in, 0);
+}
+
+uint32_t mapping_buttons_except(const settings_t *s, const mapping_ctx_t *ctx, const s2_input_t *in, uint32_t skip) {
+    uint32_t raw = in->buttons & ~skip;
     if (ctx && ctx->is_gamecube) {
         // Analog GameCube triggers count as the shoulder press past the threshold.
         int l = (int)in->trigger_l - ctx->gc_trigger_neutral[0];
@@ -108,6 +112,27 @@ void mapping_imu(const settings_t *s, const mapping_ctx_t *ctx, const s2_input_t
     gyro_out[0] = sat16(gy * g_scale);
     gyro_out[1] = sat16(-gx * g_scale);
     gyro_out[2] = sat16(gz * g_scale);
+}
+
+void mapping_imu_sdl(const settings_t *s, const mapping_ctx_t *ctx, const s2_input_t *in, float accel_g[3],
+                     float gyro_dps[3]) {
+    if (!s->gyro_enabled) {
+        for (int i = 0; i < 3; i++) accel_g[i] = gyro_dps[i] = 0.0f;
+        return;
+    }
+    float a_scale = (float)s->accel_scale_pct / (100.0f * S2_ACCEL_LSB_PER_G);
+    float native = ctx && ctx->gyro_lsb_per_dps > 1.0f ? ctx->gyro_lsb_per_dps : S2_GYRO_LSB_PER_DPS_A;
+    float g_scale = (float)s->gyro_scale_pct / (100.0f * native);
+    float gx = (float)in->gyro[0] - s->gyro_bias[0];
+    float gy = (float)in->gyro[1] - s->gyro_bias[1];
+    float gz = (float)in->gyro[2] - s->gyro_bias[2];
+    // Same axis mapping as SDL's Switch 2 driver.
+    accel_g[0] = in->accel[0] * a_scale;
+    accel_g[1] = in->accel[2] * a_scale;
+    accel_g[2] = -in->accel[1] * a_scale;
+    gyro_dps[0] = gx * g_scale;
+    gyro_dps[1] = gz * g_scale;
+    gyro_dps[2] = -gy * g_scale;
 }
 
 void mapping_apply(const settings_t *s, const mapping_ctx_t *ctx, const s2_input_t *in, procon_input_t *out) {

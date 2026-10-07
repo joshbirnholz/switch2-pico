@@ -117,6 +117,7 @@ static uint16_t clamp_u16(uint16_t v, uint16_t lo, uint16_t hi) {
 void settings_sanitize(settings_t *s) {
     for (int i = 0; i < IN_COUNT; i++) {
         if (s->button_map[i] >= OUT_COUNT) s->button_map[i] = OUT_NONE;
+    if (s->usb_mode >= USB_MODE_COUNT) s->usb_mode = USB_MODE_SWITCH_PRO;
     }
     s->stick_deadzone_pct = clamp_u8(s->stick_deadzone_pct, 0, 40);
     s->stick_outer_pct = clamp_u8(s->stick_outer_pct, 50, 100);

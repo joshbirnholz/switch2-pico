@@ -399,7 +399,7 @@ static void handle_usb_command(uint8_t cmd) {
     }
 }
 
-void usb_hid_on_output(const uint8_t *buf, uint16_t len, bool via_control, uint8_t control_report_id) {
+void procon_on_output(const uint8_t *buf, uint16_t len, bool via_control, uint8_t control_report_id) {
     uint8_t id;
     const uint8_t *p;
     int n;

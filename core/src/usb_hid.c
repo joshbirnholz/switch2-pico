@@ -138,11 +138,9 @@ static bool prohid_control_xfer_cb(uint8_t rhport, uint8_t stage, tusb_control_r
     switch (request->bRequest) {
     case HID_REQ_CONTROL_GET_REPORT:
         if (stage == CONTROL_STAGE_SETUP) {
-            // Nothing meaningful to return; answer with an empty report of the
-            // requested id so hosts that probe don't stall.
             uint16_t n = tu_min16(request->wLength, sizeof s_ctrl_buf);
-            memset(s_ctrl_buf, 0, n);
-            if (n) s_ctrl_buf[0] = tu_u16_low(request->wValue);
+            memset(s_ctrl_buf, 0, sizeof s_ctrl_buf);
+            n = usb_hid_get_feature(tu_u16_low(request->wValue), s_ctrl_buf, n);
             return tud_control_xfer(rhport, request, s_ctrl_buf, n);
         }
         return true;

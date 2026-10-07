@@ -43,6 +43,13 @@ typedef enum {
     RUMBLE_FREQ_FIXED = 1,     // amplitude only, at the Switch 2 neutral frequencies
 } rumble_freq_mode_t;
 
+// What the dongle presents itself as on USB.
+typedef enum {
+    USB_MODE_SWITCH_PRO = 0,      // wired Switch (1) Pro Controller: Switch consoles, Steam, SDL
+    USB_MODE_DUALSENSE_EDGE = 1,  // DualSense Edge: GL/GR/C become paddles/Fn that Steam Input can map
+    USB_MODE_COUNT
+} usb_mode_t;
+
 #define SETTINGS_MAGIC   0x53325043u   // "S2PC"
 #define SETTINGS_VERSION 1
 
@@ -104,6 +111,7 @@ typedef struct {
     // Inverted so images saved before it existed (zero padding here) keep the
     // shortcut on.
     uint8_t quick_remap_off;            // disable the C + GL/GR + button remap shortcut
+    uint8_t usb_mode;                   // usb_mode_t (0 in images saved before it existed)
 
     uint32_t crc;
 } settings_t;

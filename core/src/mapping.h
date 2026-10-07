@@ -73,10 +73,18 @@ uint32_t mapping_out_button_bit(out_button_t b);
 uint32_t mapping_in_button_s2_bit(in_button_t b);
 
 uint32_t mapping_buttons(const settings_t *s, const mapping_ctx_t *ctx, const s2_input_t *in);
+// Same, ignoring the raw Switch 2 buttons in `skip` (S2_BTN_* bits).
+uint32_t mapping_buttons_except(const settings_t *s, const mapping_ctx_t *ctx, const s2_input_t *in, uint32_t skip);
 void mapping_stick(const settings_t *s, const s2_stick_cal_t *cal, const uint16_t raw[2], uint16_t out[2]);
 void mapping_imu(const settings_t *s, const mapping_ctx_t *ctx, const s2_input_t *in,
                  int16_t accel_out[3], int16_t gyro_out[3]);
 void mapping_apply(const settings_t *s, const mapping_ctx_t *ctx, const s2_input_t *in, procon_input_t *out);
+
+// IMU in SDL's frame, which is also the DualSense's: accel in g (x right,
+// y up, z towards the player), gyro in deg/s (x pitch, y yaw, z roll).
+// Applies the gyro bias, scale settings and on/off switch.
+void mapping_imu_sdl(const settings_t *s, const mapping_ctx_t *ctx, const s2_input_t *in, float accel_g[3],
+                     float gyro_dps[3]);
 
 // Quick remap from the controller: hold C and GL (or GR), then press another
 // button to make GL (GR) send whatever that button sends; doing it again with

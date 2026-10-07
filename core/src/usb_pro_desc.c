@@ -2,7 +2,7 @@
 
 #include <string.h>
 
-#include "usb_hid.h"
+#include "procon.h"
 
 // ---------------------------------------------------------------------------
 // HID report descriptor of a genuine Pro Controller (input 0x30, 0x21, 0x81;
@@ -61,7 +61,7 @@ static const uint8_t PRO_REPORT_DESC[] = {
     0xC0,                         // End Collection
 };
 
-const uint8_t *usb_hid_report_descriptor(uint16_t *len) {
+const uint8_t *procon_report_descriptor(uint16_t *len) {
     *len = sizeof PRO_REPORT_DESC;
     return PRO_REPORT_DESC;
 }

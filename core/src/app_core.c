@@ -10,6 +10,7 @@
 #include "tusb.h"
 
 #include "app.h"
+#include "ds5.h"
 #include "log.h"
 #include "mapping.h"
 #include "platform.h"
@@ -17,6 +18,7 @@
 #include "s2_link.h"
 #include "settings.h"
 #include "usb_hid.h"
+#include "usb_mode.h"
 #include "webusb.h"
 
 #define SUSPEND_DISCONNECT_MS 30000
@@ -100,10 +102,18 @@ static void update_input(void) {
         if (was_connected && seq == last_seq && !mapping_macro_busy(&macro)) return;
         was_connected = true;
         last_seq = seq;
-        procon_input_t out;
-        mapping_apply(&g_settings, s2_link_mapping_ctx(), &in, &out);
         uint32_t prev = s_raw_buttons;
         s_raw_buttons = in.buttons;
+        // A button press while the host sleeps (controller still connected,
+        // i.e. within SUSPEND_DISCONNECT_MS) wakes it.
+        if ((in.buttons & ~prev) && tud_suspended()) s2_link_hook_controller_seen();
+        if (usb_mode_active() == USB_MODE_DUALSENSE_EDGE) {
+            // GL/GR/C are real buttons in this mode: no quick remap or macros.
+            ds5_set_input(&in, s2_link_mapping_ctx(), true);
+            return;
+        }
+        procon_input_t out;
+        mapping_apply(&g_settings, s2_link_mapping_ctx(), &in, &out);
         if (!g_settings.quick_remap_off) {
             in_button_t back;
             if (mapping_quick_remap(&g_settings, prev, in.buttons, &back)) {
@@ -116,9 +126,6 @@ static void update_input(void) {
             if (mapping_quick_remap_held(in.buttons)) out.buttons = 0;
         }
         out.buttons |= mapping_macro_step(&macro, &g_settings, prev, in.buttons, platform_millis());
-        // A button press while the host sleeps (controller still connected,
-        // i.e. within SUSPEND_DISCONNECT_MS) wakes it.
-        if ((in.buttons & ~prev) && tud_suspended()) s2_link_hook_controller_seen();
         // Charge state byte is non-zero while external power is connected.
         procon_set_input(&out, true, in.battery_mv, in.charge_state != 0 && in.charge_state != 0x20);
     } else {
@@ -127,6 +134,7 @@ static void update_input(void) {
         memset(&macro, 0, sizeof macro);
         s_raw_buttons = 0;
         procon_set_input(NULL, false, 0, false);
+        ds5_set_input(NULL, NULL, false);
     }
 }
 
@@ -168,7 +176,9 @@ static void maintenance_task(void) {
 }
 
 void app_core_init(void) {
+    LOG("usb: mode %s", usb_mode_name(usb_mode_active()));
     procon_init();
+    ds5_init();
     s2_link_init();
 }
 
@@ -177,7 +187,8 @@ void app_core_task(void) {
     s2_link_task();
     update_input();
     usb_hid_task();
-    procon_task();
+    if (usb_mode_active() == USB_MODE_DUALSENSE_EDGE) ds5_task();
+    else procon_task();
     webusb_task();
     suspend_task();
     settings_task();

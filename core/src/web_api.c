@@ -23,6 +23,7 @@
 #include "s2_link.h"
 #include "platform.h"
 #include "settings.h"
+#include "usb_mode.h"
 #include "version.h"
 #include "web_api.h"
 
@@ -96,12 +97,13 @@ static void api_status(http_response_t *r) {
     s2_link_info_t li;
     s2_link_get_info(&li);
     procon_status_t ps;
-    procon_get_status(&ps);
+    usb_mode_get_status(&ps);
     char a[18];
 
     jb_printf(&j, "{\"version\":");
     jb_str(&j, S2P_VERSION);
-    jb_printf(&j, ",\"platform\":\"%s\",\"wifi\":%s", platform_name(), platform_has_wifi() ? "true" : "false");
+    jb_printf(&j, ",\"platform\":\"%s\",\"wifi\":%s,\"usb_mode\":\"%s\"", platform_name(),
+              platform_has_wifi() ? "true" : "false", usb_mode_name(usb_mode_active()));
     jb_printf(&j, ",\"link\":{\"state\":\"%s\"", s2_link_state_name(li.state));
     addr_str(a, li.addr);
     jb_printf(&j, ",\"addr\":\"%s\",\"pid\":%u,\"serial\":", a, li.pid);
@@ -169,13 +171,13 @@ static void api_settings_get(http_response_t *r) {
               "\"gyro_bias\":[%d,%d,%d],"
               "\"rumble_enabled\":%u,\"rumble_strength\":%u,\"rumble_freq_mode\":%u,\"rumble_freq_slope\":%u,"
               "\"usb_interval\":%u,\"led_follow_host\":%u,"
-              "\"quick_remap\":%u,\"usb_detach\":%u,\"usb_wakeup\":%u,\"webusb\":%u,\"hotkey\":%u,\"wifi_autostart\":%u,\"wifi_channel\":%u,"
+              "\"quick_remap\":%u,\"usb_mode\":%u,\"usb_detach\":%u,\"usb_wakeup\":%u,\"webusb\":%u,\"hotkey\":%u,\"wifi_autostart\":%u,\"wifi_channel\":%u,"
               "\"wifi_ssid\":",
               s->stick_deadzone_pct, s->stick_outer_pct, s->swap_sticks, s->gc_trigger_threshold, s->gyro_enabled,
               s->gyro_range, s->gyro_scale_pct, s->accel_scale_pct, s->gyro_bias[0], s->gyro_bias[1],
               s->gyro_bias[2], s->rumble_enabled, s->rumble_strength_pct, s->rumble_freq_mode,
               s->rumble_freq_slope, s->usb_report_interval_ms,
-              s->led_follow_host, !s->quick_remap_off, s->usb_detach_when_idle, s->usb_remote_wakeup, s->webusb_enabled, s->hotkey_enabled,
+              s->led_follow_host, !s->quick_remap_off, s->usb_mode, s->usb_detach_when_idle, s->usb_remote_wakeup, s->webusb_enabled, s->hotkey_enabled,
               s->wifi_autostart, s->wifi_channel);
     jb_str(&j, s->wifi_ssid);
     jb_printf(&j, ",\"wifi_has_pass\":%s}", s->wifi_pass[0] ? "true" : "false");
@@ -248,6 +250,7 @@ static bool apply_kv(settings_t *s, const char *k, const char *v, bool *usb_reco
         {"usb_detach", &s->usb_detach_when_idle, 1, false},
         {"usb_wakeup", &s->usb_remote_wakeup, 1, false},
         {"webusb", &s->webusb_enabled, 1, true},
+        {"usb_mode", &s->usb_mode, 1, false},
         {"hotkey", &s->hotkey_enabled, 1, false},
         {"wifi_autostart", &s->wifi_autostart, 1, false},
         {"wifi_channel", &s->wifi_channel, 1, false},
@@ -289,10 +292,18 @@ static void api_settings_post(const http_request_t *req, http_response_t *r) {
     }
     free(body);
     settings_sanitize(&s);
+    bool mode_changed = s.usb_mode != g_settings.usb_mode;
     g_settings = s;
-    settings_save_later();
-    LOG("web: settings updated%s", usb ? " (USB re-enumeration)" : "");
-    if (usb) app_request_usb_reconnect();
+    if (mode_changed) {
+        // The host must see a different device: save and restart.
+        settings_save_now();
+        LOG("web: USB mode -> %s, restarting", usb_mode_name((usb_mode_t)s.usb_mode));
+        app_request_reboot(false);
+    } else {
+        settings_save_later();
+        LOG("web: settings updated%s", usb ? " (USB re-enumeration)" : "");
+        if (usb) app_request_usb_reconnect();
+    }
     api_settings_get(r);
 }
 

@@ -130,6 +130,8 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
 <section class="card">
   <h2>USB and system</h2>
   <div class="grid">
+    <label>Appear on USB as
+      <select data-k="usb_mode"><option value="0">Switch Pro Controller (Switch consoles, PC)</option><option value="1">DualSense Edge (PC: GL/GR/C mappable in Steam)</option></select></label>
     <label>Report interval (ms)<input type="number" min="4" max="16" data-k="usb_interval"></label>
     <label class="check"><input type="checkbox" data-k="led_follow_host">Player LEDs follow the host</label>
     <label class="check"><input type="checkbox" data-k="usb_detach">Only appear on USB while a controller is connected</label>
@@ -272,6 +274,8 @@ async function save(){
   document.querySelectorAll('[data-map]').forEach(el=>p.append('map_'+el.dataset.map,el.value));
   document.querySelectorAll('[data-k]').forEach(el=>p.append(el.dataset.k,el.type==='checkbox'?(el.checked?1:0):el.value));
   const pw=$('wifi_pass').value;if(pw)p.append('wifi_pass',pw);
+  const modeEl=document.querySelector('[data-k="usb_mode"]');
+  if(S&&modeEl&&String(S.usb_mode)!==modeEl.value&&!confirm('Changing what the dongle appears as restarts it. Continue?'))return;
   const r=await api('/api/settings',{method:'POST',body:p.toString()});
   if(r.ok){S=r.json();render();toast('Saved')}else toast('Save failed');
 }
@@ -296,6 +300,7 @@ async function poll(){
       ['Battery',L.battery_mv?(L.battery_mv/1000).toFixed(2)+' V':'—'],
       ['Report rate',ready?L.report_hz+' Hz ('+L.conn_interval_ms+' ms interval)':'—'],
       ['Gyro scale',['not detected','16.4','14.3'][L.gyro_range]||'—'],
+      ['USB mode',s.usb_mode==='dualsense_edge'?'DualSense Edge':'Switch Pro Controller'],
       ['Host',s.usb.mounted?`handshake ${s.usb.handshake?'yes':'no'}, mode 0x${s.usb.report_mode.toString(16)}, IMU ${s.usb.imu?'on':'off'}, ${s.usb.subcommands} subcommands, ${s.usb.reports} reports sent, rumble frames ${s.usb.rumble_frames}`:'—'],
     ]);
     if(s.input){

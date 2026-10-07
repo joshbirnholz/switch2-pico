@@ -29,11 +29,14 @@ bool usb_hid_mounted(void);
 // Call from the main loop.
 void usb_hid_task(void);
 
-// Implemented by the application (procon.c).
+// Implemented in usb_mode.c.
 // Called from usb_hid_task() in main loop context.
 void usb_hid_on_output(const uint8_t *buf, uint16_t len, bool via_control, uint8_t control_report_id);
-// Implemented in usb_descriptors.c.
+// Implemented in usb_mode.c (depends on the active USB mode).
 const uint8_t *usb_hid_report_descriptor(uint16_t *len);
+// GET_REPORT(feature): fill `buf` (report ID first, `len` bytes max), return
+// the length. May run in the USB stack's context.
+uint16_t usb_hid_get_feature(uint8_t report_id, uint8_t *buf, uint16_t len);
 
 #ifdef __cplusplus
 }

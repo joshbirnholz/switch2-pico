@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "ds5.h"
 #include "hd_rumble.h"
 #include "mapping.h"
 #include "s2_proto.h"
@@ -28,6 +29,18 @@ static int g_fail, g_pass;
 settings_t g_settings;
 const char *in_button_name(in_button_t b) { (void)b; return "?"; }
 const char *out_button_name(out_button_t b) { (void)b; return "?"; }
+
+// Stubs for ds5.c's runtime half (only its pure helpers are tested).
+#include "platform.h"
+#include "usb_hid.h"
+uint32_t platform_millis(void) { return 0; }
+void platform_unique_id(uint8_t out[PLATFORM_UNIQUE_ID_LEN]) { memset(out, 0x11, PLATFORM_UNIQUE_ID_LEN); }
+bool usb_hid_mounted(void) { return false; }
+bool usb_hid_ready(void) { return false; }
+bool usb_hid_send(uint8_t id, const uint8_t *d, uint16_t n) { (void)id; (void)d; (void)n; return false; }
+void procon_hook_rumble(const rumble_sample_t *l, int nl, const rumble_sample_t *r, int nr) { (void)l; (void)nl; (void)r; (void)nr; }
+void procon_hook_player_lights(uint8_t lights) { (void)lights; }
+void log_printf(const char *fmt, ...) { (void)fmt; }
 
 static void test_defaults(settings_t *s) {
     memset(s, 0, sizeof *s);
@@ -293,6 +306,110 @@ static void test_macro(void) {
     CHECK(mapping_out_button_bit(OUT_HOME_A) == 0);
 }
 
+static void test_ds5(void) {
+    ds5_state_t st;
+    memset(&st, 0, sizeof st);
+    st.stick_l[0] = st.stick_l[1] = st.stick_r[0] = st.stick_r[1] = S1_STICK_CENTER;
+    uint8_t r[DS5_INPUT_REPORT_LEN];
+
+    // Neutral: centred sticks, hat released, no touches.
+    ds5_build_input(&st, 7, 3000, r);
+    CHECK(r[0] == 0x01 && r[1] == 128 && r[2] == 128 && r[3] == 128 && r[4] == 128);
+    CHECK(r[7] == 7 && (r[8] & 0x0F) == 8 && r[9] == 0 && r[10] == 0);
+    CHECK(r[33] == 0x80 && r[37] == 0x80);
+    CHECK(r[28] == (3000 & 0xFF) && r[29] == (3000 >> 8));
+
+    // Positional face buttons, d-pad, extras, full stick deflection (y up = 0).
+    st.s1_buttons = S1_BTN_A | S1_BTN_B | S1_BTN_UP | S1_BTN_RIGHT | S1_BTN_HOME | S1_BTN_ZL;
+    st.gl = st.gr = st.c = true;
+    st.stick_l[1] = S1_STICK_CENTER + S1_STICK_RANGE;
+    st.stick_r[0] = S1_STICK_CENTER - S1_STICK_RANGE;
+    st.trigger_l = 255;
+    ds5_build_input(&st, 0, 0, r);
+    CHECK((r[8] & 0x0F) == 1);              // up-right
+    CHECK((r[8] & 0x40) && (r[8] & 0x20));  // circle (A), cross (B)
+    CHECK(!(r[8] & 0x10) && !(r[8] & 0x80));
+    CHECK(r[9] & 0x04);                     // L2
+    CHECK(r[10] == (0x01 | 0x20 | 0x40 | 0x80));   // PS, right Fn, paddles
+    CHECK(r[2] == 1 && r[3] == 1);
+    CHECK(r[5] == 255);
+
+    // Motion: 16 LSB per deg/s, 8192 LSB per g.
+    st.gyro_dps[1] = 100.0f;
+    st.accel_g[2] = -1.0f;
+    ds5_build_input(&st, 0, 0, r);
+    CHECK((int16_t)(r[18] | r[19] << 8) == 1600);
+    CHECK((int16_t)(r[26] | r[27] << 8) == -8192);
+
+    // Battery nibbles.
+    st.battery_pct = 55;
+    st.charging = true;
+    ds5_build_input(&st, 0, 0, r);
+    CHECK(r[53] == 0x15);
+
+    // Output report 0x02: rumble (v1 and v2 flags) and player LEDs.
+    uint8_t o[48];
+    memset(o, 0, sizeof o);
+    o[0] = 0x02;
+    o[1] = 0x03;    // compatible vibration + haptics select
+    o[3] = 40;      // right (weak)
+    o[4] = 200;     // left (strong)
+    o[2] = 0x10;    // player LED control
+    o[44] = 0x0A;   // two LEDs
+    ds5_output_t out;
+    CHECK(ds5_parse_output(o, sizeof o, &out));
+    CHECK(out.rumble && out.motor_left == 200 && out.motor_right == 40);
+    CHECK(out.player_leds && out.player_pattern == 0x0A);
+    o[1] = 0;
+    o[39] = 0x04;   // vibration v2
+    CHECK(ds5_parse_output(o, sizeof o, &out) && out.rumble);
+    o[39] = 0;
+    o[2] = 0;
+    CHECK(ds5_parse_output(o, sizeof o, &out) && !out.rumble && !out.player_leds);
+    o[0] = 0x31;
+    CHECK(!ds5_parse_output(o, sizeof o, &out));
+
+    // Feature reports: sizes the Linux driver insists on, calibration values.
+    uint8_t f[64];
+    CHECK(ds5_get_feature(0x05, f, 64) == 41 && f[0] == 0x05);
+    CHECK((int16_t)(f[7] | f[8] << 8) == 1024 && (int16_t)(f[9] | f[10] << 8) == -1024);
+    CHECK((f[19] | f[20] << 8) == 64 && (int16_t)(f[23] | f[24] << 8) == 8192);
+    CHECK(ds5_get_feature(0x09, f, 64) == 20 && f[0] == 0x09);
+    CHECK(ds5_get_feature(0x20, f, 64) == 64 && f[0] == 0x20 && (f[44] | f[45] << 8) == 0x0300);
+    CHECK(ds5_get_feature(0x05, f, 10) == 10);   // never more than asked for
+    uint16_t dl;
+    const uint8_t *d = ds5_report_descriptor(&dl);
+    CHECK(dl > 0 && d[0] == 0x05 && d[dl - 1] == 0xC0);
+}
+
+static void test_imu_sdl(void) {
+    settings_t s;
+    test_defaults(&s);
+    mapping_ctx_t ctx;
+    memset(&ctx, 0, sizeof ctx);
+    ctx.gyro_lsb_per_dps = 16.0f;
+    s2_input_t in;
+    memset(&in, 0, sizeof in);
+    in.accel[0] = 4096;    // +1 g on S2 x
+    in.accel[1] = 2048;    // +0.5 g on S2 y
+    in.accel[2] = -4096;
+    in.gyro[0] = 160;      // 10 dps
+    in.gyro[1] = 320;
+    in.gyro[2] = -480;
+    float a[3], g[3];
+    mapping_imu_sdl(&s, &ctx, &in, a, g);
+    // SDL frame = (S2 x, S2 z, -S2 y), as SDL's Switch 2 driver.
+    CHECK_NEAR(a[0], 1.0, 1e-4);
+    CHECK_NEAR(a[1], -1.0, 1e-4);
+    CHECK_NEAR(a[2], -0.5, 1e-4);
+    CHECK_NEAR(g[0], 10.0, 1e-3);
+    CHECK_NEAR(g[1], -30.0, 1e-3);
+    CHECK_NEAR(g[2], -20.0, 1e-3);
+    s.gyro_enabled = 0;
+    mapping_imu_sdl(&s, &ctx, &in, a, g);
+    CHECK(a[0] == 0 && g[1] == 0);
+}
+
 int main(void) {
     test_s1_rumble_classic();
     test_s1_rumble_packed();
@@ -303,6 +420,8 @@ int main(void) {
     test_mapping();
     test_quick_remap();
     test_macro();
+    test_ds5();
+    test_imu_sdl();
     printf("%d passed, %d failed\n", g_pass, g_fail);
     return g_fail ? 1 : 0;
 }

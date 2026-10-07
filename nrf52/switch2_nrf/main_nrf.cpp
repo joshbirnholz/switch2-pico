@@ -12,6 +12,7 @@
 #include "s2_link.h"
 #include "settings.h"
 #include "usb_hid.h"
+#include "usb_mode.h"
 #include "version.h"
 
 // ---------------------------------------------------------------------------
@@ -115,19 +116,20 @@ static void usb_setup(void) {
         delay(10);
     }
     TinyUSBDevice.clearConfiguration();
-    TinyUSBDevice.setID(0x057E, 0x2009);
-    TinyUSBDevice.setManufacturerDescriptor("Nintendo Co., Ltd.");
-    TinyUSBDevice.setProductDescriptor("Pro Controller");
+    const usb_identity_t *id = usb_mode_identity();
+    TinyUSBDevice.setID(id->vid, id->pid);
+    TinyUSBDevice.setManufacturerDescriptor(id->manufacturer);
+    TinyUSBDevice.setProductDescriptor(id->product);
     TinyUSBDevice.setSerialDescriptor("000000000001");
     TinyUSBDevice.addInterface(s_pro_itf);
     if (g_settings.webusb_enabled) {
         s_webusb.setLandingPage(&s_landing_page);
         s_webusb.setStringDescriptor("Switch2-Pico Config");
         s_webusb.begin();                     // also switches to USB 2.1 for the BOS descriptor
-        TinyUSBDevice.setDeviceVersion(0x0201);
+        TinyUSBDevice.setDeviceVersion(id->bcd_device | 1);
     } else {
         TinyUSBDevice.setVersion(0x0200);
-        TinyUSBDevice.setDeviceVersion(0x0200);
+        TinyUSBDevice.setDeviceVersion(id->bcd_device);
     }
     if (!g_settings.usb_detach_when_idle) TinyUSBDevice.attach();
 }

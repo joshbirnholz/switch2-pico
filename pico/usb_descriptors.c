@@ -1,5 +1,6 @@
 // USB descriptors: the device presents itself like a wired Nintendo Switch Pro
-// Controller (057E:2009). Interface 0 is the controller's HID interface. When
+// Controller (057E:2009) or, in DualSense Edge mode, like a DualSense Edge
+// (054C:0DF2); see core/src/usb_mode.c. Interface 0 is the controller's HID interface. When
 // WebUSB is enabled, interface 1 is a vendor interface for the configuration
 // page and the device advertises USB 2.1 + a BOS descriptor (WebUSB landing
 // page, Microsoft OS 2.0 descriptors for automatic WinUSB on Windows). With
@@ -13,10 +14,8 @@
 
 #include "settings.h"
 #include "usb_hid.h"
+#include "usb_mode.h"
 #include "webusb.h"
-
-#define PRO_VID 0x057E
-#define PRO_PID 0x2009
 
 static tusb_desc_device_t s_device = {
     .bLength = sizeof(tusb_desc_device_t),
@@ -26,8 +25,8 @@ static tusb_desc_device_t s_device = {
     .bDeviceSubClass = 0x00,
     .bDeviceProtocol = 0x00,
     .bMaxPacketSize0 = CFG_TUD_ENDPOINT0_SIZE,
-    .idVendor = PRO_VID,
-    .idProduct = PRO_PID,
+    .idVendor = 0x057E,
+    .idProduct = 0x2009,
     .bcdDevice = 0x0200,
     .iManufacturer = 0x01,
     .iProduct = 0x02,
@@ -36,10 +35,13 @@ static tusb_desc_device_t s_device = {
 };
 
 uint8_t const *tud_descriptor_device_cb(void) {
+    const usb_identity_t *id = usb_mode_identity();
+    s_device.idVendor = id->vid;
+    s_device.idProduct = id->pid;
     // A distinct bcdDevice keeps Windows from reusing a cached "no MS OS
-    // descriptor" answer from a genuine Pro Controller.
+    // descriptor" answer from a genuine controller.
     s_device.bcdUSB = g_settings.webusb_enabled ? 0x0210 : 0x0200;
-    s_device.bcdDevice = g_settings.webusb_enabled ? 0x0201 : 0x0200;
+    s_device.bcdDevice = (uint16_t)(id->bcd_device | (g_settings.webusb_enabled ? 1 : 0));
     return (uint8_t const *)&s_device;
 }
 
@@ -97,15 +99,17 @@ uint8_t const *tud_descriptor_configuration_cb(uint8_t index) {
 // ---------------------------------------------------------------------------
 // Strings
 // ---------------------------------------------------------------------------
-static const char *const s_strings[] = {
-    NULL,                   // 0: language (handled below)
-    "Nintendo Co., Ltd.",   // 1
-    "Pro Controller",       // 2
-    "000000000001",         // 3
-    "Switch2-Pico Config",  // 4
-};
+static const char *string_for(uint8_t index) {
+    switch (index) {
+    case 1: return usb_mode_identity()->manufacturer;
+    case 2: return usb_mode_identity()->product;
+    case 3: return "000000000001";
+    case 4: return "Switch2-Pico Config";
+    default: return NULL;
+    }
+}
 
-static uint16_t s_str[32];
+static uint16_t s_str[48];
 
 uint16_t const *tud_descriptor_string_cb(uint8_t index, uint16_t langid) {
     (void)langid;
@@ -114,10 +118,10 @@ uint16_t const *tud_descriptor_string_cb(uint8_t index, uint16_t langid) {
         s_str[1] = 0x0409;
         chr_count = 1;
     } else {
-        if (index >= sizeof s_strings / sizeof s_strings[0]) return NULL;
-        const char *str = s_strings[index];
+        const char *str = string_for(index);
+        if (!str) return NULL;
         chr_count = (uint8_t)strlen(str);
-        if (chr_count > 31) chr_count = 31;
+        if (chr_count > 47) chr_count = 47;
         for (uint8_t i = 0; i < chr_count; i++) s_str[1 + i] = str[i];
     }
     s_str[0] = (uint16_t)((TUSB_DESC_STRING << 8) | (2 * chr_count + 2));
