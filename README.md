@@ -65,8 +65,15 @@ Download the `.uf2` for your board from the
   short RST to GND twice quickly); a drive such as `NICENANO` or
   `FTHR840BOOT` appears. Copy the `…-nrf52840.uf2` file onto it.
 
-The board reboots into the firmware. To update later, use **Firmware update
-mode** on the configuration page, which reboots into the same drive.
+The board reboots into the firmware.
+
+**Updating:** the configuration page's **Firmware update** section shows the
+installed and latest version. **Update** downloads the latest build, restarts
+the dongle as its USB drive, and (in Chrome or Edge) writes the file to the
+drive once you pick it: choose the `NICENANO` / `FTHR840BOOT` / `RP2350` drive
+when asked. In other browsers, or if the drive can't be picked, use *Save the
+.uf2 instead* and drag the file onto the drive. **Firmware update mode** only
+restarts into the drive, for installing a file by hand.
 
 ## Pairing and everyday use
 
@@ -135,9 +142,10 @@ dongle is plugged in), click **Connect over USB** and pick "Pro Controller".
 You can also open `web/index.html` from this repository directly (download
 it and double-click it; WebUSB works from a local file too).
 
-The hosted page is published by `.github/workflows/pages.yml`. On a fork,
-enable it once under **Settings → Pages → Source: GitHub Actions** and run the
-*Pages* workflow (GitHub Pages for a private repository needs a paid plan).
+The hosted page, together with the latest firmware it offers as updates, is
+published by the `pages` job in `.github/workflows/build.yml`. On a fork,
+enable it once under **Settings → Pages → Source: GitHub Actions** (GitHub
+Pages for a private repository needs a paid plan).
 
 * **Linux:** allow your user to open the device first:
   `sudo cp tools/99-switch2-pico.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules`,

@@ -152,6 +152,23 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
   </div>
 </section>
 
+<section class="card" id="fw-card">
+  <h2>Firmware update</h2>
+  <dl class="kv" id="fw-info"></dl>
+  <div class="row" style="margin-top:12px" id="fw-step1">
+    <button class="primary" id="fw-go" onclick="fwStart()" disabled>Update</button>
+    <button onclick="fwCheck()">Check again</button>
+  </div>
+  <div id="fw-step2" style="display:none;margin-top:12px">
+    <p class="note" style="margin-top:0">The dongle restarted as a USB drive (<b>NICENANO</b>, <b>FTHR840BOOT</b> or <b>RP2350</b>). Choose that drive and the firmware is written to it; the dongle installs it and restarts by itself.</p>
+    <div class="row">
+      <button class="primary" id="fw-write" onclick="fwWrite()">Write to the drive…</button>
+      <button onclick="fwSave()">Save the .uf2 instead</button>
+    </div>
+  </div>
+  <p class="note" id="fw-note"></p>
+</section>
+
 <section class="card">
   <div class="row">
     <button class="primary" onclick="save()">Save settings</button>
@@ -267,6 +284,7 @@ async function poll(){
   try{
     if(!USE_HTTP && !usbDev) return;
     const s=(await api('/api/status')).json();
+    if(!ST||ST.version!==s.version||ST.platform!==s.platform){ST=s;fwRender()}else ST=s;
     $('st-ver').textContent='v'+s.version;
     const L=s.link,ready=L.state==='ready';
     const sl=$('st-link');sl.textContent=ready?'Controller connected':L.state==='scanning'?(s.bond.bonded?'Waiting for controller':'Waiting for pairing'):L.state;
@@ -301,7 +319,65 @@ async function copyLog(){
   let ok=false;try{ok=document.execCommand('copy')}catch(e){}
   ta.remove();toast(ok?'Log copied':'Copy failed');
 }
+// ---- Firmware update ------------------------------------------------------
+// CI publishes every build of the default branch next to this page (fw/).
+const FW_BASE='https://joshbirnholz.github.io/switch2-pico/fw/';
+let FW=null,FW_ERR='',ST=null,fwBlob=null,fwName='';
+async function fwCheck(){
+  FW=null;FW_ERR='';
+  try{const r=await fetch(FW_BASE+'latest.json?'+Date.now(),{cache:'no-store'});if(!r.ok)throw new Error(r.status);FW=await r.json()}
+  catch(e){FW_ERR='Couldn\'t reach GitHub to check for updates.'}
+  fwRender();
+}
+function vcmp(a,b){const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<3;i++){const d=(x[i]||0)-(y[i]||0);if(d)return d}return 0}
+function fwRender(){
+  const go=$('fw-go'),cur=ST&&ST.version,plat=ST&&ST.platform;
+  const file=FW&&plat&&FW.files&&FW.files[plat];
+  kv($('fw-info'),[['Installed',cur?'v'+cur+(plat?' ('+plat+')':''):'—'],['Latest',FW?'v'+FW.version+' ('+FW.sha+')':(FW_ERR||'checking…')]]);
+  go.disabled=!(file&&cur);
+  if(file&&cur){const c=vcmp(FW.version,cur);go.textContent=c>0?'Update to v'+FW.version:'Reinstall v'+FW.version;
+    $('fw-note').textContent=c>0?'A newer version is available.':'You have the latest version.';}
+  else $('fw-note').textContent=FW&&plat&&!file?'No prebuilt firmware for this board ('+plat+').':(cur?'':'Connect the dongle to see its version.');
+}
+async function fwStart(){
+  const file=FW.files[ST.platform];
+  if(!confirm('Download v'+FW.version+' and restart the dongle into its USB drive mode to install it?'))return;
+  try{
+    $('fw-note').textContent='Downloading…';
+    const r=await fetch(FW_BASE+file+'?'+FW.sha,{cache:'no-store'});
+    if(!r.ok)throw new Error('download failed ('+r.status+')');
+    fwBlob=await r.blob();fwName=file;
+  }catch(e){$('fw-note').textContent='Download failed: '+e.message;return}
+  try{await api('/api/action?do=bootloader',{method:'POST'})}catch(e){}
+  $('fw-step1').style.display='none';$('fw-step2').style.display='';
+  $('fw-write').style.display=window.showDirectoryPicker?'':'none';
+  $('fw-note').textContent=window.showDirectoryPicker?'':'This browser can\'t write to the drive directly: save the file and drag it onto the drive.';
+}
+async function fwWrite(){
+  let dir;
+  try{dir=await window.showDirectoryPicker({mode:'readwrite',id:'uf2drive'})}catch(e){return}
+  try{await dir.getFileHandle('INFO_UF2.TXT')}
+  catch(e){if(!confirm('This doesn\'t look like the dongle\'s USB drive (no INFO_UF2.TXT). Write anyway?'))return}
+  $('fw-note').textContent='Writing… the dongle installs the firmware and restarts by itself.';
+  try{
+    const w=await(await dir.getFileHandle(fwName,{create:true})).createWritable();
+    await w.write(fwBlob);
+    await w.close();
+  }catch(e){
+    // The drive disappears as soon as the bootloader has the whole image, which
+    // can make the final close fail even though the update went through.
+    console.warn(e);
+  }
+  $('fw-note').textContent='Done. When the dongle reconnects, click Connect if it isn\'t picked up automatically.';
+  $('fw-step2').style.display='none';$('fw-step1').style.display='';
+}
+function fwSave(){
+  const a=document.createElement('a');a.href=URL.createObjectURL(fwBlob);a.download=fwName;a.click();
+  $('fw-note').textContent='Drag '+fwName+' onto the dongle\'s USB drive.';
+}
+
 buildStatic();
+fwCheck();
 if (USE_HTTP){loadSettings();loadLog();}
 else if (!navigator.usb){$('usb-help').style.display='';$('usb-help').innerHTML='<b>This browser has no WebUSB.</b> Use Chrome or Edge, or the Wi-Fi page (tap BOOTSEL, join Switch2-Pico-XXXX, open http://192.168.4.1).';}
 else {

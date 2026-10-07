@@ -94,3 +94,47 @@ jobs:
             gh release create latest --title "Latest build (v$ver, $short)" --notes "$notes" --prerelease
           fi
           gh release upload latest switch2-pico-v$ver-*.uf2 --clobber
+
+  # Publishes the configuration page (web/) together with the latest firmware
+  # (fw/) to GitHub Pages: https://joshbirnholz.github.io/switch2-pico/. The
+  # page is also the WebUSB landing page Chrome offers when the dongle is
+  # plugged in, and its "Update" button downloads fw/latest.json and the
+  # .uf2 files from here (the site is public even though the repository is
+  # private). Enable once under Settings -> Pages -> Source: GitHub Actions.
+  pages:
+    if: (github.event_name == 'push' && github.ref_name == github.event.repository.default_branch) || github.event_name == 'workflow_dispatch'
+    needs: [test, firmware-pico2w, firmware-nrf52840]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: true
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - name: Assemble the site
+        run: |
+          ver=$(head -n1 VERSION)
+          mkdir -p site/fw
+          cp -r web/. site/
+          cp dist/switch2-nrf52840-firmware/switch2_nrf52840.uf2 site/fw/switch2-pico-nrf52840.uf2
+          cp dist/switch2-pico2w-firmware/switch2_pico.uf2 site/fw/switch2-pico-pico2w.uf2
+          cat > site/fw/latest.json <<JSON
+          {"version": "$ver", "sha": "${GITHUB_SHA::7}",
+           "files": {"nrf52840": "switch2-pico-nrf52840.uf2", "pico2w": "switch2-pico-pico2w.uf2"}}
+          JSON
+          cat site/fw/latest.json
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4
