@@ -28,8 +28,10 @@
 #include "version.h"
 #include "web_api.h"
 
-extern const uint8_t web_ui_data[];
-extern const size_t web_ui_size;
+// The page itself is embedded only on boards that serve it over HTTP (the
+// Pico's Wi-Fi); elsewhere these weak placeholders are used.
+__attribute__((weak)) const uint8_t web_ui_data[1] = {0};
+__attribute__((weak)) const size_t web_ui_size = 0;
 
 // ---------------------------------------------------------------------------
 // Small JSON writer
@@ -366,6 +368,7 @@ void web_api_handle(const http_request_t *req, http_response_t *r) {
     bool post = strcmp(req->method, "POST") == 0;
 
     if (get && (!strcmp(req->path, "/") || !strcmp(req->path, "/index.html"))) {
+        if (!web_ui_size) return respond_text(r, 404, "Open https://joshbirnholz.github.io/switch2-pico/");
         r->status = 200;
         r->content_type = "text/html; charset=utf-8";
         r->body = web_ui_data;

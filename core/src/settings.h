@@ -1,6 +1,10 @@
 #ifndef S2P_SETTINGS_H
 #define S2P_SETTINGS_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -115,5 +119,9 @@ void settings_factory_reset(void);
 
 const char *in_button_name(in_button_t b);
 const char *out_button_name(out_button_t b);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

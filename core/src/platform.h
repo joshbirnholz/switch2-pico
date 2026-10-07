@@ -27,6 +27,9 @@ bool platform_has_wifi(void);
 size_t platform_settings_read(void *dst, size_t cap);
 bool platform_settings_write(const void *src, size_t len);
 
+// Reboot now, optionally into the UF2 bootloader. Does not return.
+void platform_reboot(bool bootloader);
+
 // Diagnostic output (debug UART / serial), one line at a time.
 void platform_log_output(const char *line);
 

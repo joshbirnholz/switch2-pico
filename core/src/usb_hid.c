@@ -21,6 +21,39 @@ CFG_TUSB_MEM_SECTION CFG_TUSB_MEM_ALIGN static uint8_t s_in_buf[USB_HID_MAX_IN_R
 CFG_TUSB_MEM_SECTION CFG_TUSB_MEM_ALIGN static uint8_t s_out_buf[USB_HID_EP_SIZE];
 CFG_TUSB_MEM_SECTION CFG_TUSB_MEM_ALIGN static uint8_t s_ctrl_buf[USB_HID_EP_SIZE];
 
+// Single producer (USB stack) / single consumer (main loop) queue of output reports.
+#define OUT_QUEUE_LEN 8
+typedef struct {
+    uint8_t data[USB_HID_EP_SIZE];
+    uint8_t len;
+    bool via_control;
+    uint8_t report_id;
+} out_report_t;
+static out_report_t s_outq[OUT_QUEUE_LEN];
+static volatile uint8_t s_outq_head, s_outq_tail;
+
+static void out_enqueue(const uint8_t *buf, uint16_t len, bool via_control, uint8_t report_id) {
+    uint8_t t = s_outq_tail;
+    uint8_t next = (uint8_t)((t + 1) % OUT_QUEUE_LEN);
+    if (next == s_outq_head) return;   // full: drop (the host resends rumble/subcommands)
+    if (len > USB_HID_EP_SIZE) len = USB_HID_EP_SIZE;
+    memcpy(s_outq[t].data, buf, len);
+    s_outq[t].len = (uint8_t)len;
+    s_outq[t].via_control = via_control;
+    s_outq[t].report_id = report_id;
+    __sync_synchronize();
+    s_outq_tail = next;
+}
+
+void usb_hid_task(void) {
+    while (s_outq_head != s_outq_tail) {
+        out_report_t *r = &s_outq[s_outq_head];
+        __sync_synchronize();
+        usb_hid_on_output(r->data, r->len, r->via_control, r->report_id);
+        s_outq_head = (uint8_t)((s_outq_head + 1) % OUT_QUEUE_LEN);
+    }
+}
+
 bool usb_hid_mounted(void) {
     return tud_mounted() && s_hid.ep_in != 0;
 }
@@ -111,7 +144,7 @@ static bool prohid_control_xfer_cb(uint8_t rhport, uint8_t stage, tusb_control_r
             return tud_control_xfer(rhport, request, s_ctrl_buf, request->wLength);
         }
         if (stage == CONTROL_STAGE_ACK) {
-            usb_hid_on_output(s_ctrl_buf, request->wLength, true, tu_u16_low(request->wValue));
+            out_enqueue(s_ctrl_buf, request->wLength, true, tu_u16_low(request->wValue));
         }
         return true;
     case HID_REQ_CONTROL_SET_IDLE:
@@ -138,7 +171,7 @@ static bool prohid_control_xfer_cb(uint8_t rhport, uint8_t stage, tusb_control_r
 static bool prohid_xfer_cb(uint8_t rhport, uint8_t ep_addr, xfer_result_t result, uint32_t xferred_bytes) {
     if (ep_addr == s_hid.ep_out) {
         if (result == XFER_RESULT_SUCCESS && xferred_bytes > 0) {
-            usb_hid_on_output(s_out_buf, (uint16_t)xferred_bytes, false, 0);
+            out_enqueue(s_out_buf, (uint16_t)xferred_bytes, false, 0);
         }
         TU_ASSERT(usbd_edpt_xfer(rhport, s_hid.ep_out, s_out_buf, sizeof s_out_buf));
     }

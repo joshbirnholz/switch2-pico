@@ -1,6 +1,10 @@
 #ifndef S2P_HD_RUMBLE_H
 #define S2P_HD_RUMBLE_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // HD rumble translation between the Switch 1 encoding (what a host sends to the
 // emulated Pro Controller) and the Switch 2 encoding (what the Pro Controller 2
 // linear resonant actuators accept over BLE).
@@ -62,5 +66,9 @@ void s2_rumble_encode_block(uint8_t seq, const rumble_sample_t *samples, int n,
 
 // True if any frame in the block has non-zero amplitude.
 bool s2_rumble_block_active(const uint8_t block[S2_RUMBLE_BLOCK_LEN]);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

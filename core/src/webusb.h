@@ -1,6 +1,10 @@
 #ifndef S2P_WEBUSB_H
 #define S2P_WEBUSB_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdbool.h>
 
 // WebUSB configuration channel. The configuration page (opened from the
@@ -16,5 +20,9 @@
 #define WEBUSB_VENDOR_REQUEST_MS  2
 
 void webusb_task(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

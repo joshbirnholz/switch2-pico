@@ -1,15 +1,17 @@
 # Switch2-Pico
 
-Firmware that turns a **Raspberry Pi Pico 2 W** into a wireless USB dongle for
-the **Nintendo Switch 2 Pro Controller**. The controller pairs to the Pico over
-Bluetooth LE, and the Pico shows up over USB as a wired
+Firmware that turns a **Raspberry Pi Pico 2 W** or an **nRF52840 board**
+(Pro Micro nRF52840 / nice!nano, Adafruit Feather nRF52840, ...) into a
+wireless USB dongle for the **Nintendo Switch 2 Pro Controller**. The
+controller pairs to the dongle over Bluetooth LE, and the dongle shows up over
+USB as a wired
 **Nintendo Switch (1) Pro Controller**. That means it works anywhere a Pro
 Controller works: Steam (Windows, macOS, Linux, Steam Deck), SDL games,
 emulators, Chrome's Gamepad API, Linux's `hid-nintendo` driver, and a
 Switch 1 console.
 
 ```
-Switch 2 Pro Controller  ──BLE──▶  Pico 2 W  ──USB──▶  PC / Mac / Switch 1
+Switch 2 Pro Controller  ──BLE──▶  dongle    ──USB──▶  PC / Mac / Switch 1
      (proprietary GATT)            (this firmware)      sees "Pro Controller" 057E:2009
 ```
 
@@ -33,23 +35,37 @@ Switch 2 Pro Controller  ──BLE──▶  Pico 2 W  ──USB──▶  PC / 
 | Player LEDs | Follow the player number the host assigns. |
 | Battery | Reported to the host. |
 | NSO GameCube controller | Basic support: buttons, sticks, analog triggers acting as L/R past a threshold, and rumble through built-in vibration presets. |
-| Configuration page | Over **WebUSB** in Chrome/Edge with the dongle plugged in, or over the Pico's own Wi-Fi from any phone or computer. |
+| Configuration page | Over **WebUSB** in Chrome/Edge with the dongle plugged in, or (Pico 2 W only) over the dongle's own Wi-Fi from any phone or computer. |
 
 ## Hardware
 
-* Raspberry Pi Pico 2 W (RP2350 + CYW43439). A Pico W (RP2040) build also
-  works: configure with `-DPICO_BOARD=pico_w`.
-* A USB cable from the Pico to the host.
+Two boards are supported; they share all of the controller logic.
+
+| | Raspberry Pi Pico 2 W | nRF52840 (Pro Micro / nice!nano, Feather, ...) |
+| --- | --- | --- |
+| Bluetooth | CYW43439 (BTstack), shares its radio with Wi-Fi | Nordic SoftDevice S140, Bluetooth only |
+| Configuration | WebUSB or Wi-Fi page | WebUSB |
+| Buttons on the board | BOOTSEL: tap = Wi-Fi page, hold 5 s = forget controller | none (use the configuration page) |
+| Firmware file | `switch2_pico.uf2` | `switch2_nrf52840.uf2` |
+
+A Pico W (RP2040) build also works: configure with `-DPICO_BOARD=pico_w`.
+The nRF52840 build needs a board with the Adafruit nRF52 UF2 bootloader and
+S140 v6.1.1 SoftDevice. That is the bootloader Pro Micro nRF52840 and
+nice!nano boards ship with, the same as for openpuck.
 
 ## Installing
 
-1. Get `switch2_pico.uf2`, either from the GitHub Actions artifacts or by
-   [building it](#building).
-2. Hold **BOOTSEL** on the Pico while plugging it in. A drive named `RP2350` appears.
-3. Copy the `.uf2` file onto that drive. The Pico reboots into the firmware.
+Get the `.uf2` for your board from the GitHub Actions artifacts (or
+[build it](#building)), then:
 
-To update later, use **Firmware update mode** on the configuration page, or
-repeat step 2.
+* **Pico 2 W:** hold **BOOTSEL** while plugging it in; a drive named `RP2350`
+  appears. Copy `switch2_pico.uf2` onto it.
+* **nRF52840:** double-tap reset (on a Pro Micro without a reset button,
+  short RST to GND twice quickly); a drive such as `NICENANO` or
+  `FTHR840BOOT` appears. Copy `switch2_nrf52840.uf2` onto it.
+
+The board reboots into the firmware. To update later, use **Firmware update
+mode** on the configuration page, which reboots into the same drive.
 
 ## Pairing and everyday use
 
@@ -110,7 +126,7 @@ Turn the configuration Wi-Fi on in one of three ways:
 * hold **C + Home** on the controller for 3 seconds
 * plug in the dongle while no controller is paired (it starts automatically)
 
-Then join the Wi-Fi network **`Switch2-Pico-XXXX`** (default password
+(Pico 2 W only.) Then join the Wi-Fi network **`Switch2-Pico-XXXX`** (default password
 `switch2pico`) and open **http://192.168.4.1**. Most phones open the page by
 themselves. The Wi-Fi turns itself off after 10 minutes without page activity,
 or immediately with **Turn Wi-Fi off now**, so it doesn't compete with the
@@ -181,6 +197,8 @@ where it stopped. Please include it in bug reports.
 
 ## Building
 
+### Pico 2 W
+
 ```sh
 git clone --depth 1 -b 2.2.0 https://github.com/raspberrypi/pico-sdk
 git -C pico-sdk submodule update --init --depth 1
@@ -196,20 +214,42 @@ Requires `arm-none-eabi-gcc` and CMake ≥ 3.13. The SDK fetches and builds
 `picotool` automatically. Debug output goes to UART0 (GP0 TX, 115200 baud),
 and the same log is available on the configuration page.
 
+### nRF52840
+
+```sh
+arduino-cli config add board_manager.additional_urls \
+    https://adafruit.github.io/arduino-board-index/package_adafruit_index.json
+arduino-cli core update-index && arduino-cli core install adafruit:nrf52
+nrf52/build.sh               # -> build-nrf/switch2_nrf52840.uf2
+```
+
+The sketch is built for the `adafruit:nrf52:feather52840` board definition,
+which also fits Pro Micro nRF52840 / nice!nano boards. The status LED is
+driven on both `LED_BUILTIN` and pin 24 (P0.15, the nice!nano LED). Pass
+`-DS2P_LED_PIN_A=...` style defines to change it.
+
 ## Code map
+
+`core/src/` holds everything that doesn't depend on the board. It is used
+as plain C by the Pico CMake build and as an Arduino library by the nRF52840
+sketch.
 
 | File | Purpose |
 | --- | --- |
-| `src/main.c` | Main loop; connects the modules; hotkeys, BOOTSEL, USB suspend handling |
-| `src/s2_link.c` | BTstack BLE central: scan, connect, GATT discovery, init and pairing commands, input, rumble, LEDs, NFC reading |
-| `src/s2_proto.c` | Switch 2 protocol: adverts, command framing, report and calibration parsing |
-| `src/procon.c` | Emulated Switch 1 Pro Controller: USB handshake, subcommands, SPI flash, input reports |
-| `src/usb_hid.c`, `src/usb_descriptors.c` | Custom TinyUSB HID class driver and the genuine Pro Controller descriptors |
-| `src/hd_rumble.c` | Switch 1 HD rumble decoder and Switch 2 encoder |
-| `src/mapping.c` | Button remapping, stick calibration and deadzones, IMU conversion |
-| `src/mcu_nfc.c`, `src/amiibo.c` | Switch 1 NFC/MCU emulation and the shared tag store |
-| `src/settings.c` | Settings persisted in flash |
-| `src/web/*`, `web/index.html` | Wi-Fi access point, DHCP and DNS, HTTP server, JSON API, page |
+| `core/src/s2_link.c` | Switch 2 controller logic: which adverts to connect to, init and Nintendo pairing commands, input, rumble pacing, LEDs, NFC reading, gyro calibration |
+| `core/src/s2_transport.h` | Interface each board's Bluetooth stack implements |
+| `core/src/s2_proto.c` | Switch 2 protocol: adverts, command framing, report and calibration parsing |
+| `core/src/procon.c` | Emulated Switch 1 Pro Controller: USB handshake, subcommands, SPI flash, input reports |
+| `core/src/usb_hid.c`, `usb_pro_desc.c` | TinyUSB HID class driver and the Pro Controller report descriptor |
+| `core/src/hd_rumble.c` | Switch 1 HD rumble decoder and Switch 2 encoder |
+| `core/src/mapping.c` | Button remapping, stick calibration and deadzones, IMU conversion |
+| `core/src/mcu_nfc.c`, `amiibo.c` | Switch 1 NFC/MCU emulation and the shared tag store |
+| `core/src/web_api.c`, `webusb.c` | Configuration API, served over HTTP or WebUSB |
+| `core/src/app_core.c`, `settings.c` | Glue, USB suspend / wakeup, settings |
+| `core/src/platform.h` | Board services (time, storage, reboot) |
+| `pico/` | Pico: BTstack transport, USB descriptors, Wi-Fi page server, LED, BOOTSEL |
+| `nrf52/switch2_nrf/` | nRF52840: Bluefruit transport, USB setup, LittleFS storage, LED |
+| `web/index.html` | The configuration page (WebUSB or HTTP) |
 
 ## Credits
 

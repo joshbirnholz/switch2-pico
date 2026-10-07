@@ -13,7 +13,7 @@ jobs:
       - name: Host unit tests
         run: make -C test
 
-  firmware:
+  firmware-pico2w:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,7 +33,28 @@ jobs:
           cmake --build build
       - uses: actions/upload-artifact@v4
         with:
-          name: switch2-pico-firmware
+          name: switch2-pico2w-firmware
           path: |
             build/switch2_pico.uf2
             build/switch2_pico.elf
+
+  firmware-nrf52840:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Install Adafruit nRF52 core
+        run: |
+          arduino-cli config init
+          arduino-cli config add board_manager.additional_urls https://adafruit.github.io/arduino-board-index/package_adafruit_index.json
+          arduino-cli core update-index
+          arduino-cli core install adafruit:nrf52@1.7.0
+          pip install adafruit-nrfutil
+      - name: Build
+        run: nrf52/build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: switch2-nrf52840-firmware
+          path: |
+            build-nrf/switch2_nrf52840.uf2
+            build-nrf/switch2_nrf.ino.hex

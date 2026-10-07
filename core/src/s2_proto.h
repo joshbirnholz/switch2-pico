@@ -1,6 +1,10 @@
 #ifndef S2P_S2_PROTO_H
 #define S2P_S2_PROTO_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // Nintendo Switch 2 controller Bluetooth LE protocol: identifiers, GATT UUIDs,
 // command framing and report parsing. No hardware dependencies so it can be
 // unit tested on the host (see test/).
@@ -189,5 +193,9 @@ uint8_t s2_led_pattern_for_player(int player);
 
 // Unpack two packed 12-bit values.
 void s2_unpack12(const uint8_t b[3], uint16_t *a, uint16_t *c);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

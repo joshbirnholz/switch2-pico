@@ -1,6 +1,10 @@
 #ifndef S2P_WEB_API_H
 #define S2P_WEB_API_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -26,5 +30,9 @@ typedef struct {
 } http_request_t;
 
 void web_api_handle(const http_request_t *req, http_response_t *resp);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

@@ -1,6 +1,10 @@
 #ifndef S2P_LOG_H
 #define S2P_LOG_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -18,5 +22,9 @@ size_t log_copy(char *dst, size_t dst_len);
 uint32_t log_total_written(void);
 
 #define LOG(...) log_printf(__VA_ARGS__)
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

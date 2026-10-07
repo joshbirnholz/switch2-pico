@@ -1,6 +1,10 @@
 #ifndef S2P_MAPPING_H
 #define S2P_MAPPING_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // Converts decoded Switch 2 input into the fields of a Switch 1 Pro Controller
 // input report: button remapping, stick calibration + deadzones and the IMU
 // axis / unit conversion. Pure C (unit tested on the host).
@@ -75,5 +79,9 @@ void mapping_imu(const settings_t *s, const mapping_ctx_t *ctx, const s2_input_t
 void mapping_apply(const settings_t *s, const mapping_ctx_t *ctx, const s2_input_t *in, procon_input_t *out);
 
 void mapping_pack_stick(const uint16_t v[2], uint8_t out[3]);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

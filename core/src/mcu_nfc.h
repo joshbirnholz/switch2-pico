@@ -1,6 +1,10 @@
 #ifndef S2P_MCU_NFC_H
 #define S2P_MCU_NFC_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // Emulation of the NFC/IR microcontroller found in a Switch 1 Pro Controller,
 // limited to what is needed to read (and accept writes to) NTAG215 amiibo.
 //
@@ -70,5 +74,9 @@ void mcu_set_config(mcu_t *m, const uint8_t *args, int len, uint8_t reply[MCU_CO
 void mcu_handle_request(mcu_t *m, const uint8_t *payload, int len);
 // Next packet to place in a 0x31 input report.
 void mcu_next_packet(mcu_t *m, uint8_t out[MCU_PACKET_LEN]);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

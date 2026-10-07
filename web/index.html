@@ -148,12 +148,12 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
     <label class="check"><input type="checkbox" data-k="led_follow_host">Player LEDs follow the host</label>
     <label class="check"><input type="checkbox" data-k="usb_detach">Only appear on USB while a controller is connected</label>
     <label class="check"><input type="checkbox" data-k="usb_wakeup">Wake a sleeping PC from the controller</label>
-    <label class="check"><input type="checkbox" data-k="hotkey">Hold C + Home 3 s to toggle the config Wi-Fi</label>
+    <label class="check wifi-only"><input type="checkbox" data-k="hotkey">Hold C + Home 3 s to toggle the config Wi-Fi</label>
     <label class="check"><input type="checkbox" data-k="webusb">WebUSB configuration interface (turn off if a console misbehaves)</label>
   </div>
 </section>
 
-<section class="card">
+<section class="card wifi-only">
   <h2>Configuration Wi-Fi</h2>
   <div class="grid">
     <label>Network name<input type="text" maxlength="32" data-k="wifi_ssid"></label>
@@ -299,6 +299,8 @@ async function poll(){
       stick($('stk-l'),s.input.out_l[0],s.input.out_l[1]);stick($('stk-r'),s.input.out_r[0],s.input.out_r[1]);
       $('imu').innerHTML='accel '+s.input.out_accel.join(' / ')+'<br>gyro '+s.input.out_gyro.join(' / ')+(s.input.triggers[0]||s.input.triggers[1]?'<br>triggers '+s.input.triggers.join(' / '):'');
     }else{for(const n of IN)$('b-'+n).classList.remove('on');$('imu').textContent='';}
+    document.querySelectorAll('.wifi-only').forEach(e=>e.style.display=s.wifi===false?'none':'');
+    $('st-ver').textContent='v'+s.version+(s.platform?' · '+s.platform:'');
     const N=s.nfc;
     kv($('nfc'),[['Reader',N.active?'scanning':'idle'],['Tag',N.tag+(N.tag!=='none'?' ('+N.uid+')':'')],['Last amiibo ID',N.amiibo_id||'—'],['Tags read',N.generation]]);
     if(S&&L.gyro_cal_busy===false)$('bias').textContent='bias: '+S.gyro_bias.join(', ');

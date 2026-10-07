@@ -1,6 +1,10 @@
 #ifndef S2P_AMIIBO_H
 #define S2P_AMIIBO_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // The most recently scanned NFC tag (NTAG215 / amiibo), shared between the
 // Switch 2 reader (s2_link.c) and the emulated Switch 1 NFC MCU (mcu_nfc.c).
 
@@ -41,5 +45,9 @@ int amiibo_find_pages(const uint8_t *buf, size_t len, const uint8_t uid[NFC_UID_
 // The 8 byte amiibo identification block (character/variant/type/model/series)
 // stored unencrypted at pages 21-22. Returns false if no data is available.
 bool amiibo_get_id(uint8_t out[8]);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

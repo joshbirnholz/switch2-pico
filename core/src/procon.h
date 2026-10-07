@@ -1,6 +1,10 @@
 #ifndef S2P_PROCON_H
 #define S2P_PROCON_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // Emulated Nintendo Switch (1) Pro Controller on USB: the 0x80 USB handshake,
 // the 0x01 subcommand protocol (device info, SPI flash, report modes, IMU,
 // vibration, player lights, NFC/IR MCU), input report generation and HD rumble
@@ -37,5 +41,9 @@ void procon_set_colors(const uint8_t rgb[12]);
 // Hooks implemented by the firmware.
 void procon_hook_rumble(const rumble_sample_t *left, int nl, const rumble_sample_t *right, int nr);
 void procon_hook_player_lights(uint8_t lights);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

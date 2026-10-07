@@ -1,6 +1,10 @@
 #ifndef S2P_S2_LINK_H
 #define S2P_S2_LINK_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // Bluetooth LE central that finds, pairs with and talks to a Nintendo Switch 2
 // controller (Pro Controller 2, NSO GameCube controller) using BTstack.
 
@@ -86,5 +90,9 @@ void s2_link_hook_controller_seen(void);
 void s2_link_hook_connection_changed(bool connected);
 // Hook: controller info (colours etc.) was read.
 void s2_link_hook_controller_colors(const uint8_t rgb[12]);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
