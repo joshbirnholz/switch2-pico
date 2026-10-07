@@ -9,13 +9,18 @@
 @media (prefers-color-scheme:dark){:root{--bg:#15171a;--card:#1f2227;--fg:#e8eaed;--muted:#9aa0a6;--line:#30343a;--off:#3a3f46}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-header{padding:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+header{padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1px solid var(--line);margin-bottom:16px}
 header h1{font-size:20px;margin:0}
 .pill{padding:3px 10px;border-radius:99px;background:var(--off);font-size:13px}
 .pill.ok{background:var(--ok);color:#fff}.pill.warn{background:var(--warn);color:#fff}
 main{max-width:980px;margin:0 auto;padding:0 16px 40px;display:grid;gap:16px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
 .card h2{font-size:16px;margin:0 0 12px}
+.card.collapsible>h2{cursor:pointer;user-select:none}
+.card.collapsible>h2::before{content:"\25BE";display:inline-block;width:1.1em;color:var(--muted);transition:transform .15s}
+.card.collapsed>h2{margin:0}
+.card.collapsed>h2::before{transform:rotate(-90deg)}
+.card.collapsed>:not(h2){display:none!important}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px 16px}
 label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
 label.check{flex-direction:row;align-items:center;gap:8px;color:var(--fg)}
@@ -69,17 +74,21 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
 </section>
 
 <section class="card">
-  <h2>Live input</h2>
-  <div class="btns" id="live-btns"></div>
-  <div class="sticks" style="margin-top:12px">
-    <div><div class="stick" id="stk-l"><i></i></div><div class="note">Left</div></div>
-    <div><div class="stick" id="stk-r"><i></i></div><div class="note">Right</div></div>
-    <div class="mono" id="imu"></div>
+  <h2>USB and system</h2>
+  <div class="grid">
+    <label>Appear on USB as
+      <select data-k="usb_mode"><option value="0">Switch Pro Controller (Switch consoles, PC)</option><option value="1">DualSense Edge (PC: GL/GR/C as paddles / Fn)</option><option value="2">DualSense</option><option value="3">Xbox 360 controller</option></select></label>
+    <label>Report interval (ms)<input type="number" min="4" max="16" data-k="usb_interval"></label>
+    <label class="check"><input type="checkbox" data-k="led_follow_host">Player LEDs follow the host</label>
+    <label class="check"><input type="checkbox" data-k="usb_detach">Only appear on USB while a controller is connected</label>
+    <label class="check"><input type="checkbox" data-k="usb_wakeup">Wake a sleeping PC from the controller</label>
+    <label class="check wifi-only"><input type="checkbox" data-k="hotkey">Hold C + Home 3 s to toggle the config Wi-Fi</label>
+    <label class="check"><input type="checkbox" data-k="webusb">WebUSB configuration interface (turn off if a console misbehaves)</label>
   </div>
 </section>
 
 <section class="card">
-  <h2>Button mapping</h2>
+  <h2>Button mapping <span class="note" id="map-mode"></span></h2>
   <p class="note" style="margin-top:0">Choose what each physical button sends to the host, in the current USB mode (each mode keeps its own mapping). Shortcut: hold C + GL (or GR) and press a button.</p>
   <div class="grid" id="map"></div>
   <div class="row" style="margin-top:12px">
@@ -87,6 +96,16 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
     <button id="preset-swap" onclick="presetSwapFace()">Swap A/B and X/Y (positional)</button>
   </div>
   <label class="check" style="margin-top:12px"><input type="checkbox" data-k="quick_remap">Remap GL/GR from the controller (all modes): hold C + GL (or GR) and press a button. Do it again to clear.</label>
+</section>
+
+<section class="card" data-collapsed-default>
+  <h2>Live input</h2>
+  <div class="btns" id="live-btns"></div>
+  <div class="sticks" style="margin-top:12px">
+    <div><div class="stick" id="stk-l"><i></i></div><div class="note">Left</div></div>
+    <div><div class="stick" id="stk-r"><i></i></div><div class="note">Right</div></div>
+    <div class="mono" id="imu"></div>
+  </div>
 </section>
 
 <section class="card">
@@ -125,20 +144,6 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
     <label>Frequency scale (codes/octave)<input type="number" min="16" max="255" data-k="rumble_freq_slope"></label>
   </div>
   <p class="note">The Switch 2 rumble frequency encoding is not fully documented. If effects feel off, try "Fixed" or adjust the scale.</p>
-</section>
-
-<section class="card">
-  <h2>USB and system</h2>
-  <div class="grid">
-    <label>Appear on USB as
-      <select data-k="usb_mode"><option value="0">Switch Pro Controller (Switch consoles, PC)</option><option value="1">DualSense Edge (PC: GL/GR/C as paddles / Fn)</option><option value="2">DualSense</option><option value="3">Xbox 360 controller</option></select></label>
-    <label>Report interval (ms)<input type="number" min="4" max="16" data-k="usb_interval"></label>
-    <label class="check"><input type="checkbox" data-k="led_follow_host">Player LEDs follow the host</label>
-    <label class="check"><input type="checkbox" data-k="usb_detach">Only appear on USB while a controller is connected</label>
-    <label class="check"><input type="checkbox" data-k="usb_wakeup">Wake a sleeping PC from the controller</label>
-    <label class="check wifi-only"><input type="checkbox" data-k="hotkey">Hold C + Home 3 s to toggle the config Wi-Fi</label>
-    <label class="check"><input type="checkbox" data-k="webusb">WebUSB configuration interface (turn off if a console misbehaves)</label>
-  </div>
 </section>
 
 <section class="card wifi-only">
@@ -256,13 +261,22 @@ async function act(what){try{const r=await api('/api/action?do='+what,{method:'P
 function buildStatic(){
   $('live-btns').innerHTML=IN.map(n=>`<span class="btn" id="b-${n}">${n}</span>`).join('');
 }
+// The mapping grid shows the mode picked in "Appear on USB as" (each mode has
+// its own map and button names), even before the change is saved.
+let MAP_MODE=0;
+function mapMode(){return S.modes[MAP_MODE]}
+function renderMap(mode){
+  MAP_MODE=+mode;
+  const M=mapMode(),m=$('map');
+  // Outputs a mode lacks come back as null.
+  m.innerHTML=IN.map(n=>`<label>${n}<select data-map="${n}">${M.outputs.map((o,i)=>o===null?'':`<option value="${i}">${o}</option>`).join('')}</select></label>`).join('');
+  IN.forEach((n,i)=>m.querySelector(`[data-map="${n}"]`).value=M.map[i]);
+  $('preset-swap').style.display=M.family==='switch'?'':'none';
+  $('preset-reset').textContent=M.family==='switch'?'Reset to labels':'Reset to defaults';
+  const sel=document.querySelector('[data-k="usb_mode"]');
+  $('map-mode').textContent=sel?sel.options[MAP_MODE].text.replace(/ \(.*\)$/,''):'';
+}
 function render(){
-  const m=$('map');
-  // Outputs the active USB mode lacks come back as null.
-  m.innerHTML=IN.map(n=>`<label>${n}<select data-map="${n}">${S.outputs.map((o,i)=>o===null?'':`<option value="${i}">${o}</option>`).join('')}</select></label>`).join('');
-  $('preset-swap').style.display=S.map_family==='switch'?'':'none';
-  $('preset-reset').textContent=S.map_family==='switch'?'Reset to labels':'Reset to defaults';
-  for(const n of IN)m.querySelector(`[data-map="${n}"]`).value=S.map[n];
   document.querySelectorAll('[data-k]').forEach(el=>{
     const k=el.dataset.k,v=S[k];
     if(el.type==='checkbox')el.checked=!!v;else el.value=v;
@@ -270,10 +284,14 @@ function render(){
     el.oninput=()=>{const l=$('v-'+k);if(l)l.textContent=el.value};
   });
   $('bias').textContent='bias: '+S.gyro_bias.join(', ');
+  const sel=document.querySelector('[data-k="usb_mode"]');
+  sel.onchange=()=>renderMap(sel.value);
+  renderMap(S.usb_mode);
 }
 async function loadSettings(){S=(await api('/api/settings')).json();render()}
 async function save(){
   const p=new URLSearchParams();
+  p.append('map_mode',MAP_MODE);   // the grid holds this mode's map
   document.querySelectorAll('[data-map]').forEach(el=>p.append('map_'+el.dataset.map,el.value));
   document.querySelectorAll('[data-k]').forEach(el=>p.append(el.dataset.k,el.type==='checkbox'?(el.checked?1:0):el.value));
   const pw=$('wifi_pass').value;if(pw)p.append('wifi_pass',pw);
@@ -282,8 +300,8 @@ async function save(){
   const r=await api('/api/settings',{method:'POST',body:p.toString()});
   if(r.ok){S=r.json();render();toast('Saved')}else toast('Save failed');
 }
-function presetIdentity(){IN.forEach((n,i)=>{const el=document.querySelector(`[data-map="${n}"]`);el.value=S.map_family==='gp'?S.default_map[i]:(i<18?i+1:(n==='GL'?11:n==='GR'?12:0))})}
-function presetSwapFace(){const sw={A:'B',B:'A',X:'Y',Y:'X'};for(const n in sw){document.querySelector(`[data-map="${n}"]`).value=S.outputs.indexOf(sw[n])}}
+function presetIdentity(){const M=mapMode();IN.forEach((n,i)=>{document.querySelector(`[data-map="${n}"]`).value=M.default_map[i]})}
+function presetSwapFace(){const M=mapMode(),sw={A:'B',B:'A',X:'Y',Y:'X'};for(const n in sw){document.querySelector(`[data-map="${n}"]`).value=M.outputs.indexOf(sw[n])}}
 function kv(el,rows){el.innerHTML=rows.map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join('')}
 function stick(el,x,y){const i=el.querySelector('i');i.style.left=(42+(x-2048)/2048*42)+'px';i.style.top=(42-(y-2048)/2048*42)+'px'}
 const PIDS={8297:'Pro Controller 2',8307:'NSO GameCube Controller'};
@@ -384,6 +402,25 @@ function fwSave(){
   $('fw-note').textContent='Drag '+fwName+' onto the dongle\'s USB drive.';
 }
 
+// ---- Collapsible sections (state remembered in this browser) ---------------
+function setupCollapsible(){
+  let st={};
+  try{st=JSON.parse(localStorage.getItem('s2p-collapsed')||'{}')}catch(e){}
+  document.querySelectorAll('main > section.card').forEach(sec=>{
+    const h=sec.querySelector(':scope > h2');if(!h)return;
+    const key=h.firstChild.textContent.trim();
+    sec.classList.add('collapsible');
+    const collapsed=key in st?st[key]:sec.hasAttribute('data-collapsed-default');
+    sec.classList.toggle('collapsed',collapsed);
+    h.onclick=()=>{
+      const c=sec.classList.toggle('collapsed');
+      st[key]=c;
+      try{localStorage.setItem('s2p-collapsed',JSON.stringify(st))}catch(e){}
+    };
+  });
+}
+
+setupCollapsible();
 buildStatic();
 fwCheck();
 if (USE_HTTP){loadSettings();loadLog();}
