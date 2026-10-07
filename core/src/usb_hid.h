@@ -20,6 +20,8 @@ extern "C" {
 
 bool usb_hid_ready(void);
 // Send report `id` followed by `len` bytes of data.
+bool usb_hid_ep_ready(void);
+bool usb_hid_suspended(void);
 bool usb_hid_send(uint8_t id, const uint8_t *data, uint16_t len);
 bool usb_hid_mounted(void);
 

@@ -62,6 +62,14 @@ bool usb_hid_ready(void) {
     return usb_hid_mounted() && !tud_suspended() && usbd_edpt_ready(0, s_hid.ep_in);
 }
 
+bool usb_hid_suspended(void) {
+    return tud_suspended();
+}
+
+bool usb_hid_ep_ready(void) {
+    return s_hid.ep_in != 0 && usbd_edpt_ready(0, s_hid.ep_in);
+}
+
 bool usb_hid_send(uint8_t id, const uint8_t *data, uint16_t len) {
     if (!usb_hid_ready()) return false;
     if (len + 1u > sizeof s_in_buf) return false;
