@@ -3,6 +3,8 @@
 
 // BLE central only: we connect *to* the Switch 2 controller.
 #define ENABLE_LE_CENTRAL
+// Not used, but BTstack does not compile with the central role alone.
+#define ENABLE_LE_PERIPHERAL
 // GATT client is required, the ATT server/peripheral role is not used.
 #define ENABLE_LE_DATA_LENGTH_EXTENSION
 

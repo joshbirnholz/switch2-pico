@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "tusb.h"
+#include "class/hid/hid.h"
 #include "device/usbd_pvt.h"
 
 typedef struct {

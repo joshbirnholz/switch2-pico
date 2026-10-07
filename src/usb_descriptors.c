@@ -1,9 +1,11 @@
 // USB descriptors: the device presents itself exactly like a wired Nintendo
 // Switch Pro Controller (057E:2009) with a single HID interface.
 
+#include <assert.h>
 #include <string.h>
 
 #include "tusb.h"
+#include "class/hid/hid.h"
 
 #include "settings.h"
 #include "usb_hid.h"

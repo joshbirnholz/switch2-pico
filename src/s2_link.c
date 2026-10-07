@@ -167,6 +167,11 @@ static void cmd_pump(void) {
         }
     }
     uint8_t st = gatt_client_write_value_of_characteristic_without_response(s_con, s_ch_cmd.value_handle, c->len, c->buf);
+    if (st == GATT_CLIENT_VALUE_TOO_LONG) {
+        LOG("s2: command 0x%02x/0x%02x (%u bytes) exceeds the ATT MTU", c->cmd, c->sub, c->len);
+        cmd_finish(false, NULL);
+        return;
+    }
     if (st != ERROR_CODE_SUCCESS) return;   // ACL buffers full: try again next pass
     c->tries++;
     s_cmd_in_flight = true;
@@ -502,9 +507,8 @@ static void nfc_cb(bool ok, const s2_response_t *rsp, uint32_t ctx) {
         memcpy(s_nfc_buf + s_nfc_buf_len, d, n);
         s_nfc_buf_len = (uint16_t)(s_nfc_buf_len + n);
         s_nfc_offset = (uint16_t)(s_nfc_offset + n);
-        if (s_nfc_buf_len >= sizeof s_nfc_buf ||
-            amiibo_find_pages(s_nfc_buf, s_nfc_buf_len, g_tag.uid) >= 0 &&
-                amiibo_find_pages(s_nfc_buf, s_nfc_buf_len, g_tag.uid) + NTAG215_SIZE <= s_nfc_buf_len) {
+        int start = amiibo_find_pages(s_nfc_buf, s_nfc_buf_len, g_tag.uid);
+        if (s_nfc_buf_len >= sizeof s_nfc_buf || (start >= 0 && start + NTAG215_SIZE <= s_nfc_buf_len)) {
             nfc_try_complete();
         }
         break;
@@ -989,6 +993,8 @@ static void gatt_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet,
                 break;
             }
             phase(GP_READY);
+            gatt_client_get_mtu(s_con, &s_info.mtu);
+            LOG("s2: controller ready (ATT MTU %u)", s_info.mtu);
             s_rate_window = make_timeout_time_ms(1000);
             s_rate_count = 0;
             set_state(S2_LINK_READY);

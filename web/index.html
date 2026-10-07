@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Switch2-Pico</title>
+<style>
+:root{--bg:#f4f5f7;--card:#fff;--fg:#1d1f23;--muted:#677;--line:#dde0e5;--acc:#e60012;--ok:#1a8f3c;--warn:#b26b00;--on:#e60012;--off:#c9cdd3}
+@media (prefers-color-scheme:dark){:root{--bg:#15171a;--card:#1f2227;--fg:#e8eaed;--muted:#9aa0a6;--line:#30343a;--off:#3a3f46}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{padding:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+header h1{font-size:20px;margin:0}
+.pill{padding:3px 10px;border-radius:99px;background:var(--off);font-size:13px}
+.pill.ok{background:var(--ok);color:#fff}.pill.warn{background:var(--warn);color:#fff}
+main{max-width:980px;margin:0 auto;padding:0 16px 40px;display:grid;gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+.card h2{font-size:16px;margin:0 0 12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px 16px}
+label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
+label.check{flex-direction:row;align-items:center;gap:8px;color:var(--fg)}
+input,select,button{font:inherit;color:inherit}
+input[type=text],input[type=password],input[type=number],select{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 9px;min-width:0}
+input[type=range]{width:100%}
+button{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 14px;cursor:pointer}
+button.primary{background:var(--acc);border-color:var(--acc);color:#fff}
+button.danger{color:var(--acc)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.kv{display:grid;grid-template-columns:max-content 1fr;gap:4px 14px;font-size:14px}
+.kv dt{color:var(--muted)}.kv dd{margin:0;font-variant-numeric:tabular-nums}
+.btns{display:flex;flex-wrap:wrap;gap:6px}
+.btn{min-width:42px;padding:4px 7px;border-radius:6px;background:var(--off);text-align:center;font-size:12px}
+.btn.on{background:var(--on);color:#fff}
+.sticks{display:flex;gap:16px;flex-wrap:wrap}
+.stick{width:96px;height:96px;border-radius:50%;border:2px solid var(--line);position:relative}
+.stick i{position:absolute;width:12px;height:12px;border-radius:50%;background:var(--acc);left:42px;top:42px}
+.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
+pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radius:8px;margin:8px 0 0;white-space:pre-wrap;word-break:break-all}
+.note{color:var(--muted);font-size:13px;margin:6px 0 0}
+#toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:8px 16px;border-radius:8px;opacity:0;transition:opacity .2s;pointer-events:none}
+#toast.show{opacity:1}
+</style>
+</head>
+<body>
+<header>
+  <h1>Switch2-Pico</h1>
+  <span id="st-link" class="pill">…</span>
+  <span id="st-usb" class="pill">USB …</span>
+  <span id="st-ver" class="note"></span>
+</header>
+<main>
+
+<section class="card">
+  <h2>Controller</h2>
+  <dl class="kv" id="ctrl"></dl>
+  <div class="row" style="margin-top:12px">
+    <button onclick="act('rumble')">Test rumble</button>
+    <button onclick="act('disconnect')">Disconnect</button>
+    <button class="danger" onclick="if(confirm('Forget the paired controller? Hold Sync on a controller to pair again.'))act('forget')">Forget pairing</button>
+  </div>
+  <p class="note">To pair: hold the small Sync button on the Switch 2 controller until the lights sweep. The dongle pairs automatically and remembers it; afterwards any button press wakes and reconnects it.</p>
+</section>
+
+<section class="card">
+  <h2>Live input</h2>
+  <div class="btns" id="live-btns"></div>
+  <div class="sticks" style="margin-top:12px">
+    <div><div class="stick" id="stk-l"><i></i></div><div class="note">Left</div></div>
+    <div><div class="stick" id="stk-r"><i></i></div><div class="note">Right</div></div>
+    <div class="mono" id="imu"></div>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Button mapping</h2>
+  <p class="note" style="margin-top:0">Choose what each physical button sends to the host. GL, GR and C have no Switch 1 equivalent and can be mapped to any button.</p>
+  <div class="grid" id="map"></div>
+  <div class="row" style="margin-top:12px">
+    <button onclick="presetIdentity()">Reset to labels</button>
+    <button onclick="presetSwapFace()">Swap A/B and X/Y (positional)</button>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Sticks</h2>
+  <div class="grid">
+    <label>Inner deadzone: <b id="v-deadzone"></b>%<input type="range" min="0" max="40" data-k="deadzone"></label>
+    <label>Full deflection at: <b id="v-outer"></b>%<input type="range" min="50" max="100" data-k="outer"></label>
+    <label class="check"><input type="checkbox" data-k="swap_sticks">Swap left and right sticks</label>
+    <label>GameCube trigger threshold<input type="number" min="0" max="255" data-k="gc_threshold"></label>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Motion (gyro)</h2>
+  <div class="grid">
+    <label class="check"><input type="checkbox" data-k="gyro_enabled">Report motion</label>
+    <label>Gyro scale of this controller
+      <select data-k="gyro_range"><option value="0">Auto-detect</option><option value="1">16.4 LSB/°/s</option><option value="2">14.3 LSB/°/s</option></select></label>
+    <label>Gyro sensitivity: <b id="v-gyro_scale"></b>%<input type="range" min="10" max="400" data-k="gyro_scale"></label>
+    <label>Accelerometer scale: <b id="v-accel_scale"></b>%<input type="range" min="10" max="400" data-k="accel_scale"></label>
+  </div>
+  <div class="row" style="margin-top:12px">
+    <button onclick="act('gyrocal')">Calibrate gyro (keep still 2 s)</button>
+    <button onclick="act('gyroclear')">Clear calibration</button>
+    <span class="note mono" id="bias"></span>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Rumble</h2>
+  <div class="grid">
+    <label class="check"><input type="checkbox" data-k="rumble_enabled">HD rumble</label>
+    <label>Strength: <b id="v-rumble_strength"></b>%<input type="range" min="0" max="200" data-k="rumble_strength"></label>
+    <label>Frequencies
+      <select data-k="rumble_freq_mode"><option value="0">Translate (HD rumble)</option><option value="1">Fixed (amplitude only)</option></select></label>
+    <label>Frequency scale (codes/octave)<input type="number" min="16" max="255" data-k="rumble_freq_slope"></label>
+  </div>
+  <p class="note">The Switch 2 rumble frequency encoding is not fully documented. If effects feel off, try "Fixed" or adjust the scale.</p>
+</section>
+
+<section class="card">
+  <h2>NFC / amiibo</h2>
+  <div class="grid">
+    <label class="check"><input type="checkbox" data-k="nfc_enabled">Enable NFC</label>
+    <label class="check"><input type="checkbox" data-k="nfc_descriptor">Declare NFC report on USB (needed by hosts to read amiibo)</label>
+  </div>
+  <dl class="kv" id="nfc" style="margin-top:12px"></dl>
+  <div class="row" style="margin-top:12px">
+    <button onclick="act('nfc_on')">Start scanning</button>
+    <button onclick="act('nfc_off')">Stop scanning</button>
+    <a href="/api/amiibo.bin" download="amiibo.bin"><button>Download last tag (.bin)</button></a>
+  </div>
+  <p class="note">Tap an amiibo on the controller's NFC spot (bottom of the right grip area / Home button). Games read it through the emulated Pro Controller; the dump can also be loaded into emulators.</p>
+</section>
+
+<section class="card">
+  <h2>USB and system</h2>
+  <div class="grid">
+    <label>Report interval (ms)<input type="number" min="4" max="16" data-k="usb_interval"></label>
+    <label class="check"><input type="checkbox" data-k="led_follow_host">Player LEDs follow the host</label>
+    <label class="check"><input type="checkbox" data-k="usb_detach">Only appear on USB while a controller is connected</label>
+    <label class="check"><input type="checkbox" data-k="usb_wakeup">Wake a sleeping PC from the controller</label>
+    <label class="check"><input type="checkbox" data-k="hotkey">Hold C + Home 3 s to toggle this page</label>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Configuration Wi-Fi</h2>
+  <div class="grid">
+    <label>Network name<input type="text" maxlength="32" data-k="wifi_ssid"></label>
+    <label>Password (8+ chars, blank = keep)<input type="password" maxlength="63" id="wifi_pass" placeholder="unchanged"></label>
+    <label>Channel<input type="number" min="1" max="11" data-k="wifi_channel"></label>
+    <label class="check"><input type="checkbox" data-k="wifi_autostart">Start automatically while no controller is paired</label>
+  </div>
+  <div class="row" style="margin-top:12px">
+    <button onclick="act('wifi_off')">Turn Wi-Fi off now</button>
+  </div>
+</section>
+
+<section class="card">
+  <div class="row">
+    <button class="primary" onclick="save()">Save settings</button>
+    <button onclick="act('reboot')">Reboot</button>
+    <button onclick="if(confirm('Reboot into the USB bootloader to install a new .uf2?'))act('bootloader')">Firmware update mode</button>
+    <button class="danger" onclick="if(confirm('Erase all settings and pairing?'))act('factory')">Factory reset</button>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Log</h2>
+  <div class="row"><button onclick="loadLog()">Refresh</button><a href="/api/log" download="switch2-pico.log"><button>Download</button></a></div>
+  <pre id="log" class="mono"></pre>
+</section>
+</main>
+<div id="toast"></div>
+<script>
+const IN=["A","B","X","Y","L","R","ZL","ZR","Minus","Plus","LStick","RStick","Home","Capture","Up","Down","Left","Right","GL","GR","C"];
+const S2BIT={A:3,B:2,X:1,Y:0,L:22,R:6,ZL:23,ZR:7,Minus:8,Plus:9,LStick:11,RStick:10,Home:12,Capture:13,Up:17,Down:16,Left:19,Right:18,GL:25,GR:24,C:14};
+let S=null;
+const $=id=>document.getElementById(id);
+function toast(t){const e=$('toast');e.textContent=t;e.classList.add('show');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove('show'),1800)}
+async function act(what){try{const r=await fetch('/api/action?do='+what,{method:'POST'});toast(r.ok?'Done':'Failed');setTimeout(loadSettings,700)}catch(e){toast('Failed')}}
+function buildStatic(){
+  $('live-btns').innerHTML=IN.map(n=>`<span class="btn" id="b-${n}">${n}</span>`).join('');
+}
+function render(){
+  const m=$('map');
+  m.innerHTML=IN.map(n=>`<label>${n}<select data-map="${n}">${S.outputs.map((o,i)=>`<option value="${i}">${o}</option>`).join('')}</select></label>`).join('');
+  for(const n of IN)m.querySelector(`[data-map="${n}"]`).value=S.map[n];
+  document.querySelectorAll('[data-k]').forEach(el=>{
+    const k=el.dataset.k,v=S[k];
+    if(el.type==='checkbox')el.checked=!!v;else el.value=v;
+    const lab=$('v-'+k);if(lab)lab.textContent=v;
+    el.oninput=()=>{const l=$('v-'+k);if(l)l.textContent=el.value};
+  });
+  $('bias').textContent='bias: '+S.gyro_bias.join(', ');
+}
+async function loadSettings(){S=await (await fetch('/api/settings')).json();render()}
+async function save(){
+  const p=new URLSearchParams();
+  document.querySelectorAll('[data-map]').forEach(el=>p.append('map_'+el.dataset.map,el.value));
+  document.querySelectorAll('[data-k]').forEach(el=>p.append(el.dataset.k,el.type==='checkbox'?(el.checked?1:0):el.value));
+  const pw=$('wifi_pass').value;if(pw)p.append('wifi_pass',pw);
+  const r=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p});
+  if(r.ok){S=await r.json();render();toast('Saved')}else toast('Save failed');
+}
+function presetIdentity(){IN.forEach((n,i)=>{const el=document.querySelector(`[data-map="${n}"]`);el.value=i<18?i+1:(n==='GL'?11:n==='GR'?12:0)})}
+function presetSwapFace(){const sw={A:'B',B:'A',X:'Y',Y:'X'};for(const n in sw){document.querySelector(`[data-map="${n}"]`).value=S.outputs.indexOf(sw[n])}}
+function kv(el,rows){el.innerHTML=rows.map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join('')}
+function stick(el,x,y){const i=el.querySelector('i');i.style.left=(42+(x-2048)/2048*42)+'px';i.style.top=(42-(y-2048)/2048*42)+'px'}
+const PIDS={8297:'Pro Controller 2',8307:'NSO GameCube Controller'};
+async function poll(){
+  try{
+    const s=await (await fetch('/api/status')).json();
+    $('st-ver').textContent='v'+s.version;
+    const L=s.link,ready=L.state==='ready';
+    const sl=$('st-link');sl.textContent=ready?'Controller connected':L.state==='scanning'?(s.bond.bonded?'Waiting for controller':'Waiting for pairing'):L.state;
+    sl.className='pill '+(ready?'ok':'warn');
+    const su=$('st-usb');su.textContent=s.usb.mounted?(s.usb.report_mode?'USB streaming':'USB connected'):'USB not connected';su.className='pill '+(s.usb.mounted?'ok':'');
+    kv($('ctrl'),[
+      ['Type',PIDS[L.pid]||(L.pid?('0x'+L.pid.toString(16)):'—')],['Serial',L.serial||'—'],['Address',ready?L.addr:'—'],
+      ['Paired controller',s.bond.bonded?s.bond.addr:'none'],
+      ['Battery',L.battery_mv?(L.battery_mv/1000).toFixed(2)+' V':'—'],
+      ['Report rate',ready?L.report_hz+' Hz ('+L.conn_interval_ms+' ms interval)':'—'],
+      ['Gyro scale',['not detected','16.4','14.3'][L.gyro_range]||'—'],
+      ['Host',s.usb.mounted?`mode 0x${s.usb.report_mode.toString(16)}, IMU ${s.usb.imu?'on':'off'}, rumble frames ${s.usb.rumble_frames}`:'—'],
+    ]);
+    if(s.input){
+      for(const n of IN){$('b-'+n).classList.toggle('on',!!(s.input.raw_buttons>>>S2BIT[n]&1))}
+      stick($('stk-l'),s.input.out_l[0],s.input.out_l[1]);stick($('stk-r'),s.input.out_r[0],s.input.out_r[1]);
+      $('imu').innerHTML='accel '+s.input.out_accel.join(' / ')+'<br>gyro '+s.input.out_gyro.join(' / ')+(s.input.triggers[0]||s.input.triggers[1]?'<br>triggers '+s.input.triggers.join(' / '):'');
+    }else{for(const n of IN)$('b-'+n).classList.remove('on');$('imu').textContent='';}
+    const N=s.nfc;
+    kv($('nfc'),[['Reader',N.active?'scanning':'idle'],['Tag',N.tag+(N.tag!=='none'?' ('+N.uid+')':'')],['Last amiibo ID',N.amiibo_id||'—'],['Tags read',N.generation]]);
+    if(S&&L.gyro_cal_busy===false)$('bias').textContent='bias: '+S.gyro_bias.join(', ');
+  }catch(e){$('st-link').textContent='offline';$('st-link').className='pill'}
+}
+async function loadLog(){const t=await (await fetch('/api/log')).text();const e=$('log');e.textContent=t;e.scrollTop=e.scrollHeight}
+buildStatic();loadSettings();loadLog();poll();setInterval(poll,250);
+</script>
+</body>
+</html>
