@@ -383,12 +383,18 @@ static void test_ds5(void) {
     CHECK(ds5_parse_output(o, sizeof o, &out));
     CHECK(out.rumble && out.motor_left == 200 && out.motor_right == 40);
     CHECK(out.player_leds && out.player_pattern == 0x0A);
-    o[1] = 0;
-    o[39] = 0x04;   // vibration v2
-    CHECK(ds5_parse_output(o, sizeof o, &out) && out.rumble);
+    o[1] = 0x02;    // haptics select only
+    o[39] = 0x04;   // vibration v2 (SDL "enhanced rumble", Linux v2)
+    CHECK(ds5_parse_output(o, sizeof o, &out) && out.rumble && out.motor_left == 200);
+    // SDL's stop: the vibration bits off (values left as they were or zero).
     o[39] = 0;
+    o[1] = 0;
     o[2] = 0;
-    CHECK(ds5_parse_output(o, sizeof o, &out) && !out.rumble && !out.player_leds);
+    CHECK(ds5_parse_output(o, sizeof o, &out) && out.rumble && out.motor_left == 0 && out.motor_right == 0);
+    CHECK(!out.player_leds);
+    // SDL's "rumble start" (disable audio haptics only): still off.
+    o[1] = 0x02;
+    CHECK(ds5_parse_output(o, sizeof o, &out) && out.motor_left == 0 && out.motor_right == 0);
     o[0] = 0x31;
     CHECK(!ds5_parse_output(o, sizeof o, &out));
 

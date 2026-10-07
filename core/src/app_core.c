@@ -222,7 +222,10 @@ static void update_input(void) {
             // Generic modes: the mode's own map (gp_out_t), same shortcuts.
             uint8_t *map = g_settings.mode_map[mode];
             const mapping_ctx_t *ctx = s2_link_mapping_ctx();
-            if (!g_settings.quick_remap_off) {
+            // Not in DualSense Edge mode: GL/GR/C are its paddles and Fn
+            // buttons, which the host's software remaps itself.
+            bool quick = !g_settings.quick_remap_off && mode != USB_MODE_DUALSENSE_EDGE;
+            if (quick) {
                 in_button_t back;
                 if (mapping_quick_remap_map(map, prev, in.buttons, &back)) {
                     const char *n = usb_mode_output_name(mode, (gp_out_t)map[back]);
@@ -232,7 +235,7 @@ static void update_input(void) {
                 }
             }
             uint32_t gp = mapping_gp_buttons(&g_settings, map, ctx, &in);
-            if (!g_settings.quick_remap_off && mapping_quick_remap_held(in.buttons)) gp = 0;
+            if (quick && mapping_quick_remap_held(in.buttons)) gp = 0;
             switch (mapping_macro_run(&macro, map, GP_MACRO_QAM, prev, in.buttons, platform_millis())) {
             case MACRO_GUIDE: gp |= GP_BIT(GP_GUIDE); break;
             case MACRO_GUIDE_SOUTH: gp |= GP_BIT(GP_GUIDE) | GP_BIT(GP_SOUTH); break;

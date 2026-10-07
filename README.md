@@ -127,9 +127,10 @@ the controller asks the PC to wake up. The PC has to allow it:
 
 **Remapping GL/GR from the controller.** Hold **C** and **GL** (or **GR**) and
 press another button: GL (GR) now sends what that button sends, and the
-controller buzzes. Do the same again to clear it. While C + GL/GR are held,
+controller ticks. Do the same again to clear it. While C + GL/GR are held,
 nothing reaches the host. Turn it off on the configuration page if you use C
-as a regular button.
+as a regular button. It is off in DualSense Edge mode, where GL, GR and C are
+the paddles and Fn button that the host's software (e.g. Steam Input) remaps.
 
 **Steam quick access menu on C.** On the configuration page, map C (or any
 button) to *Home+A (Steam quick access)*. A tap then sends Home, then Home + A,
@@ -174,9 +175,9 @@ the controller's built-in vibration samples.
 Changing the mode restarts the dongle, which then has that controller's USB
 IDs; the configuration page still finds it (Linux: install the current
 `tools/99-switch2-pico.rules`, which covers every mode's IDs). Each mode keeps its own button map,
-edited in **Button mapping** while that mode is active. The defaults go by
-position (Nintendo A = Circle / Xbox B, B = Cross / Xbox A, and so on), and
-the C + GL/GR + button shortcut works in every mode.
+edited in **Button mapping** (pick the mode under *Mapping for*). The defaults
+go by position (Nintendo A = Circle / Xbox B, B = Cross / Xbox A, and so on),
+and the C + GL/GR + button shortcut works in every mode except DualSense Edge.
 
 DualSense modes add these outputs to the map:
 

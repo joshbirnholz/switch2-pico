@@ -191,9 +191,12 @@ bool ds5_parse_output(const uint8_t *buf, uint16_t len, ds5_output_t *o) {
     if (len < 5 || buf[0] != 0x02) return false;
     const uint8_t *c = buf + 1;
     uint8_t flag2 = len > 39 ? c[38] : 0;
-    // Compatible vibration (v1: flag0 bit 0; v2: flag2 bit 2), or haptics select.
-    if ((c[0] & 0x03) || (flag2 & 0x04)) {
-        o->rumble = true;
+    // Every report sets the rumble: the motor values count only while
+    // compatible vibration is enabled (v1: flag0 bit 0; v2: flag2 bit 2).
+    // Hosts stop rumble by sending a report with those bits off (SDL:
+    // "leaving emulated rumble bits off"), as a real DualSense expects.
+    o->rumble = true;
+    if ((c[0] & 0x01) || (flag2 & 0x04)) {
         o->motor_right = c[2];
         o->motor_left = c[3];
     }
