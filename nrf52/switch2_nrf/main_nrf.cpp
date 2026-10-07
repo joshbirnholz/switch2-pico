@@ -104,12 +104,14 @@ static Adafruit_USBD_WebUSB s_webusb;
 WEBUSB_URL_DEF(s_landing_page, 1 /* https */, "joshbirnholz.github.io/switch2-pico/");
 
 static void usb_setup(void) {
-    // The core may already have enumerated (or be enumerating) its CDC serial
-    // port. Always drop off the bus before replacing the configuration, and
-    // stay off long enough for the host to notice, so it never mixes the old
-    // descriptors with ours.
-    TinyUSBDevice.detach();
-    delay(50);
+    // The core has already enumerated a CDC serial port; replace the whole
+    // configuration with ours. Only touch the pull-up once the stack is
+    // mounted: toggling it before the USBD peripheral's READY event makes
+    // the nRF driver skip its initialisation and USB never comes up.
+    if (TinyUSBDevice.mounted()) {
+        TinyUSBDevice.detach();
+        delay(10);
+    }
     TinyUSBDevice.clearConfiguration();
     TinyUSBDevice.setID(0x057E, 0x2009);
     TinyUSBDevice.setManufacturerDescriptor("Nintendo Co., Ltd.");
@@ -125,10 +127,7 @@ static void usb_setup(void) {
         TinyUSBDevice.setVersion(0x0200);
         TinyUSBDevice.setDeviceVersion(0x0200);
     }
-    if (!g_settings.usb_detach_when_idle) {
-        delay(250);
-        TinyUSBDevice.attach();
-    }
+    if (!g_settings.usb_detach_when_idle) TinyUSBDevice.attach();
 }
 
 extern "C" void app_wifi_stop(void) {
