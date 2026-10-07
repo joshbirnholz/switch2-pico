@@ -37,6 +37,7 @@ static s1_rumble_state_t s_rumble_l, s_rumble_r;
 static uint32_t s_next_report;
 static uint32_t s_mount_time;
 static bool s_was_mounted;
+static bool check_mount(void);
 
 typedef struct {
     uint8_t id;
@@ -395,6 +396,7 @@ void usb_hid_on_output(const uint8_t *buf, uint16_t len, bool via_control, uint8
     const uint8_t *p;
     int n;
     if (len < 1) return;
+    check_mount();
     if (via_control && control_report_id != 0 && buf[0] != control_report_id) {
         id = control_report_id;
         p = buf;
@@ -489,13 +491,20 @@ static void on_mount_change(bool mounted) {
     }
 }
 
-void procon_task(void) {
+// Called before handling any host report as well as from procon_task(): a
+// host driver (Linux hid-nintendo) can send its handshake within
+// milliseconds of enumeration, and the mount reset must not wipe the reply.
+static bool check_mount(void) {
     bool mounted = usb_hid_mounted();
     if (mounted != s_was_mounted) {
         s_was_mounted = mounted;
         on_mount_change(mounted);
     }
-    if (!mounted) return;
+    return mounted;
+}
+
+void procon_task(void) {
+    if (!check_mount()) return;
 
     // Hosts without a Switch driver never select a report mode; after a short
     // grace period start streaming anyway, like a controller left alone.
