@@ -177,7 +177,7 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
 
 <section class="card">
   <h2>Log</h2>
-  <div class="row"><button onclick="loadLog()">Refresh</button><button onclick="download('/api/log','switch2-pico.log')">Download</button></div>
+  <div class="row"><button onclick="loadLog()">Refresh</button><button onclick="copyLog()">Copy</button><button onclick="download('/api/log','switch2-pico.log')">Download</button></div>
   <pre id="log" class="mono"></pre>
 </section>
 </main>
@@ -307,6 +307,16 @@ async function poll(){
   }catch(e){$('st-link').textContent='offline';$('st-link').className='pill'}
 }
 async function loadLog(){if(!USE_HTTP&&!usbDev)return;const t=(await api('/api/log')).text();const e=$('log');e.textContent=t;e.scrollTop=e.scrollHeight}
+async function copyLog(){
+  try{await loadLog()}catch(e){}
+  const t=$('log').textContent; if(!t){toast('Log is empty');return}
+  try{await navigator.clipboard.writeText(t);toast('Log copied');return}catch(e){}
+  // http://192.168.4.1 is not a secure context, so no Clipboard API there.
+  const ta=document.createElement('textarea');ta.value=t;ta.style.position='fixed';ta.style.opacity='0';
+  document.body.appendChild(ta);ta.select();
+  let ok=false;try{ok=document.execCommand('copy')}catch(e){}
+  ta.remove();toast(ok?'Log copied':'Copy failed');
+}
 buildStatic();
 if (USE_HTTP){loadSettings();loadLog();}
 else if (!navigator.usb){$('usb-help').style.display='';$('usb-help').innerHTML='<b>This browser has no WebUSB.</b> Use Chrome or Edge, or the Wi-Fi page (tap BOOTSEL, join Switch2-Pico-XXXX, open http://192.168.4.1).';}

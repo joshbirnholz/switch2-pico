@@ -35,6 +35,7 @@ enum ev_type_t : uint8_t {
     EV_INPUT,
     EV_INPUT_ENABLED,
     EV_DISCONNECTED,
+    EV_WRITE_FAILED,
 };
 
 #define EV_DATA_MAX 128
@@ -91,6 +92,15 @@ static void reverse_uuid(uint8_t out[16], const uint8_t in[16]) {
 static BLEClientService *s_svc;
 static BLEClientCharacteristic *s_ch_input, *s_ch_cmd, *s_ch_rsp, *s_ch_vib_pro, *s_ch_vib_jl, *s_ch_vib_jr;
 static BLEClientCharacteristic *s_ch_vib;   // whichever rumble characteristic exists
+
+// Commands go out as ATT Write Requests when the characteristic allows it
+// (that's what the controller answers; Write Commands are silently ignored).
+// A Write Request keeps its buffer until the response, one at a time.
+static bool s_cmd_use_req;
+static volatile bool s_req_pending;
+static volatile bool s_cccd_busy;        // enable_input_worker owns the request slot
+static uint32_t s_req_started;
+static uint8_t s_req_buf[256];
 
 static volatile uint16_t s_conn = BLE_CONN_HANDLE_INVALID;
 static volatile bool s_connecting;
@@ -160,15 +170,42 @@ static void connect_cb(uint16_t conn) {
              : s_ch_vib_jl->discovered()  ? s_ch_vib_jl
              : s_ch_vib_jr->discovered()  ? s_ch_vib_jr
                                           : nullptr;
+    s_cmd_use_req = (s_ch_cmd->properties() & 0x08) != 0;   // "write" property
     if (!s_ch_rsp->enableNotify()) {
         post_simple(EV_GATT_READY, 0, 0, "could not enable command responses");
         return;
     }
-    post_simple(EV_GATT_READY, 1);
+    {
+        // Report what was found so logs show handles and properties.
+        ev_t e;
+        memset(&e, 0, offsetof(ev_t, data));
+        e.type = EV_GATT_READY;
+        e.ok = 1;
+        uint16_t h[4] = {s_ch_input->valueHandle(), s_ch_cmd->valueHandle(), s_ch_rsp->valueHandle(),
+                         s_ch_vib ? s_ch_vib->valueHandle() : (uint16_t)0};
+        memcpy(e.data, h, sizeof h);
+        e.data[8] = s_ch_cmd->properties();
+        e.data[9] = s_ch_rsp->properties();
+        e.data[10] = s_ch_vib ? s_ch_vib->properties() : 0;
+        e.data[11] = (uint8_t)(c ? c->getMtu() : 23);
+        e.len = 12;
+        post(e);
+    }
+}
+
+static void ble_event_cb(ble_evt_t *evt) {
+    if (evt->header.evt_id != BLE_GATTC_EVT_WRITE_RSP) return;
+    const ble_gattc_evt_write_rsp_t &w = evt->evt.gattc_evt.params.write_rsp;
+    if (w.write_op != BLE_GATT_OP_WRITE_REQ || !s_req_pending) return;
+    if (s_ch_cmd && w.handle != s_ch_cmd->valueHandle()) return;
+    s_req_pending = false;
+    if (evt->evt.gattc_evt.gatt_status != BLE_GATT_STATUS_SUCCESS)
+        post_simple(EV_WRITE_FAILED, 0, evt->evt.gattc_evt.gatt_status);
 }
 
 static void disconnect_cb(uint16_t conn, uint8_t reason) {
     (void)conn;
+    s_req_pending = false;
     s_conn = BLE_CONN_HANDLE_INVALID;
     s_connecting = false;
     s_ch_vib = nullptr;
@@ -176,7 +213,12 @@ static void disconnect_cb(uint16_t conn, uint8_t reason) {
 }
 
 static void enable_input_worker(void) {
+    // The SoftDevice runs one Write Request at a time per link.
+    s_cccd_busy = true;
+    uint32_t t0 = millis();
+    while (s_req_pending && millis() - t0 < 2000) delay(5);
     bool ok = s_conn != BLE_CONN_HANDLE_INVALID && s_ch_input->enableNotify();
+    s_cccd_busy = false;
     post_simple(EV_INPUT_ENABLED, ok);
 }
 
@@ -220,6 +262,7 @@ void s2t_init(void) {
     s_ch_vib_jl->begin(s_svc);
     s_ch_vib_jr->begin(s_svc);
 
+    Bluefruit.setEventCallback(ble_event_cb);
     Bluefruit.Central.setConnectCallback(connect_cb);
     Bluefruit.Central.setDisconnectCallback(disconnect_cb);
     Bluefruit.Central.setConnInterval(CONN_INTERVAL_MIN, CONN_INTERVAL_MAX);
@@ -241,7 +284,17 @@ void s2t_task(void) {
         case EV_ADV: s2c_on_advertisement(e.addr, e.addr_type, e.rssi, e.data, e.len); break;
         case EV_LINK_UP: s2c_on_link_up(e.value); break;
         case EV_CONNECT_FAILED: s2c_on_connect_failed((uint8_t)e.value); break;
-        case EV_GATT_READY: s2c_on_gatt_ready(e.ok, e.error); break;
+        case EV_GATT_READY:
+            if (e.ok && e.len >= 12) {
+                uint16_t h[4];
+                memcpy(h, e.data, sizeof h);
+                LOG("s2: handles input=%04x cmd=%04x rsp=%04x vib=%04x, props cmd=%02x rsp=%02x vib=%02x, mtu %u",
+                    h[0], h[1], h[2], h[3], e.data[8], e.data[9], e.data[10], e.data[11]);
+                LOG("s2: commands use %s", s_cmd_use_req ? "write requests" : "write commands");
+            }
+            s2c_on_gatt_ready(e.ok, e.error);
+            break;
+        case EV_WRITE_FAILED: LOG("s2: command write rejected, ATT status 0x%04x", e.value); break;
         case EV_CMD_RSP: s2c_on_command_response(e.data, e.len); break;
         case EV_INPUT: s2c_on_input_report(e.data, e.len); break;
         case EV_INPUT_ENABLED: s2c_on_input_enabled(e.ok); break;
@@ -311,6 +364,29 @@ s2t_write_result_t s2t_write(s2t_char_t ch, const uint8_t *data, uint16_t len) {
     BLEConnection *c = Bluefruit.Connection(conn);
     if (!c) return S2T_WRITE_ERROR;
     if (len + 3u > c->getMtu()) return S2T_WRITE_ERROR;
+    if (ch == S2T_CHAR_COMMAND && s_cmd_use_req) {
+        if (s_cccd_busy) return S2T_WRITE_BUSY;
+        if (s_req_pending) {
+            // A lost response must not wedge the command channel for good.
+            if (millis() - s_req_started < 2000) return S2T_WRITE_BUSY;
+            s_req_pending = false;
+        }
+        if (len > sizeof s_req_buf) return S2T_WRITE_ERROR;
+        memcpy(s_req_buf, data, len);
+        ble_gattc_write_params_t p;
+        memset(&p, 0, sizeof p);
+        p.write_op = BLE_GATT_OP_WRITE_REQ;
+        p.handle = chr->valueHandle();
+        p.len = len;
+        p.p_value = s_req_buf;
+        s_req_pending = true;
+        s_req_started = millis();
+        uint32_t err = sd_ble_gattc_write(conn, &p);
+        if (err == NRF_SUCCESS) return S2T_WRITE_OK;
+        s_req_pending = false;
+        if (err == NRF_ERROR_BUSY || err == NRF_ERROR_RESOURCES) return S2T_WRITE_BUSY;
+        return S2T_WRITE_ERROR;
+    }
     // Write without response, straight to the SoftDevice so a full TX queue
     // never blocks the loop (Bluefruit's write() would wait for a buffer).
     ble_gattc_write_params_t p;

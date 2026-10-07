@@ -34,6 +34,15 @@ static gatt_client_characteristic_t s_ch_input, s_ch_cmd, s_ch_cmd_rsp, s_ch_vib
 static bool s_have_input, s_have_cmd, s_have_cmd_rsp, s_have_vib;
 static gatt_client_notification_t s_notif_input, s_notif_cmd;
 
+// Commands go out as ATT Write Requests when the characteristic allows it
+// (the controller ignores Write Commands there). BTstack runs one request at a
+// time and needs the buffer until it completes.
+static bool s_cmd_use_req;
+static bool s_req_pending;
+static bool s_input_cccd_wanted;   // enable input once the pending write completes
+static void start_input_cccd(void);
+static uint8_t s_req_buf[256];
+
 static void gatt_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size);
 
 static bool uuid_eq(const uint8_t *a, const uint8_t *b) {
@@ -47,6 +56,8 @@ static void reset_gatt(void) {
     }
     s_con = HCI_CON_HANDLE_INVALID;
     s_phase = GP_NONE;
+    s_req_pending = false;
+    s_input_cccd_wanted = false;
     s_have_service = s_have_input = s_have_cmd = s_have_cmd_rsp = s_have_vib = false;
 }
 
@@ -87,6 +98,15 @@ static void gatt_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet,
     }
     case GATT_EVENT_QUERY_COMPLETE: {
         uint8_t status = gatt_event_query_complete_get_att_status(packet);
+        if (s_req_pending) {
+            s_req_pending = false;
+            if (status != ATT_ERROR_SUCCESS) LOG("s2: command write rejected, ATT status 0x%02x", status);
+            if (s_input_cccd_wanted) {
+                s_input_cccd_wanted = false;
+                start_input_cccd();
+            }
+            break;
+        }
         switch (s_phase) {
         case GP_SERVICES:
             if (!s_have_service) {
@@ -101,8 +121,12 @@ static void gatt_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet,
                 gatt_fail("required characteristics missing");
                 break;
             }
-            LOG("s2: handles input=%04x cmd=%04x rsp=%04x vib=%04x", s_ch_input.value_handle, s_ch_cmd.value_handle,
-                s_ch_cmd_rsp.value_handle, s_have_vib ? s_ch_vib.value_handle : 0);
+            s_cmd_use_req = (s_ch_cmd.properties & ATT_PROPERTY_WRITE) != 0;
+            LOG("s2: handles input=%04x cmd=%04x rsp=%04x vib=%04x, props cmd=%02x rsp=%02x vib=%02x",
+                s_ch_input.value_handle, s_ch_cmd.value_handle, s_ch_cmd_rsp.value_handle,
+                s_have_vib ? s_ch_vib.value_handle : 0, s_ch_cmd.properties, s_ch_cmd_rsp.properties,
+                s_have_vib ? s_ch_vib.properties : 0);
+            LOG("s2: commands use %s", s_cmd_use_req ? "write requests" : "write commands");
             s_phase = GP_CMD_CCCD;
             gatt_client_listen_for_characteristic_value_updates(&s_notif_cmd, gatt_handler, s_con, &s_ch_cmd_rsp);
             gatt_client_write_client_characteristic_configuration(gatt_handler, s_con, &s_ch_cmd_rsp,
@@ -256,13 +280,25 @@ bool s2t_has_char(s2t_char_t ch) {
 s2t_write_result_t s2t_write(s2t_char_t ch, const uint8_t *data, uint16_t len) {
     if (s_con == HCI_CON_HANDLE_INVALID || !s2t_has_char(ch)) return S2T_WRITE_ERROR;
     uint16_t handle = ch == S2T_CHAR_COMMAND ? s_ch_cmd.value_handle : s_ch_vib.value_handle;
+    if (ch == S2T_CHAR_COMMAND && s_cmd_use_req) {
+        if (s_req_pending || s_phase != GP_IDLE) return S2T_WRITE_BUSY;
+        if (len > sizeof s_req_buf) return S2T_WRITE_ERROR;
+        memcpy(s_req_buf, data, len);
+        uint8_t st = gatt_client_write_value_of_characteristic(gatt_handler, s_con, handle, len, s_req_buf);
+        if (st == ERROR_CODE_SUCCESS) {
+            s_req_pending = true;
+            return S2T_WRITE_OK;
+        }
+        if (st == GATT_CLIENT_VALUE_TOO_LONG) return S2T_WRITE_ERROR;
+        return S2T_WRITE_BUSY;
+    }
     uint8_t st = gatt_client_write_value_of_characteristic_without_response(s_con, handle, len, (uint8_t *)data);
     if (st == ERROR_CODE_SUCCESS) return S2T_WRITE_OK;
     if (st == GATT_CLIENT_VALUE_TOO_LONG) return S2T_WRITE_ERROR;
     return S2T_WRITE_BUSY;
 }
 
-void s2t_enable_input(void) {
+static void start_input_cccd(void) {
     s_phase = GP_INPUT_CCCD;
     gatt_client_listen_for_characteristic_value_updates(&s_notif_input, gatt_handler, s_con, &s_ch_input);
     if (gatt_client_write_client_characteristic_configuration(gatt_handler, s_con, &s_ch_input,
@@ -282,4 +318,10 @@ uint16_t s2t_mtu(void) {
     uint16_t mtu = 23;
     if (s_con != HCI_CON_HANDLE_INVALID) gatt_client_get_mtu(s_con, &mtu);
     return mtu;
+}
+
+void s2t_enable_input(void) {
+    // BTstack runs one GATT request at a time.
+    if (s_req_pending) s_input_cccd_wanted = true;
+    else start_input_cccd();
 }
