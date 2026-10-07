@@ -2,15 +2,13 @@
 
 #include <string.h>
 
-#include "settings.h"
 #include "usb_hid.h"
 
 // ---------------------------------------------------------------------------
-// HID report descriptor of a genuine Pro Controller, optionally extended with
-// the 0x31 (NFC/IR MCU) input report so hosts can receive the 361 byte
-// report over USB. A genuine controller only declares 0x30, 0x21 and 0x81.
+// HID report descriptor of a genuine Pro Controller (input 0x30, 0x21, 0x81;
+// output 0x01, 0x10, 0x80, 0x82).
 // ---------------------------------------------------------------------------
-static const uint8_t PRO_REPORT_DESC_HEAD[] = {
+static const uint8_t PRO_REPORT_DESC[] = {
     0x05, 0x01,                   // Usage Page (Generic Desktop)
     0x15, 0x00,                   // Logical Minimum (0)
     0x09, 0x04,                   // Usage (Joystick)
@@ -60,42 +58,10 @@ static const uint8_t PRO_REPORT_DESC_HEAD[] = {
     0x85, 0x10, 0x09, 0x04, 0x75, 0x08, 0x95, 0x3F, 0x91, 0x83, // 0x10 out
     0x85, 0x80, 0x09, 0x05, 0x75, 0x08, 0x95, 0x3F, 0x91, 0x83, // 0x80 out
     0x85, 0x82, 0x09, 0x06, 0x75, 0x08, 0x95, 0x3F, 0x91, 0x83, // 0x82 out
+    0xC0,                         // End Collection
 };
-
-static const uint8_t PRO_REPORT_DESC_NFC[] = {
-    0x85, 0x31, 0x09, 0x07, 0x75, 0x08, 0x96, 0x69, 0x01, 0x81, 0x03, // 0x31 in, 361 bytes
-    0x85, 0x11, 0x09, 0x08, 0x75, 0x08, 0x95, 0x3F, 0x91, 0x83,       // 0x11 out (MCU request)
-};
-
-static const uint8_t PRO_REPORT_DESC_TAIL[] = {
-    0xC0, // End Collection
-};
-
-static uint8_t s_report_desc[sizeof PRO_REPORT_DESC_HEAD + sizeof PRO_REPORT_DESC_NFC + sizeof PRO_REPORT_DESC_TAIL];
-static uint16_t s_report_desc_len;
-
-static void build_report_desc(void) {
-    uint16_t n = 0;
-    memcpy(s_report_desc + n, PRO_REPORT_DESC_HEAD, sizeof PRO_REPORT_DESC_HEAD);
-    n += sizeof PRO_REPORT_DESC_HEAD;
-    if (g_settings.nfc_enabled && g_settings.nfc_report_in_descriptor) {
-        memcpy(s_report_desc + n, PRO_REPORT_DESC_NFC, sizeof PRO_REPORT_DESC_NFC);
-        n += sizeof PRO_REPORT_DESC_NFC;
-    }
-    memcpy(s_report_desc + n, PRO_REPORT_DESC_TAIL, sizeof PRO_REPORT_DESC_TAIL);
-    n += sizeof PRO_REPORT_DESC_TAIL;
-    s_report_desc_len = n;
-}
 
 const uint8_t *usb_hid_report_descriptor(uint16_t *len) {
-    build_report_desc();   // cheap; settings may have changed before re-enumeration
-    *len = s_report_desc_len;
-    return s_report_desc;
-}
-
-
-uint16_t usb_hid_max_input_report(void) {
-    // Must match the descriptor the host enumerated, i.e. the settings at
-    // enumeration time; settings changes that affect it re-enumerate.
-    return (g_settings.nfc_enabled && g_settings.nfc_report_in_descriptor) ? 362 : 64;
+    *len = sizeof PRO_REPORT_DESC;
+    return PRO_REPORT_DESC;
 }

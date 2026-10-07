@@ -4,16 +4,12 @@
 
 #include "platform.h"
 
-#include "amiibo.h"
 #include "log.h"
-#include "mcu_nfc.h"
 #include "settings.h"
 #include "usb_hid.h"
 
 #define STD_REPORT_LEN 63      // payload length of 0x21 / 0x30 / 0x81 reports
-#define NFC_REPORT_LEN 361     // payload length of 0x31 reports
 #define IMU_OFFSET 12
-#define MCU_OFFSET 48
 
 // ---------------------------------------------------------------------------
 // State
@@ -32,7 +28,6 @@ static uint8_t s_colors[12] = {
 };
 
 static procon_status_t s_status;
-static mcu_t s_mcu;
 static s1_rumble_state_t s_rumble_l, s_rumble_r;
 static uint32_t s_next_report;
 static uint32_t s_mount_time;
@@ -233,13 +228,24 @@ static uint32_t rd32(const uint8_t *p) {
     return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
 }
 
+// CRC-8 (poly 0x07) used by the NFC/IR MCU replies.
+static uint8_t mcu_crc8(const uint8_t *data, int len) {
+    uint8_t crc = 0;
+    for (int i = 0; i < len; i++) {
+        crc ^= data[i];
+        for (int b = 0; b < 8; b++) crc = (crc & 0x80) ? (uint8_t)((crc << 1) ^ 0x07) : (uint8_t)(crc << 1);
+    }
+    return crc;
+}
+
 static void set_report_mode(uint8_t mode) {
     if (mode == 0x3F) mode = 0x30;   // simple HID mode is not used over USB
-    if (mode != 0x30 && mode != 0x31) return;
-    if (mode == 0x31 && !(g_settings.nfc_enabled && g_settings.nfc_report_in_descriptor)) mode = 0x30;
+    // 0x31 (NFC/IR MCU data) is not supported: like a wired Pro Controller
+    // without its MCU in use, keep sending standard reports.
+    if (mode == 0x31) mode = 0x30;
+    if (mode != 0x30) return;
     if (s_status.report_mode != mode) LOG("procon: report mode 0x%02x", mode);
     s_status.report_mode = mode;
-    if (mode == 0x31) mcu_enter_report_mode_31(&s_mcu);
 }
 
 static void handle_subcommand(uint8_t sub, const uint8_t *a, int alen) {
@@ -317,14 +323,16 @@ static void handle_subcommand(uint8_t sub, const uint8_t *a, int alen) {
         d[0] = 0x00;
         reply_subcommand(0x80, sub, d, 1);
         break;
-    case 0x21: {  // set NFC/IR MCU configuration
-        uint8_t cfg[MCU_CONFIG_REPLY_LEN];
-        mcu_set_config(&s_mcu, a, alen, cfg);
+    case 0x21: {  // set NFC/IR MCU configuration: answer like an idle MCU
+        static const uint8_t base[8] = {0x01, 0x00, 0xFF, 0x00, 0x08, 0x00, 0x1B, 0x01};
+        uint8_t cfg[34];
+        memset(cfg, 0, sizeof cfg);
+        memcpy(cfg, base, sizeof base);
+        cfg[sizeof cfg - 1] = mcu_crc8(cfg, sizeof cfg - 1);
         reply_subcommand(0xA0, sub, cfg, sizeof cfg);
         break;
     }
     case 0x22:    // set NFC/IR MCU state
-        mcu_set_power(&s_mcu, alen >= 1 ? a[0] : 0);
         reply_subcommand(0x80, sub, NULL, 0);
         break;
     case 0x30:    // set player lights
@@ -428,9 +436,8 @@ void usb_hid_on_output(const uint8_t *buf, uint16_t len, bool via_control, uint8
     case 0x10:    // rumble only
         if (n >= 9) handle_rumble(p + 1);
         break;
-    case 0x11:    // rumble + NFC/IR MCU request
+    case 0x11:    // rumble + NFC/IR MCU request (MCU part ignored)
         if (n >= 9) handle_rumble(p + 1);
-        if (g_settings.nfc_enabled) mcu_handle_request(&s_mcu, p, n);
         break;
     default:
         break;
@@ -442,7 +449,6 @@ void usb_hid_on_output(const uint8_t *buf, uint16_t len, bool via_control, uint8
 // ---------------------------------------------------------------------------
 void procon_init(void) {
     memset(&s_status, 0, sizeof s_status);
-    mcu_reset(&s_mcu);
     s1_rumble_reset(&s_rumble_l);
     s1_rumble_reset(&s_rumble_r);
     build_stick_cal();
@@ -480,7 +486,6 @@ static void on_mount_change(bool mounted) {
     s_status.handshake_done = false;
     s_status.report_mode = 0;
     s_status.imu_enabled = false;
-    mcu_reset(&s_mcu);
     s1_rumble_reset(&s_rumble_l);
     s1_rumble_reset(&s_rumble_r);
     if (mounted) {
@@ -545,14 +550,9 @@ void procon_task(void) {
     if (!platform_time_reached(s_next_report)) return;
     s_next_report = platform_deadline_ms(g_settings.usb_report_interval_ms);
 
-    static uint8_t rpt[NFC_REPORT_LEN];
+    uint8_t rpt[STD_REPORT_LEN];
     memset(rpt, 0, sizeof rpt);
     build_prefix(rpt);
     build_imu(rpt);
-    if (s_status.report_mode == 0x31) {
-        mcu_next_packet(&s_mcu, rpt + MCU_OFFSET);
-        if (usb_hid_send(0x31, rpt, NFC_REPORT_LEN)) s_status.reports_sent++;
-    } else {
-        if (usb_hid_send(0x30, rpt, STD_REPORT_LEN)) s_status.reports_sent++;
-    }
+    if (usb_hid_send(0x30, rpt, STD_REPORT_LEN)) s_status.reports_sent++;
 }

@@ -38,7 +38,7 @@
 #define ENABLE_MICRO_ECC_FOR_LE_SECURE_CONNECTIONS
 
 #define HCI_OUTGOING_PRE_BUFFER_SIZE 4
-// Allow ATT MTU up to 247 so 0x50+ byte NFC buffer transfers fit in one PDU.
+// Allow ATT MTU up to 247 (memory reads of 0x40 bytes fit in one PDU).
 #define HCI_ACL_PAYLOAD_SIZE (255 + 4)
 #define HCI_ACL_CHUNK_SIZE_ALIGNMENT 4
 

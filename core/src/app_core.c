@@ -10,7 +10,6 @@
 #include "app.h"
 #include "log.h"
 #include "mapping.h"
-#include "mcu_nfc.h"
 #include "platform.h"
 #include "procon.h"
 #include "s2_link.h"
@@ -57,14 +56,6 @@ void procon_hook_player_lights(uint8_t lights) {
     uint8_t pattern = lights & 0x0F;
     if (!pattern) pattern = (lights >> 4) & 0x0F;   // flashing lights -> show steady
     if (pattern) s2_link_set_player_leds(pattern);
-}
-
-void mcu_hook_polling_changed(bool polling) {
-    s2_link_nfc_request(NFC_SRC_HOST, polling);
-}
-
-void mcu_hook_tag_written(void) {
-    LOG("nfc: host wrote to the tag (cached copy updated; the physical tag is not modified)");
 }
 
 void s2_link_hook_controller_seen(void) {

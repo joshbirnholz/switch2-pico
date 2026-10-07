@@ -4,7 +4,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "amiibo.h"
 #include "log.h"
 #include "platform.h"
 #include "s2_transport.h"
@@ -20,8 +19,6 @@
 #define RUMBLE_MIN_GAP_MS       8      // never write rumble faster than this
 #define RUMBLE_HOLD_MS          12     // re-send the current rumble this often
 #define RUMBLE_IDLE_STOP_MS     120    // host stopped sending -> silence
-#define NFC_POLL_INTERVAL_MS    150
-#define NFC_BUFFER_SIZE         768
 #define GYRO_DETECT_MS          1500
 
 
@@ -239,7 +236,6 @@ static void reset_session(void) {
     s_imu_samples = 0;
     s_imu_detected = false;
     s_cal_active = false;
-    s_info.nfc_active = false;
     s2_default_stick_cal(&s_map.cal_l);
     s2_default_stick_cal(&s_map.cal_r);
     s_map.is_gamecube = false;
@@ -367,202 +363,6 @@ static void led_task(void) {
     if (s_state != S2_LINK_READY || s_led_wanted == s_led_sent) return;
     uint8_t d[8] = {s_led_wanted, 0, 0, 0, 0, 0, 0, 0};
     if (cmd_submit(S2_CMD_LEDS, S2_SUB_LEDS_SET_PATTERN, d, sizeof d, NULL, 0)) s_led_sent = s_led_wanted;
-}
-
-// ---------------------------------------------------------------------------
-// NFC (amiibo) reading
-//
-// The Switch 2 NFC commands mirror the Switch 1 MCU NFC protocol:
-//   0x03 start polling, 0x04 stop, 0x05 status (state, uid), 0x06 read tag
-//   into an internal buffer (Switch 1 style block list), 0x15 read that
-//   buffer in chunks at a given offset.
-// The response layouts were inferred from ndeadly's captures; the buffer is
-// searched for the tag's UID/BCC bytes so the exact header size doesn't
-// matter. Everything is logged to make field debugging possible.
-// ---------------------------------------------------------------------------
-typedef enum {
-    NFCS_IDLE,
-    NFCS_STARTING,
-    NFCS_POLLING,
-    NFCS_READ_ISSUED,
-    NFCS_READING_BUFFER,
-    NFCS_HAVE_TAG,
-} nfc_phase_t;
-
-static uint8_t s_nfc_sources;
-static nfc_phase_t s_nfc_phase;
-static bool s_nfc_cmd_pending;
-static bool s_nfc_inited;
-static uint32_t s_nfc_next;
-static uint8_t s_nfc_buf[NFC_BUFFER_SIZE];
-static uint16_t s_nfc_buf_len;
-static uint16_t s_nfc_offset;
-static int s_nfc_read_attempts;
-
-void s2_link_nfc_request(nfc_source_t src, bool enable) {
-    uint8_t before = s_nfc_sources;
-    if (enable) s_nfc_sources |= (uint8_t)src;
-    else s_nfc_sources &= (uint8_t)~src;
-    if (before != s_nfc_sources) LOG("s2: NFC sources 0x%02x", s_nfc_sources);
-}
-
-static void nfc_cb(bool ok, const s2_response_t *rsp, uint32_t ctx);
-
-static void nfc_send(uint8_t sub, const uint8_t *d, size_t n) {
-    if (cmd_submit(S2_CMD_NFC, sub, d, n, nfc_cb, sub)) s_nfc_cmd_pending = true;
-}
-
-static void nfc_parse_status(const s2_response_t *rsp) {
-    if (rsp->data_len < 9) return;
-    const uint8_t *d = rsp->data;
-    s_info.nfc_raw_state = d[0];
-    uint8_t uid_len = d[8];
-    bool present = d[4] != 0 && uid_len == NFC_UID_LEN && rsp->data_len >= 9u + uid_len;
-    if (!present) {
-        if (g_tag.state != TAG_NONE) {
-            LOG("s2: NFC tag removed");
-            amiibo_clear();
-        }
-        if (s_nfc_phase == NFCS_HAVE_TAG) s_nfc_phase = NFCS_POLLING;
-        return;
-    }
-    const uint8_t *uid = d + 9;
-    if (g_tag.state != TAG_NONE && memcmp(g_tag.uid, uid, NFC_UID_LEN) == 0) return;
-    log_hex("s2: NFC tag", uid, NFC_UID_LEN);
-    amiibo_set_uid(uid);
-    g_tag.last_seen_ms = now_ms();
-    s_nfc_read_attempts = 0;
-    s_nfc_phase = NFCS_READ_ISSUED;
-    // Read pages 0x00-0x3B, 0x3C-0x77, 0x78-0x86 of any tag (UID all zero), 2 s timeout.
-    static const uint8_t read_args[19] = {0xd0, 0x07, 0, 0, 0, 0, 0, 0, 0, 0x01, 0x03,
-                                          0x00, 0x3b, 0x3c, 0x77, 0x78, 0x86, 0x00, 0x00};
-    nfc_send(S2_SUB_NFC_READ_TAG, read_args, sizeof read_args);
-}
-
-static void nfc_try_complete(void) {
-    int start = amiibo_find_pages(s_nfc_buf, s_nfc_buf_len, g_tag.uid);
-    if (start >= 0 && start + NTAG215_SIZE <= s_nfc_buf_len) {
-        LOG("s2: NFC tag read complete (pages at buffer offset %d)", start);
-        amiibo_set_data(s_nfc_buf + start);
-        s_nfc_phase = NFCS_HAVE_TAG;
-        return;
-    }
-    if (++s_nfc_read_attempts < 4) {
-        LOG("s2: NFC buffer incomplete (%u bytes, pages at %d), retrying", s_nfc_buf_len, start);
-        s_nfc_phase = NFCS_READ_ISSUED;
-        s_nfc_next = platform_deadline_ms(300);
-    } else {
-        LOG("s2: NFC read failed");
-        amiibo_set_failed();
-        s_nfc_phase = NFCS_HAVE_TAG;
-    }
-}
-
-static void nfc_cb(bool ok, const s2_response_t *rsp, uint32_t ctx) {
-    s_nfc_cmd_pending = false;
-    uint8_t sub = (uint8_t)ctx;
-    if (!ok) {
-        if (s_nfc_phase == NFCS_READING_BUFFER) nfc_try_complete();
-        return;
-    }
-    switch (sub) {
-    case S2_SUB_NFC_START_POLL:
-        s_nfc_phase = NFCS_POLLING;
-        break;
-    case S2_SUB_NFC_STOP_POLL:
-        s_nfc_phase = NFCS_IDLE;
-        break;
-    case S2_SUB_NFC_GET_STATUS:
-        if (s_nfc_phase == NFCS_POLLING || s_nfc_phase == NFCS_HAVE_TAG) nfc_parse_status(rsp);
-        break;
-    case S2_SUB_NFC_READ_TAG:
-        s_nfc_phase = NFCS_READING_BUFFER;
-        s_nfc_buf_len = 0;
-        s_nfc_offset = 0;
-        s_nfc_next = platform_deadline_ms(250);   // give the reader time to fill its buffer
-        break;
-    case S2_SUB_NFC_READ_BUFFER: {
-        const uint8_t *d = rsp->data;
-        size_t n = rsp->data_len;
-        // Expected: [status][offset lo][offset hi][data...]
-        if (n >= 3 && d[1] == (uint8_t)s_nfc_offset && d[2] == (uint8_t)(s_nfc_offset >> 8)) {
-            d += 3;
-            n -= 3;
-        } else if (s_nfc_offset == 0) {
-            log_hex("s2: NFC buffer header unexpected", rsp->data, rsp->data_len > 16 ? 16 : rsp->data_len);
-        }
-        if (n == 0) {
-            nfc_try_complete();
-            break;
-        }
-        if (s_nfc_buf_len + n > sizeof s_nfc_buf) n = sizeof s_nfc_buf - s_nfc_buf_len;
-        memcpy(s_nfc_buf + s_nfc_buf_len, d, n);
-        s_nfc_buf_len = (uint16_t)(s_nfc_buf_len + n);
-        s_nfc_offset = (uint16_t)(s_nfc_offset + n);
-        int start = amiibo_find_pages(s_nfc_buf, s_nfc_buf_len, g_tag.uid);
-        if (s_nfc_buf_len >= sizeof s_nfc_buf || (start >= 0 && start + NTAG215_SIZE <= s_nfc_buf_len)) {
-            nfc_try_complete();
-        }
-        break;
-    }
-    default:
-        break;
-    }
-}
-
-static void nfc_task(void) {
-    bool want = s_nfc_sources != 0 && g_settings.nfc_enabled;
-    if (s_state != S2_LINK_READY) {
-        s_nfc_phase = NFCS_IDLE;
-        s_nfc_cmd_pending = false;
-        s_nfc_inited = false;
-        return;
-    }
-    if (s_nfc_cmd_pending || !platform_time_reached(s_nfc_next)) return;
-    s_info.nfc_active = s_nfc_phase != NFCS_IDLE;
-
-    if (!want) {
-        if (s_nfc_phase != NFCS_IDLE && s_nfc_phase != NFCS_STARTING) {
-            nfc_send(S2_SUB_NFC_STOP_POLL, NULL, 0);
-            s_nfc_phase = NFCS_IDLE;
-        }
-        return;
-    }
-
-    switch (s_nfc_phase) {
-    case NFCS_IDLE:
-        if (!s_nfc_inited) {
-            // Sent by SDL during its controller init; harmless if already active.
-            cmd_submit(S2_CMD_NFC, S2_SUB_NFC_UNK0C, NULL, 0, NULL, 0);
-            cmd_submit(S2_CMD_NFC, S2_SUB_NFC_INIT, NULL, 0, NULL, 0);
-            s_nfc_inited = true;
-        }
-        {
-            static const uint8_t poll_args[5] = {0x00, 0xe8, 0x03, 0x2c, 0x01};
-            nfc_send(S2_SUB_NFC_START_POLL, poll_args, sizeof poll_args);
-        }
-        s_nfc_phase = NFCS_STARTING;
-        break;
-    case NFCS_STARTING:
-        break;
-    case NFCS_POLLING:
-    case NFCS_HAVE_TAG:
-        nfc_send(S2_SUB_NFC_GET_STATUS, NULL, 0);
-        s_nfc_next = platform_deadline_ms(NFC_POLL_INTERVAL_MS);
-        break;
-    case NFCS_READ_ISSUED:
-        if (s_nfc_read_attempts > 0) {
-            static const uint8_t read_args[19] = {0xd0, 0x07, 0, 0, 0, 0, 0, 0, 0, 0x01, 0x03,
-                                                  0x00, 0x3b, 0x3c, 0x77, 0x78, 0x86, 0x00, 0x00};
-            nfc_send(S2_SUB_NFC_READ_TAG, read_args, sizeof read_args);
-        }
-        break;
-    case NFCS_READING_BUFFER: {
-        uint8_t off[2] = {(uint8_t)s_nfc_offset, (uint8_t)(s_nfc_offset >> 8)};
-        nfc_send(S2_SUB_NFC_READ_BUFFER, off, sizeof off);
-        break;
-    }
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1037,7 +837,6 @@ void s2c_on_disconnected(uint8_t reason) {
     else if (s_state == S2_LINK_DISCOVERING) record_failure(2, reason);
     else if (s_state == S2_LINK_INITIALISING) record_failure(s_init_step <= ST_PAIR_FINALIZE ? 3 : 4, reason);
     reset_session();
-    amiibo_clear();
     s_led_sent = 0xFF;
     start_scanning();
 }
@@ -1103,7 +902,6 @@ void s2_link_task(void) {
     cmd_pump();
     if (s_state == S2_LINK_READY) {
         led_task();
-        nfc_task();
         rumble_task();
     }
 }

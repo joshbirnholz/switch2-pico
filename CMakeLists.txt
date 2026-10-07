@@ -46,12 +46,10 @@ add_custom_command(
 set(CORE ${CMAKE_CURRENT_LIST_DIR}/core/src)
 set(PICO_SRC ${CMAKE_CURRENT_LIST_DIR}/pico)
 add_executable(switch2_pico
-        ${CORE}/amiibo.c
         ${CORE}/app_core.c
         ${CORE}/hd_rumble.c
         ${CORE}/log.c
         ${CORE}/mapping.c
-        ${CORE}/mcu_nfc.c
         ${CORE}/procon.c
         ${CORE}/s2_link.c
         ${CORE}/s2_proto.c

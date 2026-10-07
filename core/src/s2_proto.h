@@ -39,7 +39,6 @@ extern const uint8_t S2_UUID_REPORT_RATE_DESC[16]; // 679d5510-... "set report r
 extern const uint8_t S2_UUID_UNKNOWN_SVC_WRITE[16];// 00c5af5d-...-bd282 (console writes 01 00 here first)
 
 // ---- commands ----
-#define S2_CMD_NFC        0x01
 #define S2_CMD_MEMORY     0x02
 #define S2_CMD_INIT       0x03
 #define S2_CMD_UNK07      0x07
@@ -62,17 +61,6 @@ extern const uint8_t S2_UUID_UNKNOWN_SVC_WRITE[16];// 00c5af5d-...-bd282 (consol
 #define S2_SUB_PAIR_CONFIRM_LTK   0x02
 #define S2_SUB_PAIR_FINALIZE      0x03
 #define S2_SUB_PAIR_EXCHANGE_KEY  0x04
-
-// NFC subcommands (command 0x01). Only partially documented upstream.
-#define S2_SUB_NFC_INIT          0x01
-#define S2_SUB_NFC_START_POLL    0x03
-#define S2_SUB_NFC_STOP_POLL     0x04
-#define S2_SUB_NFC_GET_STATUS    0x05
-#define S2_SUB_NFC_READ_TAG      0x06
-#define S2_SUB_NFC_WRITE_TAG     0x08
-#define S2_SUB_NFC_UNK0C         0x0C
-#define S2_SUB_NFC_WRITE_BUFFER  0x14
-#define S2_SUB_NFC_READ_BUFFER   0x15
 
 #define S2_FEATURE_BUTTONS  0x01
 #define S2_FEATURE_STICKS   0x02

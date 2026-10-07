@@ -127,21 +127,6 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
 </section>
 
 <section class="card">
-  <h2>NFC / amiibo</h2>
-  <div class="grid">
-    <label class="check"><input type="checkbox" data-k="nfc_enabled">Enable NFC</label>
-    <label class="check"><input type="checkbox" data-k="nfc_descriptor">Declare NFC report on USB (only for PC software that reads amiibo; the Switch doesn't need it)</label>
-  </div>
-  <dl class="kv" id="nfc" style="margin-top:12px"></dl>
-  <div class="row" style="margin-top:12px">
-    <button onclick="act('nfc_on')">Start scanning</button>
-    <button onclick="act('nfc_off')">Stop scanning</button>
-    <button onclick="download('/api/amiibo.bin','amiibo.bin')">Download last tag (.bin)</button>
-  </div>
-  <p class="note">Tap an amiibo on the controller's NFC spot (bottom of the right grip area / Home button). Games read it through the emulated Pro Controller; the dump can also be loaded into emulators.</p>
-</section>
-
-<section class="card">
   <h2>USB and system</h2>
   <div class="grid">
     <label>Report interval (ms)<input type="number" min="4" max="16" data-k="usb_interval"></label>
@@ -301,8 +286,6 @@ async function poll(){
     }else{for(const n of IN)$('b-'+n).classList.remove('on');$('imu').textContent='';}
     document.querySelectorAll('.wifi-only').forEach(e=>e.style.display=s.wifi===false?'none':'');
     $('st-ver').textContent='v'+s.version+(s.platform?' · '+s.platform:'');
-    const N=s.nfc;
-    kv($('nfc'),[['Reader',N.active?'scanning':'idle'],['Tag',N.tag+(N.tag!=='none'?' ('+N.uid+')':'')],['Last amiibo ID',N.amiibo_id||'—'],['Tags read',N.generation]]);
     if(S&&L.gyro_cal_busy===false)$('bias').textContent='bias: '+S.gyro_bias.join(', ');
   }catch(e){$('st-link').textContent='offline';$('st-link').className='pill'}
 }

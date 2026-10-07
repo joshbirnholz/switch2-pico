@@ -2,7 +2,7 @@
 CC ?= cc
 CFLAGS ?= -std=c11 -Wall -Wextra -Wno-unused-parameter -O1 -g
 SRC = ../core/src
-OBJS = test_main.c $(SRC)/hd_rumble.c $(SRC)/s2_proto.c $(SRC)/mapping.c $(SRC)/mcu_nfc.c $(SRC)/amiibo.c
+OBJS = test_main.c $(SRC)/hd_rumble.c $(SRC)/s2_proto.c $(SRC)/mapping.c
 
 run: test_runner
 	./test_runner

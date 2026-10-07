@@ -5,10 +5,8 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "amiibo.h"
 #include "hd_rumble.h"
 #include "mapping.h"
-#include "mcu_nfc.h"
 #include "s2_proto.h"
 #include "settings.h"
 
@@ -229,76 +227,6 @@ static void test_mapping(void) {
     CHECK(mapping_buttons(&s, &ctx, &in) & S1_BTN_L);
 }
 
-// ---------------------------------------------------------------------------
-static int s_poll_changes;
-void mcu_hook_polling_changed(bool polling) { (void)polling; s_poll_changes++; }
-
-static void test_mcu_nfc(void) {
-    // CRC check value used by the configuration reply (joycontrol hardcodes 0xC8).
-    uint8_t reply[MCU_CONFIG_REPLY_LEN];
-    mcu_t m;
-    mcu_reset(&m);
-    mcu_set_power(&m, MCU_READY);
-    const uint8_t cfg[] = {0x21, 0x00, MCU_NFC};
-    mcu_set_config(&m, cfg, sizeof cfg, reply);
-    CHECK(reply[MCU_CONFIG_REPLY_LEN - 1] == 0xC8);
-    CHECK(m.power == MCU_NFC);
-
-    uint8_t pkt[MCU_PACKET_LEN];
-    while (m.q_count) mcu_next_packet(&m, pkt);
-
-    // Start polling -> hook fires.
-    uint8_t req[64] = {0};
-    req[9] = 0x02;      // NFC command
-    req[10] = 0x01;     // start polling
-    mcu_handle_request(&m, req, sizeof req);
-    CHECK(s_poll_changes == 1);
-
-    // No tag: status reports state POLL without a UID.
-    req[10] = 0x04;
-    mcu_handle_request(&m, req, sizeof req);
-    mcu_next_packet(&m, pkt);
-    CHECK(pkt[0] == 0x2a && pkt[7] == NFC_POLL);
-    CHECK(pkt[MCU_PACKET_LEN - 1] == mcu_crc8(pkt, MCU_PACKET_LEN - 1));
-
-    // Tag present: UID is reported.
-    uint8_t uid[7] = {0x04, 0x8a, 0x6d, 0x2a, 0xb7, 0x5d, 0x80};
-    uint8_t data[NTAG215_SIZE];
-    memset(data, 0x5a, sizeof data);
-    amiibo_set_uid(uid);
-    amiibo_set_data(data);
-    mcu_handle_request(&m, req, sizeof req);
-    mcu_next_packet(&m, pkt);
-    CHECK(pkt[0] == 0x2a && memcmp(pkt + 16, uid, 7) == 0);
-
-    // Read request -> 3 packets containing all 540 bytes.
-    req[10] = 0x06;
-    mcu_handle_request(&m, req, sizeof req);
-    CHECK(m.q_count == 3);
-    mcu_next_packet(&m, pkt);
-    CHECK(pkt[0] == 0x3a && memcmp(pkt + 15, uid, 7) == 0 && pkt[67] == 0x5a && pkt[311] == 0x5a);
-    mcu_next_packet(&m, pkt);
-    CHECK(pkt[0] == 0x3a && pkt[3] == 0x02 && pkt[7] == 0x5a && pkt[7 + 294] == 0x5a);
-    mcu_next_packet(&m, pkt);
-    CHECK(pkt[0] == 0x2a);
-    // Queue empty -> "no response" packet.
-    mcu_next_packet(&m, pkt);
-    CHECK(pkt[0] == 0xFF);
-}
-
-static void test_amiibo_find(void) {
-    uint8_t uid[7] = {0x04, 0x8a, 0x6d, 0x2a, 0xb7, 0x5d, 0x80};
-    uint8_t buf[700];
-    memset(buf, 0, sizeof buf);
-    uint8_t *t = buf + 0x3C;
-    t[0] = uid[0]; t[1] = uid[1]; t[2] = uid[2]; t[3] = (uint8_t)(0x88 ^ uid[0] ^ uid[1] ^ uid[2]);
-    memcpy(t + 4, uid + 3, 4);
-    t[8] = (uint8_t)(uid[3] ^ uid[4] ^ uid[5] ^ uid[6]);
-    CHECK(amiibo_find_pages(buf, sizeof buf, uid) == 0x3C);
-    uid[6] ^= 1;
-    CHECK(amiibo_find_pages(buf, sizeof buf, uid) == -1);
-}
-
 int main(void) {
     test_s1_rumble_classic();
     test_s1_rumble_packed();
@@ -307,8 +235,6 @@ int main(void) {
     test_commands();
     test_input_report();
     test_mapping();
-    test_mcu_nfc();
-    test_amiibo_find();
     printf("%d passed, %d failed\n", g_pass, g_fail);
     return g_fail ? 1 : 0;
 }

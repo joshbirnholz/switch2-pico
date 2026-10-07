@@ -24,11 +24,6 @@ typedef enum {
     S2_LINK_READY,
 } s2_link_state_t;
 
-typedef enum {
-    NFC_SRC_HOST = 1,       // the USB host asked the emulated MCU to poll
-    NFC_SRC_WEB = 2,        // the configuration page asked for a scan
-} nfc_source_t;
-
 typedef struct {
     s2_link_state_t state;
     uint8_t addr[6];            // controller address (big-endian), valid when connected
@@ -42,8 +37,6 @@ typedef struct {
     bool paired_this_session;
     bool pairing_ok;
     uint8_t gyro_range_detected; // gyro_range_t actually in use
-    bool nfc_active;
-    uint8_t nfc_raw_state;
     int8_t last_rssi;
     uint32_t reports;
     uint32_t rumble_packets;
@@ -66,8 +59,6 @@ void s2_link_rumble_submit(const rumble_sample_t *left, int nl, const rumble_sam
 void s2_link_test_rumble(void);
 
 void s2_link_set_player_leds(uint8_t pattern);
-
-void s2_link_nfc_request(nfc_source_t src, bool enable);
 
 void s2_link_disconnect(void);
 void s2_link_forget(void);

@@ -7,23 +7,20 @@ extern "C" {
 
 // Minimal HID class driver for the emulated Pro Controller.
 //
-// TinyUSB's stock HID class sizes its IN and OUT transfers with the same
-// CFG_TUD_HID_EP_BUFSIZE. We need 64 byte OUT transfers (every output report
-// is exactly one packet) but a 362 byte IN transfer for the 0x31 NFC report,
-// so this driver keeps the two independent.
+// Separate IN/OUT endpoint handling, control-pipe SET_REPORT support and an
+// output-report queue that lets the USB stack run in its own task (nRF52).
+// Every report is exactly one 64 byte packet, like a genuine controller.
 
 #include <stdbool.h>
 #include <stdint.h>
 
 #define USB_HID_EP_SIZE 64
-#define USB_HID_MAX_IN_REPORT 384
+#define USB_HID_MAX_IN_REPORT 64
 
 bool usb_hid_ready(void);
-// Send report `id` followed by `len` bytes of data.
 bool usb_hid_ep_ready(void);
-// Largest input report (with id) the current report descriptor declares.
-uint16_t usb_hid_max_input_report(void);
 bool usb_hid_suspended(void);
+// Send report `id` followed by `len` bytes of data.
 bool usb_hid_send(uint8_t id, const uint8_t *data, uint16_t len);
 bool usb_hid_mounted(void);
 

@@ -7,8 +7,8 @@ extern "C" {
 
 // Emulated Nintendo Switch (1) Pro Controller on USB: the 0x80 USB handshake,
 // the 0x01 subcommand protocol (device info, SPI flash, report modes, IMU,
-// vibration, player lights, NFC/IR MCU), input report generation and HD rumble
-// reception.
+// vibration, player lights; the NFC/IR MCU only answers as idle), input report
+// generation and HD rumble reception.
 
 #include <stdbool.h>
 #include <stdint.h>

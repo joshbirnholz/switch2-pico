@@ -70,29 +70,14 @@ bool usb_hid_ep_ready(void) {
     return s_hid.ep_in != 0 && usbd_edpt_ready(0, s_hid.ep_in);
 }
 
-// When the report descriptor declares an input report longer than one packet
-// (0x31, 362 bytes), hosts read the endpoint in transfers of that size, and a
-// transfer only ends on a short packet. A 64 byte report fills the packet
-// exactly, so without a zero-length packet after it the host keeps reading,
-// merges several reports and finally drops them all with an overflow.
-static bool s_zlp_pending;
-
 bool usb_hid_send(uint8_t id, const uint8_t *data, uint16_t len) {
     if (!usb_hid_ready()) return false;
     if (len + 1u > sizeof s_in_buf) return false;
     if (!usbd_edpt_claim(0, s_hid.ep_in)) return false;
-    if (s_zlp_pending) {
-        // Finish the previous report first; the caller retries this one.
-        if (usbd_edpt_xfer(0, s_hid.ep_in, s_in_buf, 0)) s_zlp_pending = false;
-        else usbd_edpt_release(0, s_hid.ep_in);
-        return false;
-    }
     s_in_buf[0] = id;
     memcpy(s_in_buf + 1, data, len);
-    uint16_t total = (uint16_t)(len + 1);
-    bool ok = usbd_edpt_xfer(0, s_hid.ep_in, s_in_buf, total);
+    bool ok = usbd_edpt_xfer(0, s_hid.ep_in, s_in_buf, (uint16_t)(len + 1));
     if (!ok) usbd_edpt_release(0, s_hid.ep_in);
-    else if (total % USB_HID_EP_SIZE == 0 && usb_hid_max_input_report() > USB_HID_EP_SIZE) s_zlp_pending = true;
     return ok;
 }
 
@@ -107,7 +92,6 @@ static bool prohid_deinit(void) {
 static void prohid_reset(uint8_t rhport) {
     (void)rhport;
     memset(&s_hid, 0, sizeof s_hid);
-    s_zlp_pending = false;
 }
 
 static uint16_t prohid_open(uint8_t rhport, tusb_desc_interface_t const *desc_itf, uint16_t max_len) {

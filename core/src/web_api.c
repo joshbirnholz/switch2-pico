@@ -5,10 +5,9 @@
 //   GET  /api/settings         current settings (JSON)
 //   POST /api/settings         update settings (application/x-www-form-urlencoded)
 //   POST /api/action?do=...    forget, disconnect, rumble, gyrocal, gyroclear,
-//                              nfc_on, nfc_off, usb_reconnect, reboot,
-//                              bootloader, factory, wifi_off
+//                              usb_reconnect, reboot, bootloader, factory,
+//                              wifi_off
 //   GET  /api/log              firmware log (text)
-//   GET  /api/amiibo.bin       last scanned NFC tag (540 byte NTAG215 dump)
 //   anything else              redirect to / (captive portal)
 
 #include <ctype.h>
@@ -17,7 +16,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "amiibo.h"
 #include "app.h"
 #include "log.h"
 #include "mapping.h"
@@ -60,12 +58,6 @@ static void jb_str(jbuf_t *j, const char *s) {
         else if (ch < 0x20) jb_printf(j, "\\u%04x", ch);
         else jb_printf(j, "%c", ch);
     }
-    jb_printf(j, "\"");
-}
-
-static void jb_hex(jbuf_t *j, const uint8_t *d, size_t n) {
-    jb_printf(j, "\"");
-    for (size_t i = 0; i < n; i++) jb_printf(j, "%02x", d[i]);
     jb_printf(j, "\"");
 }
 
@@ -151,20 +143,7 @@ static void api_status(http_response_t *r) {
         jb_printf(&j, ",\"input\":null");
     }
 
-    static const char *const tag_states[] = {"none", "reading", "ready", "failed"};
-    jb_printf(&j, ",\"nfc\":{\"active\":%s,\"raw_state\":%u,\"tag\":\"%s\",\"uid\":", li.nfc_active ? "true" : "false",
-              li.nfc_raw_state, tag_states[g_tag.state]);
-    jb_hex(&j, g_tag.uid, NFC_UID_LEN);
-    uint8_t id[8];
-    jb_printf(&j, ",\"generation\":%lu,\"modified\":%s,\"amiibo_id\":", (unsigned long)g_tag.generation,
-              g_tag.modified_by_host ? "true" : "false");
-    if (g_tag.generation && g_tag.state != TAG_READ_FAILED) {
-        memcpy(id, g_tag.data + 0x54, 8);
-        jb_hex(&j, id, 8);
-    } else {
-        jb_printf(&j, "null");
-    }
-    jb_printf(&j, "},\"log_total\":%lu}", (unsigned long)log_total_written());
+    jb_printf(&j, ",\"log_total\":%lu}", (unsigned long)log_total_written());
     respond_json(r, &j);
 }
 
@@ -189,13 +168,13 @@ static void api_settings_get(http_response_t *r) {
               "\"gyro_enabled\":%u,\"gyro_range\":%u,\"gyro_scale\":%u,\"accel_scale\":%u,"
               "\"gyro_bias\":[%d,%d,%d],"
               "\"rumble_enabled\":%u,\"rumble_strength\":%u,\"rumble_freq_mode\":%u,\"rumble_freq_slope\":%u,"
-              "\"nfc_enabled\":%u,\"nfc_descriptor\":%u,\"usb_interval\":%u,\"led_follow_host\":%u,"
+              "\"usb_interval\":%u,\"led_follow_host\":%u,"
               "\"usb_detach\":%u,\"usb_wakeup\":%u,\"webusb\":%u,\"hotkey\":%u,\"wifi_autostart\":%u,\"wifi_channel\":%u,"
               "\"wifi_ssid\":",
               s->stick_deadzone_pct, s->stick_outer_pct, s->swap_sticks, s->gc_trigger_threshold, s->gyro_enabled,
               s->gyro_range, s->gyro_scale_pct, s->accel_scale_pct, s->gyro_bias[0], s->gyro_bias[1],
               s->gyro_bias[2], s->rumble_enabled, s->rumble_strength_pct, s->rumble_freq_mode,
-              s->rumble_freq_slope, s->nfc_enabled, s->nfc_report_in_descriptor, s->usb_report_interval_ms,
+              s->rumble_freq_slope, s->usb_report_interval_ms,
               s->led_follow_host, s->usb_detach_when_idle, s->usb_remote_wakeup, s->webusb_enabled, s->hotkey_enabled,
               s->wifi_autostart, s->wifi_channel);
     jb_str(&j, s->wifi_ssid);
@@ -260,8 +239,6 @@ static bool apply_kv(settings_t *s, const char *k, const char *v, bool *usb_reco
         {"rumble_strength", &s->rumble_strength_pct, 1, false},
         {"rumble_freq_mode", &s->rumble_freq_mode, 1, false},
         {"rumble_freq_slope", &s->rumble_freq_slope, 1, false},
-        {"nfc_enabled", &s->nfc_enabled, 1, true},
-        {"nfc_descriptor", &s->nfc_report_in_descriptor, 1, true},
         {"usb_interval", &s->usb_report_interval_ms, 1, true},
         {"led_follow_host", &s->led_follow_host, 1, false},
         {"usb_detach", &s->usb_detach_when_idle, 1, false},
@@ -346,9 +323,7 @@ static void api_action(const http_request_t *req, http_response_t *r) {
     else if (!strcmp(what, "gyroclear")) {
         g_settings.gyro_bias[0] = g_settings.gyro_bias[1] = g_settings.gyro_bias[2] = 0;
         settings_save_later();
-    } else if (!strcmp(what, "nfc_on")) s2_link_nfc_request(NFC_SRC_WEB, true);
-    else if (!strcmp(what, "nfc_off")) s2_link_nfc_request(NFC_SRC_WEB, false);
-    else if (!strcmp(what, "usb_reconnect")) app_request_usb_reconnect();
+    } else if (!strcmp(what, "usb_reconnect")) app_request_usb_reconnect();
     else if (!strcmp(what, "reboot")) app_request_reboot(false);
     else if (!strcmp(what, "bootloader")) app_request_reboot(true);
     else if (!strcmp(what, "factory")) {
@@ -386,19 +361,6 @@ void web_api_handle(const http_request_t *req, http_response_t *r) {
         r->content_type = "text/plain; charset=utf-8";
         r->body_len = log_copy(buf, 8192);
         r->body = (const uint8_t *)buf;
-        r->body_owned = true;
-        return;
-    }
-    if (get && !strcmp(req->path, "/api/amiibo.bin")) {
-        if (!g_tag.generation) return respond_text(r, 404, "no tag has been read yet");
-        uint8_t *buf = malloc(NTAG215_SIZE);
-        if (!buf) return respond_text(r, 500, "oom");
-        memcpy(buf, g_tag.data, NTAG215_SIZE);
-        r->status = 200;
-        r->content_type = "application/octet-stream";
-        r->extra_headers = "Content-Disposition: attachment; filename=\"amiibo.bin\"\r\n";
-        r->body = buf;
-        r->body_len = NTAG215_SIZE;
         r->body_owned = true;
         return;
     }

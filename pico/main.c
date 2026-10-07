@@ -22,7 +22,6 @@
 #include "bootsel.h"
 #include "log.h"
 #include "mapping.h"
-#include "mcu_nfc.h"
 #include "procon.h"
 #include "s2_link.h"
 #include "settings.h"

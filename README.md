@@ -31,7 +31,6 @@ Switch 2 Pro Controller  ──BLE──▶  dongle    ──USB──▶  PC / 
 | GL / GR / C | Each can be mapped to any Pro Controller button (all other buttons can be remapped too). Defaults: GL → left stick click, GR → right stick click, C → unassigned. |
 | Gyro and accelerometer | Converted to the Switch 1 axis layout and units. The gyro scale is auto-detected, can be calibrated, and sensitivity is adjustable. |
 | HD rumble | The host's Switch 1 HD rumble frames, including the packed multi-sample formats, are decoded and re-encoded for the Switch 2 actuators, left and right separately. |
-| Amiibo (NFC) | Reads NTAG215 tags through the controller and presents them through the emulated Pro Controller's NFC chip. Game writes to amiibo go to a cached copy only (see limitations). The last tag can be downloaded as a `.bin` dump from the config page. |
 | Player LEDs | Follow the player number the host assigns. |
 | Battery | Reported to the host. |
 | NSO GameCube controller | Basic support: buttons, sticks, analog triggers acting as L/R past a threshold, and rumble through built-in vibration presets. |
@@ -142,7 +141,6 @@ On the page you can:
 * see the live input, battery, report rate and connection details
 * remap every button, including GL, GR and C
 * set stick deadzones, gyro sensitivity and calibration, and rumble strength and frequency mode
-* scan amiibo and download the last tag
 * toggle USB behaviour: report rate, LED following, wake-on-controller, attach only while connected
 * change the Wi-Fi name and password, reboot, enter firmware update mode, factory reset
 * read the firmware log (useful for bug reports)
@@ -170,29 +168,27 @@ briefly). WebUSB is the easier option on a computer.
 ## What is verified
 
 I wrote this from the public protocol research listed under
-[Credits](#credits). I couldn't test it with real hardware.
+[Credits](#credits). On an nRF52840 dongle it has been confirmed to pair,
+reconnect, and work with a Switch 1 console and with Steam on SteamOS.
 
 | Part | Confidence |
 | --- | --- |
-| Builds for the Pico 2 W; unit tests for the rumble codec, protocol parsing, mapping and NFC MCU emulation | ✅ done in CI |
-| BLE connect, GATT layout, command framing, input report 0x05, stick calibration | High: matches two independent working implementations (trevlars' Linux bridge, SDL) |
-| Nintendo pairing (`0x15` commands) and reconnect via the host address in adverts | High: documented with captures by ndeadly |
-| Switch 1 Pro Controller USB protocol (handshake, subcommands, SPI calibration) | High: well documented and implemented by many projects |
+| Builds for both boards; unit tests for the rumble codec, protocol parsing and mapping | ✅ done in CI |
+| BLE connect, GATT layout, command framing, input report 0x05, stick calibration | ✅ confirmed on hardware (nRF52840) |
+| Nintendo pairing (`0x15` commands) and reconnect via the host address in adverts | ✅ confirmed on hardware (nRF52840) |
+| Switch 1 Pro Controller USB protocol (handshake, subcommands, SPI calibration) | ✅ confirmed with a Switch 1 and with Linux/Steam |
 | IMU axis mapping and units | Medium: derived from SDL's Switch 1 and Switch 2 drivers. Use the gyro settings if an axis feels wrong. |
 | HD rumble **amplitude** | Medium-high |
 | HD rumble **frequency** translation | **Low.** The Switch 2 frequency encoding hasn't been published. It is anchored on the console's idle frame (verified bit-exact in tests) with a configurable scale, and a *Fixed* fallback mode is available. |
-| Amiibo reading over the Switch 2 controller | **Low–medium.** The NFC command set is only partly documented. The reader searches its buffer for the tag's UID so the exact header layout doesn't matter, and every step is logged. |
-| Amiibo through USB to games and emulators | Medium. Uses the documented Switch 1 MCU protocol. The Switch reads the `0x31` NFC report as is. PC software that reads amiibo needs it declared in the HID descriptor: turn on *Declare NFC report on USB* (off by default, like a genuine Pro Controller). |
 
 If something doesn't work, the log on the configuration page usually shows
 where it stopped. Please include it in bug reports.
 
 ## Known limitations
 
-* **Amiibo writes are not written to the physical tag.** Games that update an
-  amiibo (Smash, Zelda…) succeed, but only the dongle's cached copy changes.
-  You can download that copy from the configuration page. The Switch 2 write
-  command format isn't known well enough to risk corrupting real tags.
+* **No amiibo.** The Switch doesn't use a Pro Controller's NFC reader over a
+  wired USB connection, so the dongle doesn't read tags. It answers the
+  NFC/IR chip setup commands like an idle controller.
 * One controller per dongle.
 * Joy-Con 2 are not supported yet.
 * The Switch 1 report carries three IMU samples per report. The controller
@@ -241,14 +237,13 @@ sketch.
 
 | File | Purpose |
 | --- | --- |
-| `core/src/s2_link.c` | Switch 2 controller logic: which adverts to connect to, init and Nintendo pairing commands, input, rumble pacing, LEDs, NFC reading, gyro calibration |
+| `core/src/s2_link.c` | Switch 2 controller logic: which adverts to connect to, init and Nintendo pairing commands, input, rumble pacing, LEDs, gyro calibration |
 | `core/src/s2_transport.h` | Interface each board's Bluetooth stack implements |
 | `core/src/s2_proto.c` | Switch 2 protocol: adverts, command framing, report and calibration parsing |
 | `core/src/procon.c` | Emulated Switch 1 Pro Controller: USB handshake, subcommands, SPI flash, input reports |
 | `core/src/usb_hid.c`, `usb_pro_desc.c` | TinyUSB HID class driver and the Pro Controller report descriptor |
 | `core/src/hd_rumble.c` | Switch 1 HD rumble decoder and Switch 2 encoder |
 | `core/src/mapping.c` | Button remapping, stick calibration and deadzones, IMU conversion |
-| `core/src/mcu_nfc.c`, `amiibo.c` | Switch 1 NFC/MCU emulation and the shared tag store |
 | `core/src/web_api.c`, `webusb.c` | Configuration API, served over HTTP or WebUSB |
 | `core/src/app_core.c`, `settings.c` | Glue, USB suspend / wakeup, settings |
 | `core/src/platform.h` | Board services (time, storage, reboot) |
@@ -265,7 +260,7 @@ Protocol knowledge comes from these projects. No code was copied from them.
 * [libsdl-org/SDL](https://github.com/libsdl-org/SDL): Switch 2 USB driver (calibration, IMU, rumble frame layout) and the Switch 1 driver
 * [TommyWabg/Switch2Connect](https://github.com/TommyWabg/switch2-controllers-windows10-gyro): IMU scale measurements, rumble captures
 * [safijari/openpuck](https://github.com/safijari/openpuck) and [SundayMoments/DS5_Bridge](https://github.com/SundayMoments/DS5_Bridge): the dongle concept and Switch Pro output mode
-* [dekuNukem/Nintendo_Switch_Reverse_Engineering](https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering), CTCaer's jc_toolkit, [mart1nro/joycontrol](https://github.com/mart1nro/joycontrol) (Poohl's fork): Switch 1 protocol, HD rumble, NFC MCU
+* [dekuNukem/Nintendo_Switch_Reverse_Engineering](https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering), CTCaer's jc_toolkit, [mart1nro/joycontrol](https://github.com/mart1nro/joycontrol) (Poohl's fork): Switch 1 protocol, HD rumble
 
 ## License
 
