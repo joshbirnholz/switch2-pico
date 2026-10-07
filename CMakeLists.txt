@@ -43,27 +43,33 @@ add_custom_command(
         VERBATIM
 )
 
+set(CORE ${CMAKE_CURRENT_LIST_DIR}/core/src)
+set(PICO_SRC ${CMAKE_CURRENT_LIST_DIR}/pico)
 add_executable(switch2_pico
-        src/main.c
-        src/settings.c
-        src/log.c
-        src/s2_proto.c
-        src/s2_link.c
-        src/hd_rumble.c
-        src/mapping.c
-        src/procon.c
-        src/mcu_nfc.c
-        src/amiibo.c
-        src/usb_descriptors.c
-        src/usb_hid.c
-        src/webusb.c
-        src/status_led.c
-        src/bootsel.c
-        src/web/wifi_ap.c
-        src/web/dhcp_server.c
-        src/web/dns_server.c
-        src/web/http_server.c
-        src/web/web_api.c
+        ${CORE}/amiibo.c
+        ${CORE}/hd_rumble.c
+        ${CORE}/log.c
+        ${CORE}/mapping.c
+        ${CORE}/mcu_nfc.c
+        ${CORE}/procon.c
+        ${CORE}/s2_link.c
+        ${CORE}/s2_proto.c
+        ${CORE}/settings.c
+        ${CORE}/usb_hid.c
+        ${CORE}/usb_pro_desc.c
+        ${CORE}/web_api.c
+        ${CORE}/webusb.c
+        ${PICO_SRC}/main.c
+        ${PICO_SRC}/platform_pico.c
+        ${PICO_SRC}/s2_ble_btstack.c
+        ${PICO_SRC}/usb_descriptors.c
+        ${PICO_SRC}/webusb_desc.c
+        ${PICO_SRC}/status_led.c
+        ${PICO_SRC}/bootsel.c
+        ${PICO_SRC}/web/wifi_ap.c
+        ${PICO_SRC}/web/dhcp_server.c
+        ${PICO_SRC}/web/dns_server.c
+        ${PICO_SRC}/web/http_server.c
         ${WEB_UI_GEN}
 )
 
@@ -75,8 +81,9 @@ target_compile_definitions(switch2_pico PRIVATE
 )
 
 target_include_directories(switch2_pico PRIVATE
-        ${CMAKE_CURRENT_LIST_DIR}/src
-        ${CMAKE_CURRENT_LIST_DIR}/src/web
+        ${CORE}
+        ${PICO_SRC}
+        ${PICO_SRC}/web
 )
 
 target_compile_options(switch2_pico PRIVATE -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers)

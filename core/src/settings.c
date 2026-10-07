@@ -4,22 +4,15 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "hardware/flash.h"
-#include "pico/flash.h"
-#include "pico/time.h"
-#include "pico/unique_id.h"
-
 #include "log.h"
+#include "platform.h"
 
 settings_t g_settings;
 
-// One flash sector, well clear of the BTstack TLV bank at the very end of flash.
-#define SETTINGS_FLASH_OFFSET (PICO_FLASH_SIZE_BYTES - 16 * FLASH_SECTOR_SIZE)
-
-static_assert(sizeof(settings_t) <= FLASH_SECTOR_SIZE, "settings_t too large");
+_Static_assert(sizeof(settings_t) <= 1024, "settings_t too large");
 
 static bool s_dirty;
-static absolute_time_t s_save_deadline;
+static uint32_t s_save_deadline;
 
 static const char *const IN_NAMES[IN_COUNT] = {
     "A", "B", "X", "Y", "L", "R", "ZL", "ZR", "Minus", "Plus", "LStick", "RStick",
@@ -106,10 +99,10 @@ void settings_defaults(settings_t *s) {
     s->wifi_autostart = 1;
     s->wifi_channel = 6;
 
-    pico_unique_board_id_t id;
-    pico_get_unique_board_id(&id);
-    snprintf(s->wifi_ssid, sizeof s->wifi_ssid, "Switch2-Pico-%02X%02X",
-             id.id[PICO_UNIQUE_BOARD_ID_SIZE_BYTES - 2], id.id[PICO_UNIQUE_BOARD_ID_SIZE_BYTES - 1]);
+    uint8_t id[PLATFORM_UNIQUE_ID_LEN];
+    platform_unique_id(id);
+    snprintf(s->wifi_ssid, sizeof s->wifi_ssid, "Switch2-Pico-%02X%02X", id[PLATFORM_UNIQUE_ID_LEN - 2],
+             id[PLATFORM_UNIQUE_ID_LEN - 1]);
     snprintf(s->wifi_pass, sizeof s->wifi_pass, "switch2pico");
 
     memset(s->spi_user_cal, 0xFF, sizeof s->spi_user_cal);
@@ -152,10 +145,14 @@ void settings_sanitize(settings_t *s) {
     }
 }
 
+static settings_t s_stored;   // last image read from / written to storage
+
 void settings_init(void) {
-    const settings_t *stored = (const settings_t *)(XIP_BASE + SETTINGS_FLASH_OFFSET);
+    memset(&s_stored, 0, sizeof s_stored);
+    size_t got = platform_settings_read(&s_stored, sizeof s_stored);
+    const settings_t *stored = &s_stored;
     const uint8_t *raw = (const uint8_t *)stored;
-    if (stored->magic == SETTINGS_MAGIC && stored->version == SETTINGS_VERSION &&
+    if (got >= offsetof(settings_t, spi_user_cal) && got >= stored->size && stored->magic == SETTINGS_MAGIC && stored->version == SETTINGS_VERSION &&
         stored->size >= offsetof(settings_t, spi_user_cal) + SPI_USER_CAL_SIZE + 4 &&
         stored->size <= sizeof(settings_t) && stored_crc_ok(raw, stored->size)) {
         // Start from defaults so fields added since the save keep sane values.
@@ -172,39 +169,29 @@ void settings_init(void) {
     s_dirty = false;
 }
 
-static void flash_write_cb(void *param) {
-    const uint8_t *page_data = (const uint8_t *)param;
-    flash_range_erase(SETTINGS_FLASH_OFFSET, FLASH_SECTOR_SIZE);
-    flash_range_program(SETTINGS_FLASH_OFFSET, page_data,
-                        (sizeof(settings_t) + FLASH_PAGE_SIZE - 1) / FLASH_PAGE_SIZE * FLASH_PAGE_SIZE);
-}
-
 void settings_save_now(void) {
-    static uint8_t buf[(sizeof(settings_t) + FLASH_PAGE_SIZE - 1) / FLASH_PAGE_SIZE * FLASH_PAGE_SIZE];
     g_settings.magic = SETTINGS_MAGIC;
     g_settings.version = SETTINGS_VERSION;
     g_settings.size = sizeof g_settings;
     g_settings.crc = settings_crc(&g_settings);
 
-    const settings_t *stored = (const settings_t *)(XIP_BASE + SETTINGS_FLASH_OFFSET);
-    if (memcmp(stored, &g_settings, sizeof g_settings) == 0) {
+    if (memcmp(&s_stored, &g_settings, sizeof g_settings) == 0) {
         s_dirty = false;
         return;
     }
-    memset(buf, 0xFF, sizeof buf);
-    memcpy(buf, &g_settings, sizeof g_settings);
-    int rc = flash_safe_execute(flash_write_cb, buf, 500);
+    bool ok = platform_settings_write(&g_settings, sizeof g_settings);
+    if (ok) s_stored = g_settings;
     s_dirty = false;
-    LOG("settings: saved to flash (rc=%d)", rc);
+    LOG("settings: saved (%s)", ok ? "ok" : "FAILED");
 }
 
 void settings_save_later(void) {
     s_dirty = true;
-    s_save_deadline = make_timeout_time_ms(1500);
+    s_save_deadline = platform_deadline_ms(1500);
 }
 
 void settings_task(void) {
-    if (s_dirty && time_reached(s_save_deadline)) {
+    if (s_dirty && platform_time_reached(s_save_deadline)) {
         settings_save_now();
     }
 }

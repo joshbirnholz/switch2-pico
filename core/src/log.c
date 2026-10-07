@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "pico/time.h"
+#include "platform.h"
 
 #define LOG_BUF_SIZE 8192
 
@@ -27,7 +27,7 @@ static void log_put(const char *s, size_t n) {
 
 void log_printf(const char *fmt, ...) {
     char line[192];
-    uint32_t ms = to_ms_since_boot(get_absolute_time());
+    uint32_t ms = platform_millis();
     int n = snprintf(line, sizeof line, "[%7lu.%03lu] ", (unsigned long)(ms / 1000), (unsigned long)(ms % 1000));
     va_list ap;
     va_start(ap, fmt);
@@ -39,7 +39,7 @@ void log_printf(const char *fmt, ...) {
     line[len++] = '\n';
     line[len] = 0;
     log_put(line, len);
-    fputs(line, stdout);
+    platform_log_output(line);
 }
 
 void log_hex(const char *prefix, const uint8_t *data, size_t len) {

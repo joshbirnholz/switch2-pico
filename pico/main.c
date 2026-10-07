@@ -16,6 +16,7 @@
 #include "tusb.h"
 
 #include "app.h"
+#include "version.h"
 #include "bootsel.h"
 #include "log.h"
 #include "mapping.h"
@@ -48,6 +49,10 @@ void app_request_usb_reconnect(void) {
         s_usb_reconnect_at = make_timeout_time_ms(300);
         LOG("usb: re-enumerating");
     }
+}
+
+void app_wifi_stop(void) {
+    wifi_ap_stop_later();
 }
 
 void app_request_reboot(bool bootloader) {

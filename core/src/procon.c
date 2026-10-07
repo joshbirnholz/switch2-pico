@@ -2,9 +2,7 @@
 
 #include <string.h>
 
-#include "pico/time.h"
-#include "pico/unique_id.h"
-#include "tusb.h"
+#include "platform.h"
 
 #include "amiibo.h"
 #include "log.h"
@@ -36,8 +34,8 @@ static uint8_t s_colors[12] = {
 static procon_status_t s_status;
 static mcu_t s_mcu;
 static s1_rumble_state_t s_rumble_l, s_rumble_r;
-static absolute_time_t s_next_report;
-static absolute_time_t s_mount_time;
+static uint32_t s_next_report;
+static uint32_t s_mount_time;
 static bool s_was_mounted;
 
 typedef struct {
@@ -159,7 +157,7 @@ static void build_prefix(uint8_t *p) {
         memset(&in, 0, sizeof in);
         in.stick_l[0] = in.stick_l[1] = in.stick_r[0] = in.stick_r[1] = S1_STICK_CENTER;
     }
-    uint32_t ms = to_ms_since_boot(get_absolute_time());
+    uint32_t ms = platform_millis();
     p[0] = (uint8_t)(ms / 5);              // the timer ticks every 5 ms on real hardware
     p[1] = battery_byte();
     p[2] = (uint8_t)(in.buttons);
@@ -439,15 +437,15 @@ void procon_init(void) {
     build_stick_cal();
 
     // Stable per-board MAC in Nintendo's 7C:BB:8A OUI.
-    pico_unique_board_id_t id;
-    pico_get_unique_board_id(&id);
+    uint8_t id[PLATFORM_UNIQUE_ID_LEN];
+    platform_unique_id(id);
     s_mac[0] = 0x7C;
     s_mac[1] = 0xBB;
     s_mac[2] = 0x8A;
-    s_mac[3] = id.id[5];
-    s_mac[4] = id.id[6];
-    s_mac[5] = id.id[7];
-    s_next_report = get_absolute_time();
+    s_mac[3] = id[5];
+    s_mac[4] = id[6];
+    s_mac[5] = id[7];
+    s_next_report = platform_millis();
 }
 
 void procon_set_input(const procon_input_t *in, bool connected, uint16_t battery_mv, bool charging) {
@@ -475,7 +473,7 @@ static void on_mount_change(bool mounted) {
     s1_rumble_reset(&s_rumble_l);
     s1_rumble_reset(&s_rumble_r);
     if (mounted) {
-        s_mount_time = get_absolute_time();
+        s_mount_time = platform_millis();
         LOG("procon: USB mounted");
     } else {
         LOG("procon: USB unmounted");
@@ -492,7 +490,7 @@ void procon_task(void) {
 
     // Hosts without a Switch driver never select a report mode; after a short
     // grace period start streaming anyway, like a controller left alone.
-    if (!s_status.report_mode && absolute_time_diff_us(s_mount_time, get_absolute_time()) > 3000000) {
+    if (!s_status.report_mode && platform_millis() - s_mount_time > 3000) {
         s_status.report_mode = 0x30;
         LOG("procon: no host init seen, streaming 0x30 reports");
     }
@@ -509,8 +507,8 @@ void procon_task(void) {
     }
 
     if (!s_status.report_mode) return;
-    if (!time_reached(s_next_report)) return;
-    s_next_report = make_timeout_time_ms(g_settings.usb_report_interval_ms);
+    if (!platform_time_reached(s_next_report)) return;
+    s_next_report = platform_deadline_ms(g_settings.usb_report_interval_ms);
 
     static uint8_t rpt[NFC_REPORT_LEN];
     memset(rpt, 0, sizeof rpt);

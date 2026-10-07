@@ -1,11 +1,12 @@
-#ifndef S2P_HTTP_SERVER_H
-#define S2P_HTTP_SERVER_H
+#ifndef S2P_WEB_API_H
+#define S2P_WEB_API_H
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-// Minimal HTTP/1.0 server on lwIP's raw TCP API (one request per connection).
+// Request/response types shared by the HTTP server (Pico Wi-Fi) and the
+// WebUSB channel; both dispatch to web_api_handle().
 
 typedef struct {
     int status;                 // 200, 302, 404 ...
@@ -24,10 +25,6 @@ typedef struct {
     size_t body_len;
 } http_request_t;
 
-void http_server_start(void);
-void http_server_stop(void);
-
-// Implemented by web_api.c.
 void web_api_handle(const http_request_t *req, http_response_t *resp);
 
 #endif

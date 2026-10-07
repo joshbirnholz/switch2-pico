@@ -19,13 +19,14 @@
 
 #include "amiibo.h"
 #include "app.h"
-#include "http_server.h"
 #include "log.h"
 #include "mapping.h"
 #include "procon.h"
 #include "s2_link.h"
+#include "platform.h"
 #include "settings.h"
-#include "wifi_ap.h"
+#include "version.h"
+#include "web_api.h"
 
 extern const uint8_t web_ui_data[];
 extern const size_t web_ui_size;
@@ -106,6 +107,7 @@ static void api_status(http_response_t *r) {
 
     jb_printf(&j, "{\"version\":");
     jb_str(&j, S2P_VERSION);
+    jb_printf(&j, ",\"platform\":\"%s\",\"wifi\":%s", platform_name(), platform_has_wifi() ? "true" : "false");
     jb_printf(&j, ",\"link\":{\"state\":\"%s\"", s2_link_state_name(li.state));
     addr_str(a, li.addr);
     jb_printf(&j, ",\"addr\":\"%s\",\"pid\":%u,\"serial\":", a, li.pid);
@@ -351,7 +353,7 @@ static void api_action(const http_request_t *req, http_response_t *r) {
         settings_factory_reset();
         app_request_reboot(false);
     } else if (!strcmp(what, "wifi_off")) {
-        wifi_ap_stop_later();   // after this response has been sent
+        app_wifi_stop();   // deferred until this response has been sent
     } else return respond_text(r, 400, "unknown action");
     respond_text(r, 200, "ok");
 }
