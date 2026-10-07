@@ -361,6 +361,7 @@ static void handle_subcommand(uint8_t sub, const uint8_t *a, int alen) {
 // ---------------------------------------------------------------------------
 static void handle_usb_command(uint8_t cmd) {
     uint8_t d[10] = {0};
+    LOG("procon: host USB command 0x80 0x%02x", cmd);
     switch (cmd) {
     case 0x01:    // status: connection type + MAC (little-endian)
         d[0] = 0x01;
@@ -402,6 +403,14 @@ void usb_hid_on_output(const uint8_t *buf, uint16_t len, bool via_control, uint8
         id = buf[0];
         p = buf + 1;
         n = len - 1;
+    }
+
+    static uint32_t s_logged;
+    if (id != 0x80 && id != 0x10 && s_logged < 24) {
+        // The first few host reports, to see what the host driver does.
+        s_logged++;
+        LOG("procon: host report 0x%02x len %u%s sub 0x%02x", id, (unsigned)n, via_control ? " (control)" : "",
+            id == 0x01 && n >= 10 ? p[9] : 0);
     }
 
     switch (id) {

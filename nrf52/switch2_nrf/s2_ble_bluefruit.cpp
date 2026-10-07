@@ -157,9 +157,20 @@ static volatile uint16_t s_conn = BLE_CONN_HANDLE_INVALID;
 static volatile bool s_connecting;
 static bool s_ready;
 
+// Input reports arrive every few ms; only the newest one matters, so they
+// bypass the event queue (which they would otherwise flood).
+static uint8_t s_input_buf[EV_DATA_MAX];
+static uint16_t s_input_len;
+static volatile bool s_input_new;
+
 static void input_notify_cb(BLEClientCharacteristic *chr, uint8_t *data, uint16_t len) {
     (void)chr;
-    post_data(EV_INPUT, data, len);
+    if (len > EV_DATA_MAX) len = EV_DATA_MAX;
+    taskENTER_CRITICAL();
+    memcpy(s_input_buf, data, len);
+    s_input_len = len;
+    s_input_new = true;
+    taskEXIT_CRITICAL();
 }
 
 static void rsp_notify_cb(BLEClientCharacteristic *chr, uint8_t *data, uint16_t len) {
@@ -321,6 +332,16 @@ void s2t_init(void) {
     Bluefruit.setTxPower(8);
     Bluefruit.setName("Switch2-Pico");
 
+    // Use the chip's address as a *public* address. A paired controller only
+    // accepts reconnections from its host's address as a public address (the
+    // console's type); nRF chips default to a random static one, which the
+    // controller ignores ("connection failed to be established", 0x3e).
+    // The six bytes stay the same, so existing pairings still match.
+    ble_gap_addr_t addr = Bluefruit.getAddr();
+    addr.addr_id_peer = 0;
+    addr.addr_type = BLE_GAP_ADDR_TYPE_PUBLIC;
+    if (!Bluefruit.setAddr(&addr)) LOG("ble: could not switch to a public address");
+
     s_svc->begin();
     s_ch_input->setNotifyCallback(input_notify_cb, false);
     s_ch_input->begin(s_svc);
@@ -345,8 +366,21 @@ void s2t_init(void) {
     post_simple(EV_STACK_READY);
 }
 
+static void deliver_input(void) {
+    if (!s_input_new) return;
+    uint8_t buf[EV_DATA_MAX];
+    uint16_t len;
+    taskENTER_CRITICAL();
+    memcpy(buf, s_input_buf, s_input_len);
+    len = s_input_len;
+    s_input_new = false;
+    taskEXIT_CRITICAL();
+    if (s_conn != BLE_CONN_HANDLE_INVALID) s2c_on_input_report(buf, len);
+}
+
 void s2t_task(void) {
     ev_t e;
+    deliver_input();
     while (xQueueReceive(s_queue, &e, 0) == pdTRUE) {
         switch (e.type) {
         case EV_STACK_READY: s2c_on_stack_ready(); break;
@@ -368,7 +402,7 @@ void s2t_task(void) {
             else LOG("s2: command write rejected, ATT status 0x%04x", e.value);
             break;
         case EV_CMD_RSP: s2c_on_command_response(e.data, e.len); break;
-        case EV_INPUT: s2c_on_input_report(e.data, e.len); break;
+        case EV_INPUT: break;
         case EV_INPUT_ENABLED: s2c_on_input_enabled(e.ok); break;
         case EV_DISCONNECTED: s2c_on_disconnected((uint8_t)e.value); break;
         }

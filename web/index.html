@@ -292,7 +292,7 @@ async function poll(){
       ['Battery',L.battery_mv?(L.battery_mv/1000).toFixed(2)+' V':'—'],
       ['Report rate',ready?L.report_hz+' Hz ('+L.conn_interval_ms+' ms interval)':'—'],
       ['Gyro scale',['not detected','16.4','14.3'][L.gyro_range]||'—'],
-      ['Host',s.usb.mounted?`mode 0x${s.usb.report_mode.toString(16)}, IMU ${s.usb.imu?'on':'off'}, rumble frames ${s.usb.rumble_frames}`:'—'],
+      ['Host',s.usb.mounted?`handshake ${s.usb.handshake?'yes':'no'}, mode 0x${s.usb.report_mode.toString(16)}, IMU ${s.usb.imu?'on':'off'}, ${s.usb.subcommands} subcommands, ${s.usb.reports} reports sent, rumble frames ${s.usb.rumble_frames}`:'—'],
     ]);
     if(s.input){
       for(const n of IN){$('b-'+n).classList.toggle('on',!!(s.input.raw_buttons>>>S2BIT[n]&1))}
