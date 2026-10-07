@@ -158,14 +158,14 @@ that mode. Defaults:
 | B | Xbox 360 controller |
 | X | DualSense |
 | Y | Switch Pro Controller |
-| D-pad | nothing |
+| D-pad | – (empty) |
 
-**USB and system → Mode shortcut** assigns any mode, or nothing, to each face
-button and D-pad direction. Buttons set to nothing are ignored. Press C + Home
+**USB and system → Mode shortcut** assigns a mode, or – (empty), to each face
+button and D-pad direction. Empty buttons are ignored. Press C + Home
 again, or wait 5 seconds without pressing anything, to leave without a change.
 While choosing, the host sees no buttons pressed. While C is held, Home doesn't
 reach the host, so the hold doesn't open the host's home menu (setting every
-button to nothing turns the shortcut and this off, except on the Pico 2 W while
+button to – turns the shortcut and this off, except on the Pico 2 W while
 the Wi-Fi hotkey is on). The **Haptics test** section plays these effects, and
 the controller's built-in vibration samples.
 

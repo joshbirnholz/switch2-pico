@@ -86,7 +86,7 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
     <label class="check"><input type="checkbox" data-k="webusb">WebUSB configuration interface (turn off if a console misbehaves)</label>
   </div>
   <h3 style="margin:16px 0 4px;font-size:15px">Mode shortcut</h3>
-  <p class="note" style="margin-top:0">On the controller, hold <b>C + Home</b> until its lights blink, then press a button below to switch to that mode (the dongle restarts). C + Home again, or a few seconds without pressing anything, leaves without a change. Buttons set to <i>nothing</i> are ignored; with every button set to nothing the shortcut is off.</p>
+  <p class="note" style="margin-top:0">On the controller, hold <b>C + Home</b> until its lights blink, then press a button below to switch to that mode (the dongle restarts). C + Home again, or a few seconds without pressing anything, leaves without a change. Buttons set to – are ignored; with every button set to – the shortcut is off.</p>
   <div class="grid" id="slots"></div>
 </section>
 
@@ -309,7 +309,7 @@ const SLOTS=['A','B','X','Y','Up','Down','Left','Right'];
 function renderSlots(){
   const sel=document.querySelector('[data-k="usb_mode"]');
   const names=[...sel.options].map(o=>o.text.replace(/ \(.*\)$/,''));
-  const opts='<option value="0">nothing</option>'+names.map((n,i)=>`<option value="${i+1}">${n}</option>`).join('');
+  const opts='<option value="0">–</option>'+names.map((n,i)=>`<option value="${i+1}">${n}</option>`).join('');
   $('slots').innerHTML=SLOTS.map(n=>`<label>${n}<select data-slot="${n}">${opts}</select></label>`).join('');
   const v=S.mode_slots||{};
   SLOTS.forEach(n=>$('slots').querySelector(`[data-slot="${n}"]`).value=v[n]||0);
