@@ -56,6 +56,12 @@ static bool stored_crc_ok(const uint8_t *raw, uint16_t size) {
     return crc == crc32(raw, size - 4u);
 }
 
+static void default_ssid(char *out, size_t len) {
+    uint8_t id[PLATFORM_UNIQUE_ID_LEN];
+    platform_unique_id(id);
+    snprintf(out, len, "Switch2-Pico-%02X%02X", id[PLATFORM_UNIQUE_ID_LEN - 2], id[PLATFORM_UNIQUE_ID_LEN - 1]);
+}
+
 void settings_defaults(settings_t *s) {
     memset(s, 0, sizeof *s);
     s->magic = SETTINGS_MAGIC;
@@ -101,10 +107,7 @@ void settings_defaults(settings_t *s) {
     s->wifi_autostart = 1;
     s->wifi_channel = 6;
 
-    uint8_t id[PLATFORM_UNIQUE_ID_LEN];
-    platform_unique_id(id);
-    snprintf(s->wifi_ssid, sizeof s->wifi_ssid, "Switch2-Pico-%02X%02X", id[PLATFORM_UNIQUE_ID_LEN - 2],
-             id[PLATFORM_UNIQUE_ID_LEN - 1]);
+    default_ssid(s->wifi_ssid, sizeof s->wifi_ssid);
     snprintf(s->wifi_pass, sizeof s->wifi_pass, "switch2pico");
 
     memset(s->spi_user_cal, 0xFF, sizeof s->spi_user_cal);
@@ -141,11 +144,7 @@ void settings_sanitize(settings_t *s) {
     s->wifi_channel = clamp_u8(s->wifi_channel, 1, 11);
     s->wifi_ssid[sizeof s->wifi_ssid - 1] = 0;
     s->wifi_pass[sizeof s->wifi_pass - 1] = 0;
-    if (strlen(s->wifi_ssid) == 0) {
-        settings_t d;
-        settings_defaults(&d);
-        memcpy(s->wifi_ssid, d.wifi_ssid, sizeof s->wifi_ssid);
-    }
+    if (strlen(s->wifi_ssid) == 0) default_ssid(s->wifi_ssid, sizeof s->wifi_ssid);
     // WPA2 needs 8..63 characters; an empty password means an open network.
     size_t pl = strlen(s->wifi_pass);
     if (pl > 0 && pl < 8) {

@@ -119,16 +119,49 @@ void platform_watchdog_feed(void) {
     NRF_WDT->RR[0] = WDT_RR_RR_Reload;
 }
 
+// Reports any task whose stack comes close to running out (the core's
+// overflow hook only logs in debug builds and then carries on).
+void platform_stack_check(void) {
+    static uint32_t next;
+    static TaskStatus_t st[12];
+    static uint16_t low[12];   // lowest free words reported, per slot
+    if ((int32_t)(millis() - next) < 0) return;
+    next = millis() + 2000;
+    UBaseType_t n = uxTaskGetSystemState(st, 12, NULL);
+    for (UBaseType_t i = 0; i < n; i++) {
+        uint16_t free_words = (uint16_t)st[i].usStackHighWaterMark;
+        uint32_t id = st[i].xTaskNumber % 12;
+        if (free_words < 64 && (low[id] == 0 || free_words < low[id])) {
+            low[id] = free_words;
+            LOG("stack: task %s has only %u bytes of stack left", st[i].pcTaskName, (unsigned)free_words * 4);
+        }
+    }
+}
+
+// GPREGRET2 keeps its value through every reset except losing power (it is
+// cleared only by power-on / brown-out), and nothing else uses it (the
+// bootloader uses GPREGRET). Set while the firmware runs, it tells a real
+// power loss apart from a restart that leaves no reset reason (the firmware
+// jumping back to its start, e.g. after memory corruption).
+#define ALIVE_MARK 0xA5u
+
 void platform_log_reset_reason(void) {
+    // Called before the SoftDevice starts: the POWER registers are still ours.
     uint32_t r = NRF_POWER->RESETREAS;
     NRF_POWER->RESETREAS = r;   // write-1-to-clear, so the next boot sees fresh bits
+    bool was_alive = (NRF_POWER->GPREGRET2 & 0xFF) == ALIVE_MARK;
+    bool wdt_running = NRF_WDT->RUNSTATUS;   // a real reset stops it
+    NRF_POWER->GPREGRET2 = ALIVE_MARK;
     const char *why = r & POWER_RESETREAS_DOG_Msk      ? "watchdog (main loop stuck)"
                     : r & POWER_RESETREAS_LOCKUP_Msk   ? "CPU lockup"
                     : r & POWER_RESETREAS_SREQ_Msk     ? "software (reboot or crash)"
                     : r & POWER_RESETREAS_RESETPIN_Msk ? "reset button"
                     : r & POWER_RESETREAS_VBUS_Msk     ? "USB power"
-                    : r ? "other" : "power on";
-    LOG("boot: last reset: %s (RESETREAS 0x%08lx)", why, (unsigned long)r);
+                    : r ? "other"
+                    : was_alive ? "none: the firmware restarted itself without a reset (crash)"
+                                : "power on (power was off or dropped)";
+    LOG("boot: last reset: %s (RESETREAS 0x%08lx, retained 0x%02lx, watchdog %s)", why, (unsigned long)r,
+        (unsigned long)(was_alive ? ALIVE_MARK : 0), wdt_running ? "running" : "stopped");
     if ((r & POWER_RESETREAS_DOG_Msk) && g_s2p_hang.magic == HANG_MAGIC) {
         LOG("boot: stuck at pc=0x%08lx lr=0x%08lx", (unsigned long)g_s2p_hang.pc, (unsigned long)g_s2p_hang.lr);
     }

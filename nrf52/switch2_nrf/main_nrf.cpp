@@ -124,6 +124,7 @@ static void usb_setup(void) {
 extern "C" void platform_watchdog_start(void);
 extern "C" void platform_journal_init(void);
 extern "C" void platform_journal_task(void);
+extern "C" void platform_stack_check(void);
 extern "C" void platform_log_reset_reason(void);
 
 extern "C" void app_wifi_stop(void) {
@@ -155,6 +156,7 @@ void loop() {
     app_core_task();
     status_led_task();
     platform_journal_task();
+    platform_stack_check();
     // Let the USB and Bluetooth tasks run.
     yield();
 }
