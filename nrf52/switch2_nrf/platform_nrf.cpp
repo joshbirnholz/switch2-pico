@@ -60,6 +60,7 @@ bool platform_settings_write(const void *src, size_t len) {
 }
 
 void platform_reboot(bool bootloader) {
+    platform_log_flush();   // keep the log up to the restart
     if (bootloader) {
         enterUf2Dfu();   // Adafruit bootloader: mass storage UF2 mode
     }
@@ -134,12 +135,18 @@ void platform_log_reset_reason(void) {
     g_s2p_hang.magic = 0;
 }
 
+void platform_journal_append(const char *line, size_t len);
+void platform_journal_flush(void);
+
 void platform_log_output(const char *line) {
 #ifdef S2P_UART_LOG
     Serial1.print(line);
-#else
-    (void)line;
 #endif
+    platform_journal_append(line, strlen(line));
+}
+
+void platform_log_flush(void) {
+    platform_journal_flush();
 }
 
 }  // extern "C"

@@ -33,6 +33,12 @@ void platform_reboot(bool bootloader);
 // Diagnostic output (debug UART / serial), one line at a time.
 void platform_log_output(const char *line);
 
+// Log kept in flash across resets and power loss, where the board has one
+// (nRF52840; elsewhere these do nothing). Write out pending lines now; copy
+// the newest `cap` bytes saved before this boot.
+void platform_log_flush(void);
+size_t platform_saved_log(char *dst, size_t cap);
+
 // Firmware update over the configuration channel (WebUSB / HTTP), without
 // the UF2 drive. The page sends the raw application image (extracted from
 // the .uf2) in order; the board stages it in flash it doesn't use, checks it

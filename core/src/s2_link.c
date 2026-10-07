@@ -309,22 +309,23 @@ typedef struct {
 static const haptic_step_t HAP_TICK[] = {
     {22, 320.0f, 0.80f, 200.0f, 0.45f},
 };
-static const haptic_step_t HAP_BA_THUMP[] = {
-    {45, 300.0f, 0.35f, 150.0f, 1.00f},   // "ba"
-    {90, 0, 0, 0, 0},
-    {40, 280.0f, 0.20f, 130.0f, 0.65f},   // "thump", softer
-};
 static const haptic_step_t HAP_THUMP[] = {
     {75, 260.0f, 0.45f, 130.0f, 1.00f},
 };
+// Built-in vibration samples (s2_link_play_sample): 1 buzz, 2 buzz + two
+// beeps, 3 the "ba-thump" the controller plays when it connects, 4 the
+// pairing "ka-chink", 5 a heavier 3, 6 / 7 the two halves of 4.
+#define SAMPLE_BA_THUMP 3
+
 static const struct {
-    const haptic_step_t *steps;
+    const haptic_step_t *steps;   // NULL: play built-in `sample`
     uint8_t n;
+    uint8_t sample;
     const char *name;
 } HAPTICS[S2_HAPTIC_COUNT] = {
-    [S2_HAPTIC_TICK] = {HAP_TICK, 1, "tick"},
-    [S2_HAPTIC_BA_THUMP] = {HAP_BA_THUMP, 3, "ba_thump"},
-    [S2_HAPTIC_THUMP] = {HAP_THUMP, 1, "thump"},
+    [S2_HAPTIC_TICK] = {HAP_TICK, 1, 0, "tick"},
+    [S2_HAPTIC_BA_THUMP] = {NULL, 0, SAMPLE_BA_THUMP, "ba_thump"},
+    [S2_HAPTIC_THUMP] = {HAP_THUMP, 1, 0, "thump"},
 };
 
 #define HAPTIC_FRAME_MS  5    // each of the 3 frames in a rumble packet
@@ -340,6 +341,10 @@ const char *s2_link_haptic_name(s2_haptic_t effect) {
 
 void s2_link_haptic(s2_haptic_t effect) {
     if (s_state != S2_LINK_READY || effect >= S2_HAPTIC_COUNT) return;
+    if (!HAPTICS[effect].steps) {
+        s2_link_play_sample(HAPTICS[effect].sample);
+        return;
+    }
     if (s_map.is_gamecube || !s2t_has_char(S2T_CHAR_VIBRATION)) {
         s2_link_test_rumble();
         return;

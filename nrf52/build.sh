@@ -14,7 +14,10 @@ cd "$(dirname "$0")/.."
 FQBN="${1:-adafruit:nrf52:feather52840}"
 OUT=build-nrf
 
-arduino-cli compile -b "$FQBN" --warnings default --library core --output-dir "$OUT" nrf52/switch2_nrf
+# --wrap: the saved log (log_journal_nrf.cpp) takes the flash completion
+# events for its own writes before they reach InternalFS.
+arduino-cli compile -b "$FQBN" --warnings default --library core --output-dir "$OUT" \
+    --build-property "compiler.c.elf.extra_flags=-Wl,--wrap=flash_nrf5x_event_cb" nrf52/switch2_nrf
 
 # Find uf2conv.py in the installed core (arduino-cli data dir or sketchbook).
 UF2CONV=$(find "$(arduino-cli config get directories.data 2>/dev/null || echo "$HOME/.arduino15")" \

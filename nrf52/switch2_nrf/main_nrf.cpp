@@ -122,6 +122,8 @@ static void usb_setup(void) {
 }
 
 extern "C" void platform_watchdog_start(void);
+extern "C" void platform_journal_init(void);
+extern "C" void platform_journal_task(void);
 extern "C" void platform_log_reset_reason(void);
 
 extern "C" void app_wifi_stop(void) {
@@ -138,6 +140,7 @@ void setup() {
 #ifdef S2P_UART_LOG
     Serial1.begin(115200);
 #endif
+    platform_journal_init();
     log_init();
     LOG("switch2-pico %s starting on nRF52840", S2P_VERSION);
     platform_log_reset_reason();
@@ -151,6 +154,7 @@ void setup() {
 void loop() {
     app_core_task();
     status_led_task();
+    platform_journal_task();
     // Let the USB and Bluetooth tasks run.
     yield();
 }

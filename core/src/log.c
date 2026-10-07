@@ -17,6 +17,14 @@
 #define LOG_KEEP
 #endif
 
+// Boards without a saved log.
+__attribute__((weak)) void platform_log_flush(void) {}
+__attribute__((weak)) size_t platform_saved_log(char *dst, size_t cap) {
+    (void)dst;
+    (void)cap;
+    return 0;
+}
+
 LOG_KEEP static char s_buf[LOG_BUF_SIZE];
 LOG_KEEP static size_t s_head;      // next write position
 LOG_KEEP static uint32_t s_total;   // total bytes ever written

@@ -32,6 +32,9 @@
 #define FW_MAGIC      0x46575550UL               // "FWUP"
 #define UF2_FAMILY    0xADA52840UL
 
+// 0xE8000-0xEBFFF holds the saved log (log_journal_nrf.cpp).
+static_assert(FW_STAGE + FW_MAX <= 0xE8000UL, "update staging overlaps the saved log");
+
 struct fw_meta_t {
     uint32_t magic, size, crc, check;
 };

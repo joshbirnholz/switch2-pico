@@ -486,11 +486,20 @@ void web_api_handle(const http_request_t *req, http_response_t *r) {
     if (post && !strcmp(req->path, "/api/action")) return api_action(req, r);
     if (!strncmp(req->path, "/api/fw/", 8)) return api_fw(req, r, get, post);
     if (get && !strcmp(req->path, "/api/log")) {
-        char *buf = malloc(8192);
+        // Saved log from before this boot (boards that keep one), then this boot's.
+        static const char sep[] = "===== saved log from before this start is above =====\n";
+        const size_t saved_max = 6144, live_max = 8192;
+        char *buf = malloc(saved_max + sizeof sep + live_max);
         if (!buf) return respond_text(r, 500, "oom");
+        size_t n = platform_saved_log(buf, saved_max);
+        if (n) {
+            memcpy(buf + n, sep, sizeof sep - 1);
+            n += sizeof sep - 1;
+        }
+        n += log_copy(buf + n, live_max);
         r->status = 200;
         r->content_type = "text/plain; charset=utf-8";
-        r->body_len = log_copy(buf, 8192);
+        r->body_len = n;
         r->body = (const uint8_t *)buf;
         r->body_owned = true;
         return;

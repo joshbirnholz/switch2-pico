@@ -273,10 +273,16 @@ the Bluetooth error code. Please include it in bug reports.
 
 **The dongle stops responding** (LED frozen, the controller drops and the
 configuration page can't find it). If the firmware ever hangs, a watchdog
-restarts it after about 8 seconds. On nRF52840 boards the log from before the
-restart is usually kept: open the log after it comes back and look for
-`boot: last reset: watchdog` and the `stuck at pc=…` line just below the
-`----- reboot -----` marker.
+restarts it after about 8 seconds.
+
+**Saved log (nRF52840).** The log is also written to flash about once a
+second (and straight away when the controller disconnects), so it survives a
+restart, a crash and even unplugging the dongle. The configuration page's log
+shows the saved part first, then a `===== saved log from before this start is
+above =====` line, then the current start. `boot: last reset:` tells why the
+dongle last started: `power on` means it lost power (unplugged, or the USB
+port's power dropped), `watchdog` that the firmware hung, `software` a
+restart or crash.
 
 **The Wi-Fi network shows up but http://192.168.4.1 doesn't load.** Make sure
 your phone or computer stays on the `Switch2-Pico` network even though it has

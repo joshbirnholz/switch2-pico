@@ -185,7 +185,7 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
 
 <section class="card" data-collapsed-default>
   <h2>Haptics test</h2>
-  <p class="note" style="margin-top:0">Plays feedback on the connected controller. Left / right motor play the classic rumble the DualSense and Xbox modes use (strong left, weak right, each on its own side). The effects are the ones the shortcuts use; the built-in samples are stored in the controller (number 1 is the old remap buzz).</p>
+  <p class="note" style="margin-top:0">Plays feedback on the connected controller. Left / right motor play the classic rumble the DualSense and Xbox modes use (strong left, weak right, each on its own side). The effects are the ones the shortcuts use; the built-in samples (1–7) are stored in the controller: 1 buzz, 2 buzz and two beeps, 3 the "ba-thump" it plays when it connects (also used for mode select), 4 the pairing "ka-chink", 5 a heavier 3, 6 and 7 the two halves of 4.</p>
   <div class="row">
     <button onclick="act('rumble')">Test rumble</button>
     <button onclick="act('motors&l=255&r=0')">Left motor (strong)</button>
@@ -195,7 +195,7 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
     <button onclick="haptic('tick')">Remap (tick)</button>
   </div>
   <div class="row" style="margin-top:12px">
-    <label>Built-in sample <input type="number" id="sample-n" min="0" max="255" value="1" style="width:5em"></label>
+    <label>Built-in sample <input type="number" id="sample-n" min="1" max="7" value="1" style="width:5em"></label>
     <button onclick="playSample(0)">Play</button>
     <button onclick="playSample(-1)">◀ Previous</button>
     <button onclick="playSample(1)">Next ▶</button>
@@ -308,7 +308,7 @@ let S=null;
 const $=id=>document.getElementById(id);
 function toast(t){const e=$('toast');e.textContent=t;e.classList.add('show');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove('show'),1800)}
 async function haptic(e){try{const r=await api('/api/action?do=haptic&effect='+e,{method:'POST'});if(!r.ok)toast(r.text()||'Failed')}catch(x){toast('Failed')}}
-async function playSample(step){const el=$('sample-n');const n=Math.max(0,Math.min(255,(+el.value||0)+step));el.value=n;
+async function playSample(step){const el=$('sample-n');const n=Math.max(1,Math.min(7,(+el.value||1)+step));el.value=n;
   try{const r=await api('/api/action?do=sample&n='+n,{method:'POST'});toast(r.ok?'Sample '+n:(r.text()||'Failed'))}catch(x){toast('Failed')}}
 async function act(what){try{const r=await api('/api/action?do='+what,{method:'POST'});toast(r.ok?'Done':'Failed');setTimeout(loadSettings,700)}catch(e){toast('Failed')}}
 function buildStatic(){

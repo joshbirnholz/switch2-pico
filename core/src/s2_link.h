@@ -59,7 +59,8 @@ void s2_link_rumble_submit(const rumble_sample_t *left, int nl, const rumble_sam
 void s2_link_test_rumble(void);
 // Play classic two-motor rumble (see rumble_from_motors) for `ms`.
 void s2_link_test_motors(uint8_t left_strong, uint8_t right_weak, uint16_t ms);
-// Play one of the controller's built-in vibration samples (1 = low buzz).
+// Play one of the controller's built-in vibration samples (1..7; 1 = buzz,
+// 3 = the "ba-thump" it plays on connecting, 4 = the pairing "ka-chink").
 void s2_link_play_sample(uint8_t sample);
 
 // Short feedback effects, played on the HD rumble actuators over whatever the

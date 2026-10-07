@@ -75,6 +75,9 @@ void s2_link_hook_controller_seen(void) {
 }
 
 void s2_link_hook_connection_changed(bool connected) {
+    // Save the log around a lost connection right away (it may be followed
+    // by a reset or power loss).
+    if (!connected) platform_log_flush();
     if (g_settings.usb_detach_when_idle) {
         if (connected) tud_connect();
         else tud_disconnect();
