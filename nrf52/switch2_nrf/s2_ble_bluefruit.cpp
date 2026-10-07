@@ -20,6 +20,7 @@
 #include "log.h"
 #include "s2_proto.h"
 #include "s2_transport.h"
+#include "settings.h"
 
 // 7.5-15 ms connection interval (units of 1.25 ms).
 #define CONN_INTERVAL_MIN 6
@@ -329,7 +330,10 @@ void s2t_init(void) {
     Bluefruit.configCentralBandwidth(BANDWIDTH_MAX);
     Bluefruit.begin(0, 1);
     Bluefruit.autoConnLed(false);
-    Bluefruit.setTxPower(8);
+    // Applied to each new connection. Lower settings cut the radio's peak
+    // current, for boards on a weak USB supply.
+    static const int8_t TX_POWER[] = {8, 4, 0, -4};
+    Bluefruit.setTxPower(TX_POWER[g_settings.ble_tx_power < 4 ? g_settings.ble_tx_power : 0]);
     Bluefruit.setName("Switch2-Pico");
 
     // Use the chip's address as a *public* address. A paired controller only

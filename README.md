@@ -284,6 +284,16 @@ dongle last started: `power on` means it lost power (unplugged, or the USB
 port's power dropped), `watchdog` that the firmware hung, `software` a
 restart or crash.
 
+**The dongle restarts by itself (nRF52840) and the log says `power on (power
+was off or dropped)`.** The board really lost power for a moment: the USB
+port, hub or cable couldn't keep up, or the board's regulator browned out.
+**Controller → Dongle power** shows the USB and chip supply (with the lowest
+seen since start), and the log records new lows (`power: … dropped to …`).
+Try another port directly on the computer (not a hub) or another cable, and
+don't charge the controller from the same hub. **USB and system → Bluetooth
+transmit power** lowers the dongle's peak current; 0 dBm still reaches
+across a room.
+
 **The Wi-Fi network shows up but http://192.168.4.1 doesn't load.** Make sure
 your phone or computer stays on the `Switch2-Pico` network even though it has
 no internet (phones may switch back to mobile data; turn mobile data off

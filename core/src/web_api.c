@@ -105,6 +105,11 @@ static void api_status(http_response_t *r) {
     jb_str(&j, S2P_VERSION);
     jb_printf(&j, ",\"platform\":\"%s\",\"wifi\":%s,\"usb_mode\":\"%s\"", platform_name(),
               platform_has_wifi() ? "true" : "false", usb_mode_name(usb_mode_active()));
+    platform_supply_t sup;
+    if (platform_supply(&sup)) {
+        jb_printf(&j, ",\"supply\":{\"vdd\":%u,\"vbus\":%u,\"vdd_min\":%u,\"vbus_min\":%u}", sup.vdd, sup.vbus,
+                  sup.vdd_min, sup.vbus_min);
+    }
     jb_printf(&j, ",\"link\":{\"state\":\"%s\"", s2_link_state_name(li.state));
     addr_str(a, li.addr);
     jb_printf(&j, ",\"addr\":\"%s\",\"pid\":%u,\"serial\":", a, li.pid);
@@ -214,7 +219,7 @@ static void api_settings_get(http_response_t *r) {
               s->led_follow_host, !s->quick_remap_off, s->usb_mode, s->usb_detach_when_idle, s->usb_remote_wakeup, s->webusb_enabled, s->hotkey_enabled,
               s->wifi_autostart, s->wifi_channel);
     jb_str(&j, s->wifi_ssid);
-    jb_printf(&j, ",\"wifi_has_pass\":%s}", s->wifi_pass[0] ? "true" : "false");
+    jb_printf(&j, ",\"wifi_has_pass\":%s,\"ble_tx_power\":%u}", s->wifi_pass[0] ? "true" : "false", s->ble_tx_power);
     respond_json(r, &j);
 }
 
@@ -307,6 +312,7 @@ static bool apply_kv(settings_t *s, const char *k, const char *v, bool *usb_reco
         {"webusb", &s->webusb_enabled, 1, true},
         {"usb_mode", &s->usb_mode, 1, false},
         {"hotkey", &s->hotkey_enabled, 1, false},
+        {"ble_tx_power", &s->ble_tx_power, 1, false},
         {"wifi_autostart", &s->wifi_autostart, 1, false},
         {"wifi_channel", &s->wifi_channel, 1, false},
     };

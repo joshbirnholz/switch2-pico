@@ -37,6 +37,14 @@ void platform_log_output(const char *line);
 // (nRF52840; elsewhere these do nothing). Write out pending lines now; copy
 // the newest `cap` bytes saved before this boot.
 void platform_log_flush(void);
+
+// Supply voltages in mV, where the board can measure them (nRF52840): the
+// chip's own supply (VDD, ~3.3 V) and the USB input (VBUS, ~5 V), now and
+// the lowest since start. False elsewhere.
+typedef struct {
+    uint16_t vdd, vbus, vdd_min, vbus_min;
+} platform_supply_t;
+bool platform_supply(platform_supply_t *out);
 size_t platform_saved_log(char *dst, size_t cap);
 
 // Firmware update over the configuration channel (WebUSB / HTTP), without

@@ -107,6 +107,8 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
     <label>Current mode
       <select data-k="usb_mode"><option value="0">Switch Pro Controller</option><option value="1">DualSense Edge</option><option value="2">DualSense</option><option value="3">Xbox 360 controller</option></select></label>
     <label>Report interval (ms)<input type="number" min="4" max="16" data-k="usb_interval"></label>
+    <label>Bluetooth transmit power (nRF52840; from the next connection)
+      <select data-k="ble_tx_power"><option value="0">+8 dBm (maximum)</option><option value="1">+4 dBm</option><option value="2">0 dBm</option><option value="3">−4 dBm (lowest current)</option></select></label>
     <label class="check"><input type="checkbox" data-k="led_follow_host">Player LEDs follow the host</label>
     <label class="check"><input type="checkbox" data-k="usb_detach">Only appear on USB while a controller is connected</label>
     <label class="check"><input type="checkbox" data-k="usb_wakeup">Wake a sleeping PC from the controller</label>
@@ -444,6 +446,7 @@ async function poll(){
       ['Battery',L.battery_mv?(L.battery_mv/1000).toFixed(2)+' V':'—'],
       ['Report rate',ready?L.report_hz+' Hz ('+L.conn_interval_ms+' ms interval)':'—'],
       ['Gyro scale',['not detected','16.4','14.3'][L.gyro_range]||'—'],
+      ['Dongle power',s.supply?`USB ${(s.supply.vbus/1000).toFixed(2)} V (lowest ${(s.supply.vbus_min/1000).toFixed(2)}), chip ${(s.supply.vdd/1000).toFixed(2)} V (lowest ${(s.supply.vdd_min/1000).toFixed(2)})`:'—'],
       ['USB mode',{switch_pro:'Switch Pro Controller',dualsense_edge:'DualSense Edge',dualsense:'DualSense',xbox360:'Xbox 360 controller'}[s.usb_mode]||s.usb_mode],
       ['Host',s.usb.mounted?`handshake ${s.usb.handshake?'yes':'no'}, mode 0x${s.usb.report_mode.toString(16)}, IMU ${s.usb.imu?'on':'off'}, ${s.usb.subcommands} subcommands, ${s.usb.reports} reports sent, rumble frames ${s.usb.rumble_frames}`:'—'],
     ]);

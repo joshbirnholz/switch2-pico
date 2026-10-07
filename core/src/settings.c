@@ -126,6 +126,7 @@ void settings_sanitize(settings_t *s) {
         if (s->button_map[i] >= OUT_COUNT) s->button_map[i] = OUT_NONE;
     }
     if (s->usb_mode >= USB_MODE_COUNT) s->usb_mode = USB_MODE_SWITCH_PRO;
+    if (s->ble_tx_power > 3) s->ble_tx_power = 0;
     for (int m = 0; m < MODE_MAP_SLOTS; m++)
         for (int i = 0; i < IN_COUNT; i++)
             if (s->mode_map[m][i] >= GP_COUNT) s->mode_map[m][i] = GP_NONE;
@@ -174,6 +175,7 @@ void settings_init(void) {
             for (int m = 0; m < MODE_MAP_SLOTS; m++) settings_default_mode_map((usb_mode_t)m, g_settings.mode_map[m]);
         }
         if (rev < 2) settings_default_mode_slots(g_settings.mode_slot);
+        if (rev < 3) g_settings.ble_tx_power = 0;
         g_settings.ext_rev = SETTINGS_EXT_REV;
         settings_sanitize(&g_settings);
         LOG("settings: loaded from flash (bonded=%d%s)", g_settings.bonded,

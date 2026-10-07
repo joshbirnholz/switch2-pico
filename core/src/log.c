@@ -17,6 +17,12 @@
 #define LOG_KEEP
 #endif
 
+// Boards without supply measurement.
+__attribute__((weak)) bool platform_supply(platform_supply_t *out) {
+    (void)out;
+    return false;
+}
+
 // Boards without a saved log.
 __attribute__((weak)) void platform_log_flush(void) {}
 __attribute__((weak)) size_t platform_saved_log(char *dst, size_t cap) {

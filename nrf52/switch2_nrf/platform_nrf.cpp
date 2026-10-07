@@ -119,12 +119,43 @@ void platform_watchdog_feed(void) {
     NRF_WDT->RR[0] = WDT_RR_RR_Reload;
 }
 
+// Supply voltages, sampled every 250 ms with the SAADC (10-bit, 0.6 V
+// reference, gain 1/6: full scale 3.6 V; VBUS through the internal /5
+// divider). A new low below 3.0 V (VDD) or 4.5 V (VBUS) is logged, so a
+// supply that sags before a power loss shows in the saved log.
+static platform_supply_t s_sup;
+
+static void supply_task(void) {
+    static uint32_t next;
+    if ((int32_t)(millis() - next) < 0) return;
+    next = millis() + 250;
+    uint16_t vdd = (uint16_t)(analogReadVDD() * 3600UL / 1023);
+    uint16_t vbus = (uint16_t)(analogReadVDDHDIV5() * 3600UL * 5 / 1023);
+    s_sup.vdd = vdd;
+    s_sup.vbus = vbus;
+    if (!s_sup.vdd_min || vdd < s_sup.vdd_min) {
+        if (s_sup.vdd_min && vdd < 3000 && s_sup.vdd_min - vdd >= 50) LOG("power: chip supply dropped to %u mV", vdd);
+        s_sup.vdd_min = vdd;
+    }
+    if (!s_sup.vbus_min || vbus < s_sup.vbus_min) {
+        if (s_sup.vbus_min && vbus < 4500 && s_sup.vbus_min - vbus >= 100) LOG("power: USB supply dropped to %u mV", vbus);
+        s_sup.vbus_min = vbus;
+    }
+}
+
+bool platform_supply(platform_supply_t *out) {
+    if (!s_sup.vdd) return false;
+    *out = s_sup;
+    return true;
+}
+
 // Reports any task whose stack comes close to running out (the core's
 // overflow hook only logs in debug builds and then carries on).
 void platform_stack_check(void) {
     static uint32_t next;
     static TaskStatus_t st[12];
     static uint16_t low[12];   // lowest free words reported, per slot
+    supply_task();
     if ((int32_t)(millis() - next) < 0) return;
     next = millis() + 2000;
     UBaseType_t n = uxTaskGetSystemState(st, 12, NULL);
@@ -162,6 +193,8 @@ void platform_log_reset_reason(void) {
                                 : "power on (power was off or dropped)";
     LOG("boot: last reset: %s (RESETREAS 0x%08lx, retained 0x%02lx, watchdog %s)", why, (unsigned long)r,
         (unsigned long)(was_alive ? ALIVE_MARK : 0), wdt_running ? "running" : "stopped");
+    LOG("boot: supply %lu mV, USB %lu mV", (unsigned long)(analogReadVDD() * 3600UL / 1023),
+        (unsigned long)(analogReadVDDHDIV5() * 3600UL * 5 / 1023));
     if ((r & POWER_RESETREAS_DOG_Msk) && g_s2p_hang.magic == HANG_MAGIC) {
         LOG("boot: stuck at pc=0x%08lx lr=0x%08lx", (unsigned long)g_s2p_hang.pc, (unsigned long)g_s2p_hang.lr);
     }
