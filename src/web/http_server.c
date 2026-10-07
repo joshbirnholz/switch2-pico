@@ -198,7 +198,9 @@ static err_t on_poll(void *arg, struct tcp_pcb *pcb) {
         tcp_abort(pcb);
         return ERR_ABRT;
     }
-    // Idle for too long (~10 s): give up on this connection.
+    // Called every ~10 s. Keep connections that are still sending a response;
+    // drop ones that never sent a complete request.
+    if (c->responded && c->body_sent > 0) return ERR_OK;
     tcp_abort(pcb);
     c->pcb = NULL;
     conn_free(c);

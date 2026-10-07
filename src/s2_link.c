@@ -28,7 +28,8 @@
 
 // Connection parameters: 7.5 ms interval (the BLE minimum), no latency,
 // 2 s supervision timeout.
-#define CONN_INTERVAL           6
+#define CONN_INTERVAL_MIN       6      // 7.5 ms
+#define CONN_INTERVAL_MAX       12     // 15 ms
 #define CONN_SUPERVISION        200
 
 // ---------------------------------------------------------------------------
@@ -226,8 +227,25 @@ __attribute__((weak)) void s2_link_hook_controller_seen(void) {}
 __attribute__((weak)) void s2_link_hook_connection_changed(bool connected) { (void)connected; }
 __attribute__((weak)) void s2_link_hook_controller_colors(const uint8_t rgb[12]) { (void)rgb; }
 
+static bool s_low_duty_scan;
+static uint8_t s_fail_stage;          // see s2_link_last_failure()
+static uint8_t s_fail_reason;
+static absolute_time_t s_fail_time;
+
+static void record_failure(uint8_t stage, uint8_t reason) {
+    s_fail_stage = stage;
+    s_fail_reason = reason;
+    s_fail_time = get_absolute_time();
+    LOG("s2: connection attempt failed at stage %u (reason 0x%02x)", stage, reason);
+}
+
 static void start_scanning(void) {
-    gap_set_scan_parameters(0, 0x0030, 0x0030);   // passive, 30 ms window every 30 ms
+    // Passive scan. The CYW43 shares its radio between Bluetooth and Wi-Fi, so
+    // scan at 50% duty normally and much less while the configuration access
+    // point is up, otherwise Wi-Fi clients get almost no airtime.
+    gap_stop_scan();
+    if (s_low_duty_scan) gap_set_scan_parameters(0, 0x0200, 0x0030);
+    else gap_set_scan_parameters(0, 0x0060, 0x0030);
     gap_start_scan();
     set_state(S2_LINK_SCANNING);
 }
@@ -962,10 +980,8 @@ static void gatt_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet,
             }
             LOG("s2: handles input=%04x cmd=%04x rsp=%04x vib=%04x", s_ch_input.value_handle, s_ch_cmd.value_handle,
                 s_ch_cmd_rsp.value_handle, s_have_vib ? s_ch_vib.value_handle : 0);
-            phase(GP_DESCRIPTORS);
-            gatt_client_discover_characteristic_descriptors(gatt_handler, s_con, &s_ch_input);
-            break;
-        case GP_DESCRIPTORS:
+            // (The console also writes 0x85 0x00 to an undocumented "report rate"
+            // descriptor; the working Linux implementation doesn't, so neither do we.)
             phase(GP_CMD_CCCD);
             gatt_client_listen_for_characteristic_value_updates(&s_notif_cmd, gatt_handler, s_con, &s_ch_cmd_rsp);
             gatt_client_write_client_characteristic_configuration(gatt_handler, s_con, &s_ch_cmd_rsp,
@@ -1089,7 +1105,7 @@ static void on_advertisement(const uint8_t *packet) {
     s_peer_type = type;
     s_peer_pid = adv.pid;
     s_map.is_gamecube = adv.pid == S2_PID_GAMECUBE;
-    gap_set_connection_parameters(0x0030, 0x0030, CONN_INTERVAL, CONN_INTERVAL, 0, CONN_SUPERVISION, 0, 0);
+    gap_set_connection_parameters(0x0030, 0x0030, CONN_INTERVAL_MIN, CONN_INTERVAL_MAX, 0, CONN_SUPERVISION, 0, 0);
     LOG("s2: connecting to %s (type %d, pid %04x, pairing=%d)", bd_addr_to_str(addr), type, adv.pid,
         s_need_pairing);
     if (gap_connect(addr, type) != ERROR_CODE_SUCCESS) {
@@ -1104,6 +1120,7 @@ static void on_connected(hci_con_handle_t con, uint8_t status, uint16_t interval
     if (s_state != S2_LINK_CONNECTING) return;
     if (status != ERROR_CODE_SUCCESS) {
         LOG("s2: connection failed (0x%02x)", status);
+        record_failure(1, status);
         start_scanning();
         return;
     }
@@ -1152,7 +1169,10 @@ static void hci_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, 
         break;
     case HCI_EVENT_DISCONNECTION_COMPLETE:
         if (hci_event_disconnection_complete_get_connection_handle(packet) == s_con) {
-            LOG("s2: disconnected (reason 0x%02x)", hci_event_disconnection_complete_get_reason(packet));
+            uint8_t reason = hci_event_disconnection_complete_get_reason(packet);
+            LOG("s2: disconnected (reason 0x%02x)", reason);
+            if (s_state == S2_LINK_DISCOVERING) record_failure(2, reason);
+            else if (s_state == S2_LINK_INITIALISING) record_failure(s_init_step <= ST_PAIR_FINALIZE ? 3 : 4, reason);
             reset_session();
             amiibo_clear();
             s_led_sent = 0xFF;
@@ -1167,6 +1187,27 @@ static void hci_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, 
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
+static void smp_ignore_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size) {
+    (void)channel;
+    if (packet_type == SM_DATA_PACKET && size > 0) {
+        LOG("s2: ignoring SMP PDU 0x%02x from controller", packet[0]);
+    }
+}
+
+void s2_link_set_low_duty_scan(bool low) {
+    if (low == s_low_duty_scan) return;
+    s_low_duty_scan = low;
+    if (s_state == S2_LINK_SCANNING) start_scanning();
+}
+
+bool s2_link_last_failure(uint8_t *stage, uint8_t *reason, uint32_t *age_ms) {
+    if (!s_fail_stage) return false;
+    *stage = s_fail_stage;
+    *reason = s_fail_reason;
+    *age_ms = (uint32_t)(absolute_time_diff_us(s_fail_time, get_absolute_time()) / 1000);
+    return true;
+}
+
 void s2_link_init(void) {
     memset(&s_info, 0, sizeof s_info);
     reset_session();
@@ -1174,6 +1215,12 @@ void s2_link_init(void) {
     sm_init();
     sm_set_io_capabilities(IO_CAPABILITY_NO_INPUT_NO_OUTPUT);
     sm_set_authentication_requirements(0);
+    // Switch 2 controllers drop the link (and power off) when standard SMP
+    // pairing is attempted. BTstack's central role would answer a Security
+    // Request from the peripheral by starting SMP pairing, so we take over the
+    // SMP channel and silently ignore everything on it. Nintendo's own pairing
+    // runs over the command characteristic instead.
+    l2cap_register_fixed_channel(smp_ignore_handler, L2CAP_CID_SECURITY_MANAGER_PROTOCOL);
     gatt_client_init();
     // Switch 2 controllers terminate the link if SMP pairing is attempted;
     // never ask for a security level that would trigger it.
@@ -1188,6 +1235,7 @@ void s2_link_task(void) {
     // Connection / discovery watchdogs.
     if (s_state == S2_LINK_CONNECTING && time_reached(s_phase_deadline)) {
         LOG("s2: connect timed out");
+        record_failure(1, 0xFF);
         gap_connect_cancel();
         start_scanning();
     }

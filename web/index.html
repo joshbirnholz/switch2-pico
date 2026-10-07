@@ -47,7 +47,14 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
   <span id="st-link" class="pill">…</span>
   <span id="st-usb" class="pill">USB …</span>
   <span id="st-ver" class="note"></span>
+  <button id="usb-connect" class="primary" style="display:none" onclick="usbConnect()">Connect over USB</button>
 </header>
+<div id="usb-help" class="card" style="display:none;max-width:948px;margin:0 auto 16px">
+  <b>Connect to your dongle over USB.</b> Plug in the Switch2-Pico, click <i>Connect over USB</i> and choose
+  "Pro Controller". Needs Chrome, Edge or another Chromium browser.
+  <span class="note">Linux: install the udev rule from the README first. If WebUSB is turned off on the dongle, use the
+  Wi-Fi page instead (tap BOOTSEL, join Switch2-Pico-XXXX, open http://192.168.4.1).</span>
+</div>
 <main>
 
 <section class="card">
@@ -129,7 +136,7 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
   <div class="row" style="margin-top:12px">
     <button onclick="act('nfc_on')">Start scanning</button>
     <button onclick="act('nfc_off')">Stop scanning</button>
-    <a href="/api/amiibo.bin" download="amiibo.bin"><button>Download last tag (.bin)</button></a>
+    <button onclick="download('/api/amiibo.bin','amiibo.bin')">Download last tag (.bin)</button>
   </div>
   <p class="note">Tap an amiibo on the controller's NFC spot (bottom of the right grip area / Home button). Games read it through the emulated Pro Controller; the dump can also be loaded into emulators.</p>
 </section>
@@ -141,7 +148,8 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
     <label class="check"><input type="checkbox" data-k="led_follow_host">Player LEDs follow the host</label>
     <label class="check"><input type="checkbox" data-k="usb_detach">Only appear on USB while a controller is connected</label>
     <label class="check"><input type="checkbox" data-k="usb_wakeup">Wake a sleeping PC from the controller</label>
-    <label class="check"><input type="checkbox" data-k="hotkey">Hold C + Home 3 s to toggle this page</label>
+    <label class="check"><input type="checkbox" data-k="hotkey">Hold C + Home 3 s to toggle the config Wi-Fi</label>
+    <label class="check"><input type="checkbox" data-k="webusb">WebUSB configuration interface (turn off if a console misbehaves)</label>
   </div>
 </section>
 
@@ -169,18 +177,77 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
 
 <section class="card">
   <h2>Log</h2>
-  <div class="row"><button onclick="loadLog()">Refresh</button><a href="/api/log" download="switch2-pico.log"><button>Download</button></a></div>
+  <div class="row"><button onclick="loadLog()">Refresh</button><button onclick="download('/api/log','switch2-pico.log')">Download</button></div>
   <pre id="log" class="mono"></pre>
 </section>
 </main>
 <div id="toast"></div>
 <script>
+// ---------------------------------------------------------------------------
+// Transport: HTTP when served by the dongle's Wi-Fi, WebUSB everywhere else.
+// Both carry the same requests (see src/webusb.h for the USB framing).
+// ---------------------------------------------------------------------------
+const USE_HTTP = location.protocol === 'http:' && !['localhost','127.0.0.1'].includes(location.hostname);
+let usbDev = null, usbBusy = Promise.resolve();
+const te = new TextEncoder(), td = new TextDecoder();
+
+async function usbOpen(dev){
+  await dev.open();
+  if (dev.configuration === null) await dev.selectConfiguration(1);
+  await dev.claimInterface(1);
+  usbDev = dev;
+  $('usb-connect').style.display='none'; $('usb-help').style.display='none';
+  loadSettings(); loadLog();
+}
+async function usbConnect(){
+  try{
+    const dev = await navigator.usb.requestDevice({filters:[{vendorId:0x057e, productId:0x2009}]});
+    await usbOpen(dev);
+  }catch(e){toast('USB: '+e.message)}
+}
+async function usbExchange(method, path, body){
+  const payload = te.encode(method+' '+path+'\n'+(body||''));
+  const msg = new Uint8Array(8+payload.length);
+  msg.set(te.encode('S2PQ'),0); new DataView(msg.buffer).setUint32(4,payload.length,true); msg.set(payload,8);
+  await usbDev.transferOut(2, msg);
+  let buf = new Uint8Array(0), need = 12, status = 0;
+  while (buf.length < need){
+    const r = await usbDev.transferIn(2, 4096);
+    const chunk = new Uint8Array(r.data.buffer, r.data.byteOffset, r.data.byteLength);
+    const nb = new Uint8Array(buf.length+chunk.length); nb.set(buf); nb.set(chunk,buf.length); buf = nb;
+    if (buf.length >= 12 && need === 12){
+      if (td.decode(buf.slice(0,4)) !== 'S2PR') throw new Error('bad response');
+      const dv = new DataView(buf.buffer); status = dv.getUint16(4,true); need = 12 + dv.getUint32(8,true);
+    }
+  }
+  return {ok: status>=200 && status<300, status, bytes: buf.slice(12, need)};
+}
+// fetch()-like helper returning {ok, status, text(), json(), bytes}
+async function api(path, opts){
+  opts = opts || {}; const method = opts.method || 'GET';
+  if (USE_HTTP){
+    const r = await fetch(path, {method, body: opts.body, headers: opts.body ? {'Content-Type':'application/x-www-form-urlencoded'} : undefined});
+    const bytes = new Uint8Array(await r.arrayBuffer());
+    return {ok:r.ok, status:r.status, bytes, text:()=>td.decode(bytes), json:()=>JSON.parse(td.decode(bytes))};
+  }
+  if (!usbDev) throw new Error('not connected');
+  const p = usbBusy.then(()=>usbExchange(method, path, opts.body ? String(opts.body) : ''));
+  usbBusy = p.catch(()=>{});
+  const r = await p;
+  return {...r, text:()=>td.decode(r.bytes), json:()=>JSON.parse(td.decode(r.bytes))};
+}
+async function download(path, name){
+  try{
+    const r = await api(path); if(!r.ok){toast(r.text()||'Not available');return}
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([r.bytes])); a.download = name; a.click();
+  }catch(e){toast('Failed')}
+}
 const IN=["A","B","X","Y","L","R","ZL","ZR","Minus","Plus","LStick","RStick","Home","Capture","Up","Down","Left","Right","GL","GR","C"];
 const S2BIT={A:3,B:2,X:1,Y:0,L:22,R:6,ZL:23,ZR:7,Minus:8,Plus:9,LStick:11,RStick:10,Home:12,Capture:13,Up:17,Down:16,Left:19,Right:18,GL:25,GR:24,C:14};
 let S=null;
 const $=id=>document.getElementById(id);
 function toast(t){const e=$('toast');e.textContent=t;e.classList.add('show');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove('show'),1800)}
-async function act(what){try{const r=await fetch('/api/action?do='+what,{method:'POST'});toast(r.ok?'Done':'Failed');setTimeout(loadSettings,700)}catch(e){toast('Failed')}}
+async function act(what){try{const r=await api('/api/action?do='+what,{method:'POST'});toast(r.ok?'Done':'Failed');setTimeout(loadSettings,700)}catch(e){toast('Failed')}}
 function buildStatic(){
   $('live-btns').innerHTML=IN.map(n=>`<span class="btn" id="b-${n}">${n}</span>`).join('');
 }
@@ -196,14 +263,14 @@ function render(){
   });
   $('bias').textContent='bias: '+S.gyro_bias.join(', ');
 }
-async function loadSettings(){S=await (await fetch('/api/settings')).json();render()}
+async function loadSettings(){S=(await api('/api/settings')).json();render()}
 async function save(){
   const p=new URLSearchParams();
   document.querySelectorAll('[data-map]').forEach(el=>p.append('map_'+el.dataset.map,el.value));
   document.querySelectorAll('[data-k]').forEach(el=>p.append(el.dataset.k,el.type==='checkbox'?(el.checked?1:0):el.value));
   const pw=$('wifi_pass').value;if(pw)p.append('wifi_pass',pw);
-  const r=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p});
-  if(r.ok){S=await r.json();render();toast('Saved')}else toast('Save failed');
+  const r=await api('/api/settings',{method:'POST',body:p.toString()});
+  if(r.ok){S=r.json();render();toast('Saved')}else toast('Save failed');
 }
 function presetIdentity(){IN.forEach((n,i)=>{const el=document.querySelector(`[data-map="${n}"]`);el.value=i<18?i+1:(n==='GL'?11:n==='GR'?12:0)})}
 function presetSwapFace(){const sw={A:'B',B:'A',X:'Y',Y:'X'};for(const n in sw){document.querySelector(`[data-map="${n}"]`).value=S.outputs.indexOf(sw[n])}}
@@ -212,7 +279,8 @@ function stick(el,x,y){const i=el.querySelector('i');i.style.left=(42+(x-2048)/2
 const PIDS={8297:'Pro Controller 2',8307:'NSO GameCube Controller'};
 async function poll(){
   try{
-    const s=await (await fetch('/api/status')).json();
+    if(!USE_HTTP && !usbDev) return;
+    const s=(await api('/api/status')).json();
     $('st-ver').textContent='v'+s.version;
     const L=s.link,ready=L.state==='ready';
     const sl=$('st-link');sl.textContent=ready?'Controller connected':L.state==='scanning'?(s.bond.bonded?'Waiting for controller':'Waiting for pairing'):L.state;
@@ -236,8 +304,17 @@ async function poll(){
     if(S&&L.gyro_cal_busy===false)$('bias').textContent='bias: '+S.gyro_bias.join(', ');
   }catch(e){$('st-link').textContent='offline';$('st-link').className='pill'}
 }
-async function loadLog(){const t=await (await fetch('/api/log')).text();const e=$('log');e.textContent=t;e.scrollTop=e.scrollHeight}
-buildStatic();loadSettings();loadLog();poll();setInterval(poll,250);
+async function loadLog(){if(!USE_HTTP&&!usbDev)return;const t=(await api('/api/log')).text();const e=$('log');e.textContent=t;e.scrollTop=e.scrollHeight}
+buildStatic();
+if (USE_HTTP){loadSettings();loadLog();}
+else if (!navigator.usb){$('usb-help').style.display='';$('usb-help').innerHTML='<b>This browser has no WebUSB.</b> Use Chrome or Edge, or the Wi-Fi page (tap BOOTSEL, join Switch2-Pico-XXXX, open http://192.168.4.1).';}
+else {
+  $('usb-connect').style.display=''; $('usb-help').style.display='';
+  navigator.usb.getDevices().then(ds=>{const d=ds.find(d=>d.vendorId===0x057e&&d.productId===0x2009);if(d)usbOpen(d).catch(()=>{})});
+  navigator.usb.addEventListener('connect',e=>{if(!usbDev)usbOpen(e.device).catch(()=>{})});
+  navigator.usb.addEventListener('disconnect',e=>{if(e.device===usbDev){usbDev=null;$('usb-connect').style.display='';$('usb-help').style.display='';}});
+}
+poll();setInterval(poll,250);
 </script>
 </body>
 </html>

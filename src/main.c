@@ -25,6 +25,7 @@
 #include "settings.h"
 #include "status_led.h"
 #include "web/wifi_ap.h"
+#include "webusb.h"
 
 #define HOTKEY_HOLD_MS        3000
 #define BOOTSEL_FORGET_MS     5000
@@ -228,6 +229,7 @@ int main(void) {
         bootsel_task();
         suspend_task();
         wifi_ap_task();
+        webusb_task();
         status_led_task();
         settings_task();
         maintenance_task();

@@ -25,9 +25,19 @@ void status_led_task(void) {
         case S2_LINK_INITIALISING:
             on = (t / 60) & 1;
             break;
-        case S2_LINK_SCANNING:
-            on = g_settings.bonded ? (t % 2000) < 150 : ((t / 250) & 1);
+        case S2_LINK_SCANNING: {
+            uint8_t stage, reason;
+            uint32_t age;
+            if (s2_link_last_failure(&stage, &reason, &age) && age < 60000) {
+                // Diagnostic: N quick blinks = the stage where the last
+                // connection attempt failed (see README), then a pause.
+                uint32_t ph = t % 3000;
+                on = ph < stage * 400u && (ph % 400) < 150;
+            } else {
+                on = g_settings.bonded ? (t % 2000) < 150 : ((t / 250) & 1);
+            }
             break;
+        }
         default:
             on = false;
             break;

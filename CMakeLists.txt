@@ -56,6 +56,7 @@ add_executable(switch2_pico
         src/amiibo.c
         src/usb_descriptors.c
         src/usb_hid.c
+        src/webusb.c
         src/status_led.c
         src/bootsel.c
         src/web/wifi_ap.c

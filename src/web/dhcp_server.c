@@ -1,5 +1,6 @@
 #include "dhcp_server.h"
 
+#include <stddef.h>
 #include <string.h>
 
 #include "lwip/pbuf.h"
@@ -88,6 +89,7 @@ static int lease_for(const uint8_t *mac) {
 
 static void send_reply(struct netif *nif, dhcp_msg_t *m, uint8_t type, int lease) {
     m->op = DHCP_OP_REPLY;
+    memcpy(m->siaddr, &s_ip.addr, 4);
     memset(m->yiaddr, 0, 4);
     if (lease >= 0) {
         memcpy(m->yiaddr, &s_ip.addr, 4);
@@ -104,6 +106,10 @@ static void send_reply(struct netif *nif, dhcp_msg_t *m, uint8_t type, int lease
     *p++ = OPT_END;
 
     size_t len = (size_t)(p - (uint8_t *)m);
+    if (len < 300) {   // BOOTP minimum message size; some clients drop shorter replies
+        memset(p, 0, 300 - len);
+        len = 300;
+    }
     struct pbuf *pb = pbuf_alloc(PBUF_TRANSPORT, (u16_t)len, PBUF_RAM);
     if (!pb) return;
     memcpy(pb->payload, m, len);

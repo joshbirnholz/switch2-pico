@@ -94,6 +94,10 @@ typedef struct {
     // ---- emulated Pro Controller user calibration (written by the host) ----
     uint8_t spi_user_cal[SPI_USER_CAL_SIZE];
 
+    // ---- added later: new fields go here, just before `crc`, so settings
+    // saved by older firmware still load (see settings_init) ----
+    uint8_t webusb_enabled;             // expose the WebUSB configuration interface
+
     uint32_t crc;
 } settings_t;
 

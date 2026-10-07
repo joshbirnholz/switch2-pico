@@ -54,6 +54,14 @@ static uint32_t settings_crc(const settings_t *s) {
     return crc32((const uint8_t *)s, offsetof(settings_t, crc));
 }
 
+// CRC of settings written by firmware whose settings_t was `size` bytes long
+// (the CRC is always the last field).
+static bool stored_crc_ok(const uint8_t *raw, uint16_t size) {
+    uint32_t crc;
+    memcpy(&crc, raw + size - 4, 4);
+    return crc == crc32(raw, size - 4u);
+}
+
 void settings_defaults(settings_t *s) {
     memset(s, 0, sizeof *s);
     s->magic = SETTINGS_MAGIC;
@@ -92,6 +100,7 @@ void settings_defaults(settings_t *s) {
     s->led_follow_host = 1;
     s->usb_detach_when_idle = 0;
     s->usb_remote_wakeup = 1;
+    s->webusb_enabled = 1;
 
     s->hotkey_enabled = 1;
     s->wifi_autostart = 1;
@@ -145,11 +154,17 @@ void settings_sanitize(settings_t *s) {
 
 void settings_init(void) {
     const settings_t *stored = (const settings_t *)(XIP_BASE + SETTINGS_FLASH_OFFSET);
+    const uint8_t *raw = (const uint8_t *)stored;
     if (stored->magic == SETTINGS_MAGIC && stored->version == SETTINGS_VERSION &&
-        stored->size == sizeof(settings_t) && stored->crc == settings_crc(stored)) {
-        memcpy(&g_settings, stored, sizeof g_settings);
+        stored->size >= offsetof(settings_t, spi_user_cal) + SPI_USER_CAL_SIZE + 4 &&
+        stored->size <= sizeof(settings_t) && stored_crc_ok(raw, stored->size)) {
+        // Start from defaults so fields added since the save keep sane values.
+        settings_defaults(&g_settings);
+        memcpy(&g_settings, raw, stored->size - 4u);
+        g_settings.size = sizeof g_settings;
         settings_sanitize(&g_settings);
-        LOG("settings: loaded from flash (bonded=%d)", g_settings.bonded);
+        LOG("settings: loaded from flash (bonded=%d%s)", g_settings.bonded,
+            stored->size != sizeof(settings_t) ? ", migrated" : "");
     } else {
         settings_defaults(&g_settings);
         LOG("settings: using defaults");

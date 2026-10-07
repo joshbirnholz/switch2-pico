@@ -1,0 +1,185 @@
+#include "webusb.h"
+
+#include <stdlib.h>
+#include <string.h>
+
+#include "tusb.h"
+
+#include "log.h"
+#include "settings.h"
+#include "web/http_server.h"
+
+#define REQ_MAX 6144
+
+static uint8_t s_rx[REQ_MAX + 1];
+static uint32_t s_rx_len;
+static uint32_t s_req_len;            // payload length of the request being received
+
+static http_response_t s_resp;
+static uint8_t s_hdr[12];
+static uint32_t s_hdr_sent;
+static uint32_t s_body_sent;
+static bool s_sending;
+
+static uint32_t rd32(const uint8_t *p) {
+    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+}
+
+static void finish_response(void) {
+    if (s_resp.body_owned && s_resp.body) free((void *)s_resp.body);
+    memset(&s_resp, 0, sizeof s_resp);
+    s_sending = false;
+}
+
+static void reset(void) {
+    s_rx_len = 0;
+    s_req_len = 0;
+    if (s_sending) finish_response();
+}
+
+static void handle_request(void) {
+    char *req = (char *)s_rx + 8;
+    req[s_req_len] = 0;
+    char *nl = strchr(req, '\n');
+    char *body = nl ? nl + 1 : req + s_req_len;
+    if (nl) *nl = 0;
+
+    http_request_t r;
+    memset(&r, 0, sizeof r);
+    char *sp = strchr(req, ' ');
+    memset(&s_resp, 0, sizeof s_resp);
+    if (!sp) {
+        s_resp.status = 400;
+    } else {
+        *sp = 0;
+        r.method = req;
+        r.path = sp + 1;
+        char *q = strchr(sp + 1, '?');
+        if (q) {
+            *q = 0;
+            r.query = q + 1;
+        } else {
+            r.query = "";
+        }
+        r.body = body;
+        r.body_len = (size_t)(req + s_req_len - body);
+        web_api_handle(&r, &s_resp);
+    }
+    uint32_t len = (uint32_t)s_resp.body_len;
+    uint8_t h[12] = {'S', '2', 'P', 'R', (uint8_t)s_resp.status, (uint8_t)(s_resp.status >> 8), 0, 0,
+                     (uint8_t)len, (uint8_t)(len >> 8), (uint8_t)(len >> 16), (uint8_t)(len >> 24)};
+    memcpy(s_hdr, h, sizeof h);
+    s_hdr_sent = 0;
+    s_body_sent = 0;
+    s_sending = true;
+}
+
+static void pump_tx(void) {
+    while (s_sending) {
+        uint32_t room = tud_vendor_write_available();
+        if (!room) break;
+        uint32_t n;
+        if (s_hdr_sent < sizeof s_hdr) {
+            n = tud_vendor_write(s_hdr + s_hdr_sent, tu_min32(room, sizeof s_hdr - s_hdr_sent));
+            s_hdr_sent += n;
+        } else if (s_body_sent < s_resp.body_len) {
+            n = tud_vendor_write(s_resp.body + s_body_sent, tu_min32(room, (uint32_t)(s_resp.body_len - s_body_sent)));
+            s_body_sent += n;
+        } else {
+            finish_response();
+            n = 1;
+        }
+        if (!n) break;
+    }
+    tud_vendor_write_flush();
+}
+
+void webusb_task(void) {
+    if (!tud_vendor_mounted()) {
+        if (s_rx_len || s_sending) reset();
+        return;
+    }
+    if (s_sending) {
+        pump_tx();
+        return;
+    }
+    while (tud_vendor_available()) {
+        uint32_t want = s_req_len ? 8 + s_req_len - s_rx_len : 8 - s_rx_len;
+        uint32_t n = tud_vendor_read(s_rx + s_rx_len, want);
+        if (!n) break;
+        s_rx_len += n;
+        if (!s_req_len && s_rx_len == 8) {
+            uint32_t len = rd32(s_rx + 4);
+            if (memcmp(s_rx, "S2PQ", 4) != 0 || len == 0 || len > REQ_MAX - 8) {
+                // Out of sync or oversized: drop everything buffered and start over.
+                LOG("webusb: bad request header");
+                tud_vendor_read_flush();
+                s_rx_len = 0;
+                return;
+            }
+            s_req_len = len;
+        }
+        if (s_req_len && s_rx_len == 8 + s_req_len) {
+            handle_request();
+            s_rx_len = 0;
+            s_req_len = 0;
+            pump_tx();
+            return;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Vendor control requests: WebUSB landing page and Microsoft OS 2.0 descriptors
+// (so Windows binds WinUSB to the configuration interface automatically).
+// ---------------------------------------------------------------------------
+#define LANDING_URL "joshbirnholz.github.io/switch2-pico/"
+
+static const struct {
+    uint8_t bLength, bDescriptorType, bScheme;
+    char url[sizeof LANDING_URL - 1];
+} __attribute__((packed)) s_url = {3 + sizeof LANDING_URL - 1, 3, 1, LANDING_URL};
+
+#define MS_OS_20_DESC_LEN 0xB2
+#define WEBUSB_ITF 1
+
+static const uint8_t s_ms_os_20[] = {
+    // Set header: length, type, Windows version (8.1+), total length
+    U16_TO_U8S_LE(0x000A), U16_TO_U8S_LE(MS_OS_20_SET_HEADER_DESCRIPTOR), U32_TO_U8S_LE(0x06030000),
+    U16_TO_U8S_LE(MS_OS_20_DESC_LEN),
+    // Configuration subset header
+    U16_TO_U8S_LE(0x0008), U16_TO_U8S_LE(MS_OS_20_SUBSET_HEADER_CONFIGURATION), 0, 0,
+    U16_TO_U8S_LE(MS_OS_20_DESC_LEN - 0x0A),
+    // Function subset header for the WebUSB interface
+    U16_TO_U8S_LE(0x0008), U16_TO_U8S_LE(MS_OS_20_SUBSET_HEADER_FUNCTION), WEBUSB_ITF, 0,
+    U16_TO_U8S_LE(MS_OS_20_DESC_LEN - 0x0A - 0x08),
+    // Compatible ID: WINUSB
+    U16_TO_U8S_LE(0x0014), U16_TO_U8S_LE(MS_OS_20_FEATURE_COMPATBLE_ID), 'W', 'I', 'N', 'U', 'S', 'B', 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0,
+    // Registry property: DeviceInterfaceGUIDs = {8f3b2c66-5c1a-4b5e-9a3e-2b6f53c0d7a1}
+    U16_TO_U8S_LE(MS_OS_20_DESC_LEN - 0x0A - 0x08 - 0x08 - 0x14), U16_TO_U8S_LE(MS_OS_20_FEATURE_REG_PROPERTY),
+    U16_TO_U8S_LE(0x0007), U16_TO_U8S_LE(0x002A),
+    'D', 0, 'e', 0, 'v', 0, 'i', 0, 'c', 0, 'e', 0, 'I', 0, 'n', 0, 't', 0, 'e', 0, 'r', 0, 'f', 0, 'a', 0, 'c', 0,
+    'e', 0, 'G', 0, 'U', 0, 'I', 0, 'D', 0, 's', 0, 0, 0,
+    U16_TO_U8S_LE(0x0050),
+    '{', 0, '8', 0, 'f', 0, '3', 0, 'b', 0, '2', 0, 'c', 0, '6', 0, '6', 0, '-', 0, '5', 0, 'c', 0, '1', 0, 'a', 0,
+    '-', 0, '4', 0, 'b', 0, '5', 0, 'e', 0, '-', 0, '9', 0, 'a', 0, '3', 0, 'e', 0, '-', 0, '2', 0, 'b', 0, '6', 0,
+    'f', 0, '5', 0, '3', 0, 'c', 0, '0', 0, 'd', 0, '7', 0, 'a', 0, '1', 0, '}', 0, 0, 0, 0, 0,
+};
+_Static_assert(sizeof s_ms_os_20 == MS_OS_20_DESC_LEN, "MS OS 2.0 descriptor length");
+
+bool tud_vendor_control_xfer_cb(uint8_t rhport, uint8_t stage, tusb_control_request_t const *request) {
+    if (stage != CONTROL_STAGE_SETUP) return true;
+    if (request->bmRequestType_bit.type != TUSB_REQ_TYPE_VENDOR) return false;
+    switch (request->bRequest) {
+    case WEBUSB_VENDOR_REQUEST_URL:
+        return tud_control_xfer(rhport, request, (void *)(uintptr_t)&s_url, s_url.bLength);
+    case WEBUSB_VENDOR_REQUEST_MS:
+        if (request->wIndex == 7) {
+            return tud_control_xfer(rhport, request, (void *)(uintptr_t)s_ms_os_20, sizeof s_ms_os_20);
+        }
+        return false;
+    default:
+        return false;
+    }
+}

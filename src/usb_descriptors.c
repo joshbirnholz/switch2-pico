@@ -1,5 +1,9 @@
-// USB descriptors: the device presents itself exactly like a wired Nintendo
-// Switch Pro Controller (057E:2009) with a single HID interface.
+// USB descriptors: the device presents itself like a wired Nintendo Switch Pro
+// Controller (057E:2009). Interface 0 is the controller's HID interface. When
+// WebUSB is enabled, interface 1 is a vendor interface for the configuration
+// page and the device advertises USB 2.1 + a BOS descriptor (WebUSB landing
+// page, Microsoft OS 2.0 descriptors for automatic WinUSB on Windows). With
+// WebUSB disabled the descriptors match a genuine controller.
 
 #include <assert.h>
 #include <string.h>
@@ -9,11 +13,12 @@
 
 #include "settings.h"
 #include "usb_hid.h"
+#include "webusb.h"
 
 #define PRO_VID 0x057E
 #define PRO_PID 0x2009
 
-static tusb_desc_device_t const s_device = {
+static tusb_desc_device_t s_device = {
     .bLength = sizeof(tusb_desc_device_t),
     .bDescriptorType = TUSB_DESC_DEVICE,
     .bcdUSB = 0x0200,
@@ -31,7 +36,22 @@ static tusb_desc_device_t const s_device = {
 };
 
 uint8_t const *tud_descriptor_device_cb(void) {
+    // A distinct bcdDevice keeps Windows from reusing a cached "no MS OS
+    // descriptor" answer from a genuine Pro Controller.
+    s_device.bcdUSB = g_settings.webusb_enabled ? 0x0210 : 0x0200;
+    s_device.bcdDevice = g_settings.webusb_enabled ? 0x0201 : 0x0200;
     return (uint8_t const *)&s_device;
+}
+
+#define BOS_LEN (TUD_BOS_DESC_LEN + TUD_BOS_WEBUSB_DESC_LEN + TUD_BOS_MICROSOFT_OS_DESC_LEN)
+static const uint8_t s_bos[] = {
+    TUD_BOS_DESCRIPTOR(BOS_LEN, 2),
+    TUD_BOS_WEBUSB_DESCRIPTOR(WEBUSB_VENDOR_REQUEST_URL, 1),
+    TUD_BOS_MS_OS_20_DESCRIPTOR(0xB2, WEBUSB_VENDOR_REQUEST_MS),
+};
+
+uint8_t const *tud_descriptor_bos_cb(void) {
+    return g_settings.webusb_enabled ? s_bos : NULL;
 }
 
 // ---------------------------------------------------------------------------
@@ -117,7 +137,7 @@ static void build_report_desc(void) {
 }
 
 const uint8_t *usb_hid_report_descriptor(uint16_t *len) {
-    if (!s_report_desc_len) build_report_desc();
+    build_report_desc();   // cheap; settings may have changed before re-enumeration
     *len = s_report_desc_len;
     return s_report_desc;
 }
@@ -127,7 +147,10 @@ const uint8_t *usb_hid_report_descriptor(uint16_t *len) {
 // ---------------------------------------------------------------------------
 #define EP_IN  0x81
 #define EP_OUT 0x01
-#define CONFIG_LEN (TUD_CONFIG_DESC_LEN + 9 + 9 + 7 + 7)
+#define EP_VENDOR_IN  0x82
+#define EP_VENDOR_OUT 0x02
+#define CONFIG_LEN_HID (TUD_CONFIG_DESC_LEN + 9 + 9 + 7 + 7)
+#define CONFIG_LEN (CONFIG_LEN_HID + TUD_VENDOR_DESC_LEN)
 
 static uint8_t s_config[CONFIG_LEN];
 
@@ -137,9 +160,11 @@ uint8_t const *tud_descriptor_configuration_cb(uint8_t index) {
     usb_hid_report_descriptor(&rlen);
     uint8_t interval = g_settings.usb_report_interval_ms ? g_settings.usb_report_interval_ms : 8;
     if (interval > 8) interval = 8;
+    bool webusb = g_settings.webusb_enabled;
+    uint16_t total = webusb ? CONFIG_LEN : CONFIG_LEN_HID;
     const uint8_t desc[] = {
-        // Configuration: 1 interface, bus powered, remote wakeup, 500 mA
-        9, TUSB_DESC_CONFIGURATION, U16_TO_U8S_LE(CONFIG_LEN), 1, 1, 0, 0xA0, 0xFA,
+        // Configuration: 1 or 2 interfaces, bus powered, remote wakeup, 500 mA
+        9, TUSB_DESC_CONFIGURATION, U16_TO_U8S_LE(total), (uint8_t)(webusb ? 2 : 1), 1, 0, 0xA0, 0xFA,
         // Interface 0: HID, no boot protocol
         9, TUSB_DESC_INTERFACE, 0, 0, 2, TUSB_CLASS_HID, 0, 0, 0,
         // HID descriptor
@@ -147,6 +172,8 @@ uint8_t const *tud_descriptor_configuration_cb(uint8_t index) {
         // Endpoints
         7, TUSB_DESC_ENDPOINT, EP_IN, TUSB_XFER_INTERRUPT, U16_TO_U8S_LE(USB_HID_EP_SIZE), interval,
         7, TUSB_DESC_ENDPOINT, EP_OUT, TUSB_XFER_INTERRUPT, U16_TO_U8S_LE(USB_HID_EP_SIZE), interval,
+        // Interface 1: WebUSB configuration (vendor class, bulk)
+        TUD_VENDOR_DESCRIPTOR(1, 4, EP_VENDOR_OUT, EP_VENDOR_IN, 64),
     };
     static_assert(sizeof desc == CONFIG_LEN, "config descriptor length");
     memcpy(s_config, desc, sizeof desc);
@@ -161,6 +188,7 @@ static const char *const s_strings[] = {
     "Nintendo Co., Ltd.",   // 1
     "Pro Controller",       // 2
     "000000000001",         // 3
+    "Switch2-Pico Config",  // 4
 };
 
 static uint16_t s_str[32];

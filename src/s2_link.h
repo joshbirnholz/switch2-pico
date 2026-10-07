@@ -72,6 +72,14 @@ void s2_link_set_paused(bool paused);
 
 void s2_link_start_gyro_calibration(void);
 
+// Lower the scan duty cycle (used while the Wi-Fi access point is on).
+void s2_link_set_low_duty_scan(bool low);
+
+// Where the last failed connection attempt stopped:
+//   1 = link not established, 2 = GATT discovery, 3 = first commands /
+//   Nintendo pairing, 4 = controller initialisation. `reason` is the HCI error/disconnect code.
+bool s2_link_last_failure(uint8_t *stage, uint8_t *reason, uint32_t *age_ms);
+
 // Hook: a bonded controller advertised while we were not connected.
 void s2_link_hook_controller_seen(void);
 // Hook: the link became ready / was lost.

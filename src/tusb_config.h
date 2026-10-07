@@ -22,6 +22,10 @@
 #define CFG_TUD_CDC 0
 #define CFG_TUD_MSC 0
 #define CFG_TUD_MIDI 0
-#define CFG_TUD_VENDOR 0
+// WebUSB configuration interface (second interface, optional at runtime).
+#define CFG_TUD_VENDOR 1
+#define CFG_TUD_VENDOR_EPSIZE 64
+#define CFG_TUD_VENDOR_RX_BUFSIZE 512
+#define CFG_TUD_VENDOR_TX_BUFSIZE 2048
 
 #endif

@@ -33,7 +33,7 @@ Switch 2 Pro Controller  ──BLE──▶  Pico 2 W  ──USB──▶  PC / 
 | Player LEDs | Follow the player number the host assigns. |
 | Battery | Reported to the host. |
 | NSO GameCube controller | Basic support: buttons, sticks, analog triggers acting as L/R past a threshold, and rumble through built-in vibration presets. |
-| Configuration page | Served by the Pico itself over Wi-Fi, so it works from any phone or computer with no drivers. |
+| Configuration page | Over **WebUSB** in Chrome/Edge with the dongle plugged in, or over the Pico's own Wi-Fi from any phone or computer. |
 
 ## Hardware
 
@@ -70,6 +70,7 @@ pairing. To forget the paired controller, hold the Pico's BOOTSEL button for
 | flicker | connecting |
 | solid | connected |
 | double blink | configuration Wi-Fi is on |
+| 1–4 quick blinks, pause, repeat | the last connection attempt failed (see [Troubleshooting](#troubleshooting)); shown for 60 s |
 
 ### On a PC
 
@@ -83,6 +84,25 @@ Turn on **System Settings → Controllers and Sensors → Pro Controller Wired
 Communication**, then plug the dongle into the dock or the console.
 
 ## Configuration page
+
+### Over USB (WebUSB)
+
+With the dongle plugged in, open **https://joshbirnholz.github.io/switch2-pico/**
+in Chrome or Edge (Chrome also offers this link in a notification when the
+dongle is plugged in), click **Connect over USB** and pick "Pro Controller".
+You can also open `web/index.html` from this repository directly.
+
+* **Linux:** allow your user to open the device first:
+  `sudo cp tools/99-switch2-pico.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules`,
+  then replug the dongle.
+* **Windows:** no driver needed; the dongle tells Windows to use WinUSB for
+  the configuration interface.
+* The WebUSB interface adds a second USB interface next to the controller. If
+  a Switch 1 console doesn't accept the dongle, turn off *WebUSB configuration
+  interface* (via Wi-Fi if needed) so it matches a genuine Pro Controller
+  exactly.
+
+### Over Wi-Fi
 
 Turn the configuration Wi-Fi on in one of three ways:
 
@@ -105,6 +125,26 @@ On the page you can:
 * toggle USB behaviour: report rate, LED following, wake-on-controller, attach only while connected
 * change the Wi-Fi name and password, reboot, enter firmware update mode, factory reset
 * read the firmware log (useful for bug reports)
+
+## Troubleshooting
+
+**The controller connects briefly, then turns off.** After a failed attempt the
+Pico LED blinks a code for 60 seconds:
+
+| Blinks | Failed at |
+| --- | --- |
+| 1 | establishing the Bluetooth link |
+| 2 | reading the controller's services (GATT) |
+| 3 | first commands / Nintendo pairing |
+| 4 | controller initialisation |
+
+The full log (configuration page → Log → Download) shows the exact step and
+the Bluetooth error code. Please include it in bug reports.
+
+**The Wi-Fi network shows up but http://192.168.4.1 doesn't load.** Make sure
+your phone or computer stays on the `Switch2-Pico` network even though it has
+no internet (phones may switch back to mobile data; turn mobile data off
+briefly). WebUSB is the easier option on a computer.
 
 ## What is verified
 

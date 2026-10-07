@@ -8,6 +8,7 @@
 #include "dns_server.h"
 #include "http_server.h"
 #include "log.h"
+#include "s2_link.h"
 #include "settings.h"
 
 #define AP_IDLE_TIMEOUT_MS (10 * 60 * 1000)
@@ -33,6 +34,7 @@ void wifi_ap_start(void) {
     if (s_active) return;
     const char *pass = g_settings.wifi_pass[0] ? g_settings.wifi_pass : NULL;
     uint32_t auth = pass ? CYW43_AUTH_WPA2_AES_PSK : CYW43_AUTH_OPEN;
+    s2_link_set_low_duty_scan(true);
     cyw43_wifi_ap_set_channel(&cyw43_state, g_settings.wifi_channel);
     cyw43_arch_enable_ap_mode(g_settings.wifi_ssid, pass, auth);
 
@@ -53,6 +55,7 @@ void wifi_ap_stop(void) {
     dns_server_stop();
     dhcp_server_stop();
     cyw43_arch_disable_ap_mode();
+    s2_link_set_low_duty_scan(false);
     s_active = false;
     LOG("wifi: access point down");
 }
