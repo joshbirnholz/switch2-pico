@@ -69,12 +69,20 @@ Download the `.uf2` for your board from the
 The board reboots into the firmware.
 
 **Updating:** the configuration page's **Firmware update** section shows the
-installed and latest version. **Update** downloads the latest build, restarts
-the dongle as its USB drive, and (in Chrome or Edge) writes the file to the
-drive once you pick it: choose the `NICENANO` / `FTHR840BOOT` / `RP2350` drive
-when asked. In other browsers, or if the drive can't be picked, use *Save the
-.uf2 instead* and drag the file onto the drive. **Firmware update mode** only
-restarts into the drive, for installing a file by hand.
+installed and latest version. **Update** downloads the latest build and sends
+it straight to the dongle over the configuration connection (from v0.5.2):
+the dongle stores it in spare flash, checks it (CRC-32 and vector table),
+installs it at the next start and restarts on its own. No drive to pick. The
+copy writes the image's first page last, so a power cut mid-install leaves the
+board in its UF2 bootloader rather than running a half-written image; plug it
+in and install the .uf2 by hand.
+
+Older firmware, or a failed direct update, falls back to the drive method: the
+dongle restarts as its USB drive and (in Chrome or Edge) the page writes the
+file once you pick the `NICENANO` / `FTHR840BOOT` / `RP2350` drive. In other
+browsers use *Save the .uf2 instead* and drag the file onto the drive.
+**Firmware update mode** only restarts into the drive, for installing a file
+by hand.
 
 ## Pairing and everyday use
 
@@ -139,7 +147,9 @@ Under **USB and system → Appear on USB as** the dongle can present itself as:
 | DualSense | PCs and games that expect a PlayStation pad | mapped to existing buttons |
 | Xbox 360 controller | anything that only speaks XInput | mapped to existing buttons |
 
-Changing the mode restarts the dongle. Each mode keeps its own button map,
+Changing the mode restarts the dongle, which then has that controller's USB
+IDs; the configuration page still finds it (Linux: install the current
+`tools/99-switch2-pico.rules`, which covers every mode's IDs). Each mode keeps its own button map,
 edited in **Button mapping** while that mode is active. The defaults go by
 position (Nintendo A = Circle / Xbox B, B = Cross / Xbox A, and so on), and
 the C + GL/GR + button shortcut works in every mode.
@@ -171,7 +181,10 @@ Communication**, then plug the dongle into the dock or the console.
 
 With the dongle plugged in, open **https://joshbirnholz.github.io/switch2-pico/**
 in Chrome or Edge (Chrome also offers this link in a notification when the
-dongle is plugged in), click **Connect over USB** and pick "Pro Controller".
+dongle is plugged in), click **Connect over USB** and pick the dongle ("Pro
+Controller", "DualSense Edge Wireless Controller", "DualSense Wireless
+Controller" or "Controller", depending on its USB mode; a real controller with
+those names isn't listed).
 You can also open `web/index.html` from this repository directly (download
 it and double-click it; WebUSB works from a local file too).
 
@@ -320,7 +333,8 @@ sketch.
 | `core/src/mapping.c` | Button remapping, stick calibration and deadzones, IMU conversion |
 | `core/src/web_api.c`, `webusb.c` | Configuration API, served over HTTP or WebUSB |
 | `core/src/app_core.c`, `settings.c` | Glue, USB suspend / wakeup, settings |
-| `core/src/platform.h` | Board services (time, storage, reboot) |
+| `core/src/platform.h` | Board services (time, storage, reboot, firmware update) |
+| `pico/fw_update_pico.c`, `nrf52/switch2_nrf/fw_update_nrf.cpp` | Firmware update without the UF2 drive: staging, check, install at boot |
 | `pico/` | Pico: BTstack transport, USB descriptors, Wi-Fi page server, LED, BOOTSEL |
 | `nrf52/switch2_nrf/` | nRF52840: Bluefruit transport, USB setup, LittleFS storage, LED |
 | `web/index.html` | The configuration page (WebUSB or HTTP) |

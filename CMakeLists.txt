@@ -61,6 +61,7 @@ add_executable(switch2_pico
         ${CORE}/x360.c
         ${CORE}/web_api.c
         ${CORE}/webusb.c
+        ${PICO_SRC}/fw_update_pico.c
         ${PICO_SRC}/main.c
         ${PICO_SRC}/platform_pico.c
         ${PICO_SRC}/s2_ble_btstack.c

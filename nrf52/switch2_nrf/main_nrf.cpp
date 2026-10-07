@@ -132,6 +132,9 @@ void setup() {
     pinMode(S2P_LED_PIN_A, OUTPUT);
     pinMode(S2P_LED_PIN_B, OUTPUT);
     led_write(false);
+    // A firmware update staged from the configuration page installs here,
+    // before the SoftDevice starts (it restarts the board when done).
+    platform_fw_apply_if_pending();
 #ifdef S2P_UART_LOG
     Serial1.begin(115200);
 #endif

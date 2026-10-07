@@ -83,6 +83,9 @@ static void bootsel_task(void) {
 }
 
 int main(void) {
+    // A firmware update staged from the configuration page installs here,
+    // before anything else runs (the board restarts when done).
+    platform_fw_apply_if_pending();
     board_init();
     stdio_init_all();
     log_init();

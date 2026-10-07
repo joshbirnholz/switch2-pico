@@ -211,12 +211,18 @@ async function usbOpen(dev){
 }
 async function usbConnect(){
   try{
-    const dev = await navigator.usb.requestDevice({filters:[{vendorId:0x057e, productId:0x2009}]});
+    const dev = await navigator.usb.requestDevice({filters:USB_IDS.map(([v,p])=>({vendorId:v, productId:p, classCode:0xff}))});
     await usbOpen(dev);
   }catch(e){toast('USB: '+e.message)}
 }
+// The dongle's USB identity follows its mode (Switch Pro, DualSense Edge,
+// DualSense, Xbox 360); the configuration interface is the same in all of them.
+const USB_IDS = [[0x057e,0x2009],[0x054c,0x0df2],[0x054c,0x0ce6],[0x045e,0x028e]];
+const isDongleId = d => USB_IDS.some(([v,p])=>d.vendorId===v&&d.productId===p);
 async function usbExchange(method, path, body){
-  const payload = te.encode(method+' '+path+'\n'+(body||''));
+  const head = te.encode(method+' '+path+'\n');
+  const data = body instanceof Uint8Array ? body : te.encode(body||'');
+  const payload = new Uint8Array(head.length+data.length); payload.set(head); payload.set(data,head.length);
   const msg = new Uint8Array(8+payload.length);
   msg.set(te.encode('S2PQ'),0); new DataView(msg.buffer).setUint32(4,payload.length,true); msg.set(payload,8);
   await usbDev.transferOut(2, msg);
@@ -236,12 +242,13 @@ async function usbExchange(method, path, body){
 async function api(path, opts){
   opts = opts || {}; const method = opts.method || 'GET';
   if (USE_HTTP){
-    const r = await fetch(path, {method, body: opts.body, headers: opts.body ? {'Content-Type':'application/x-www-form-urlencoded'} : undefined});
+    const bin = opts.body instanceof Uint8Array;
+    const r = await fetch(path, {method, body: opts.body, headers: opts.body ? {'Content-Type': bin ? 'application/octet-stream' : 'application/x-www-form-urlencoded'} : undefined});
     const bytes = new Uint8Array(await r.arrayBuffer());
     return {ok:r.ok, status:r.status, bytes, text:()=>td.decode(bytes), json:()=>JSON.parse(td.decode(bytes))};
   }
   if (!usbDev) throw new Error('not connected');
-  const p = usbBusy.then(()=>usbExchange(method, path, opts.body ? String(opts.body) : ''));
+  const p = usbBusy.then(()=>usbExchange(method, path, opts.body instanceof Uint8Array ? opts.body : opts.body ? String(opts.body) : ''));
   usbBusy = p.catch(()=>{});
   const r = await p;
   return {...r, text:()=>td.decode(r.bytes), json:()=>JSON.parse(td.decode(r.bytes))};
@@ -365,15 +372,63 @@ function fwRender(){
     $('fw-note').textContent=c>0?'A newer version is available.':'You have the latest version.';}
   else $('fw-note').textContent=FW&&plat&&!file?'No prebuilt firmware for this board ('+plat+').':(cur?'':'Connect the dongle to see its version.');
 }
+// Extract the flash image for one UF2 family: {base, image}. Gaps are 0xFF.
+function uf2Image(buf, family, base, max){
+  const dv=new DataView(buf.buffer,buf.byteOffset,buf.byteLength);let end=0;const blocks=[];
+  for(let o=0;o+512<=buf.length;o+=512){
+    if(dv.getUint32(o,true)!==0x0A324655||dv.getUint32(o+4,true)!==0x9E5D5157)continue;
+    const flags=dv.getUint32(o+8,true);if(flags&1)continue;                 // not for main flash
+    if((flags&0x2000)&&dv.getUint32(o+28,true)!==family)continue;          // other family
+    const addr=dv.getUint32(o+12,true),len=dv.getUint32(o+16,true);
+    if(len>476||addr<base||addr+len-base>max)throw new Error('image doesn\'t fit this board');
+    blocks.push([addr-base,o+32,len]);end=Math.max(end,addr+len-base);
+  }
+  if(!blocks.length)throw new Error('no firmware for this board in the file');
+  const img=new Uint8Array(end).fill(0xFF);
+  for(const [off,src,len] of blocks)img.set(buf.subarray(src,src+len),off);
+  return img;
+}
+let CRC_T=null;
+function crc32(b){
+  if(!CRC_T){CRC_T=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;CRC_T[n]=c>>>0}}
+  let c=0xFFFFFFFF;for(let i=0;i<b.length;i++)c=CRC_T[(c^b[i])&255]^(c>>>8);return(c^0xFFFFFFFF)>>>0;
+}
+// Send the image over the configuration channel; the dongle checks it, installs it
+// at the next start and restarts. Returns false if this firmware can't do that.
+async function fwDirect(uf2){
+  let info;
+  try{const r=await api('/api/fw/info');if(!r.ok)return false;info=r.json()}catch(e){return false}
+  const img=uf2Image(uf2,info.family,info.base,info.max),crc=crc32(img);
+  const post=async(path,body)=>{const r=await api(path,{method:'POST',body});if(!r.ok)throw new Error(r.text()||('error '+r.status))};
+  await post('/api/fw/begin?size='+img.length+'&crc='+crc);
+  const CH=4096;
+  for(let o=0;o<img.length;o+=CH){
+    $('fw-note').textContent='Sending to the dongle… '+Math.floor(o*100/img.length)+'%';
+    await post('/api/fw/chunk?off='+o,img.subarray(o,Math.min(o+CH,img.length)));
+  }
+  $('fw-note').textContent='Checking…';
+  await post('/api/fw/end');
+  try{await api('/api/action?do=reboot',{method:'POST'})}catch(e){}
+  $('fw-note').textContent='Installed. The dongle is restarting with v'+FW.version+'; it reconnects by itself in a few seconds (click Connect if it doesn\'t).';
+  return true;
+}
 async function fwStart(){
   const file=FW.files[ST.platform];
-  if(!confirm('Download v'+FW.version+' and restart the dongle into its USB drive mode to install it?'))return;
+  if(!confirm('Download v'+FW.version+' and install it on the dongle?'))return;
   try{
     $('fw-note').textContent='Downloading…';
     const r=await fetch(FW_BASE+file+'?'+FW.sha,{cache:'no-store'});
     if(!r.ok)throw new Error('download failed ('+r.status+')');
     fwBlob=await r.blob();fwName=file;
   }catch(e){$('fw-note').textContent='Download failed: '+e.message;return}
+  const go=$('fw-go');go.disabled=true;
+  try{if(await fwDirect(new Uint8Array(await fwBlob.arrayBuffer()))){go.disabled=false;return}}
+  catch(e){
+    go.disabled=false;
+    if(!confirm('Direct update failed ('+e.message+'). Restart the dongle into its USB drive mode and install it from there instead?')){$('fw-note').textContent='Update failed: '+e.message;return}
+  }
+  go.disabled=false;
+  // Older firmware (or a failed direct update): go through the UF2 drive.
   try{await api('/api/action?do=bootloader',{method:'POST'})}catch(e){}
   $('fw-step1').style.display='none';$('fw-step2').style.display='';
   $('fw-write').style.display=window.showDirectoryPicker?'':'none';
@@ -427,8 +482,10 @@ if (USE_HTTP){loadSettings();loadLog();}
 else if (!navigator.usb){$('usb-help').style.display='';$('usb-help').innerHTML='<b>This browser has no WebUSB.</b> Use Chrome or Edge, or the Wi-Fi page (tap BOOTSEL, join Switch2-Pico-XXXX, open http://192.168.4.1).';}
 else {
   $('usb-connect').style.display=''; $('usb-help').style.display='';
-  navigator.usb.getDevices().then(ds=>{const d=ds.find(d=>d.vendorId===0x057e&&d.productId===0x2009);if(d)usbOpen(d).catch(()=>{})});
-  navigator.usb.addEventListener('connect',e=>{if(!usbDev)usbOpen(e.device).catch(()=>{})});
+  // Try each permitted match in turn: a real DualSense or Xbox pad has the same IDs
+  // but no configuration interface, so opening it fails and the next one is tried.
+  navigator.usb.getDevices().then(async ds=>{for(const d of ds.filter(isDongleId)){if(usbDev)break;try{await usbOpen(d)}catch(e){}}});
+  navigator.usb.addEventListener('connect',e=>{if(!usbDev&&isDongleId(e.device))usbOpen(e.device).catch(()=>{})});
   navigator.usb.addEventListener('disconnect',e=>{if(e.device===usbDev){usbDev=null;$('usb-connect').style.display='';$('usb-help').style.display='';}});
 }
 poll();setInterval(poll,250);

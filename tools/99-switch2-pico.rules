@@ -1,10 +1,17 @@
 # Lets Chrome/Edge (WebUSB) open the Switch2-Pico configuration interface
-# without root. Install:
+# without root, in every USB mode (Switch Pro, DualSense Edge, DualSense,
+# Xbox 360). Install:
 #   sudo cp 99-switch2-pico.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules
 # then unplug and replug the dongle.
 SUBSYSTEM=="usb", ATTRS{idVendor}=="057e", ATTRS{idProduct}=="2009", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="054c", ATTRS{idProduct}=="0df2", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="054c", ATTRS{idProduct}=="0ce6", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="045e", ATTRS{idProduct}=="028e", TAG+="uaccess"
 
 # Lets the dongle wake the PC from sleep when you press a button on the
 # controller. Linux only arms USB wake-up for keyboards by default, so without
-# this line the dongle's wake request is ignored.
+# these lines the dongle's wake request is ignored.
 ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="057e", ATTR{idProduct}=="2009", TEST=="power/wakeup", ATTR{power/wakeup}="enabled"
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="054c", ATTR{idProduct}=="0df2", TEST=="power/wakeup", ATTR{power/wakeup}="enabled"
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="054c", ATTR{idProduct}=="0ce6", TEST=="power/wakeup", ATTR{power/wakeup}="enabled"
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="045e", ATTR{idProduct}=="028e", TEST=="power/wakeup", ATTR{power/wakeup}="enabled"

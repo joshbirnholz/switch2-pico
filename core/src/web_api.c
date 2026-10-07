@@ -390,6 +390,45 @@ static void api_action(const http_request_t *req, http_response_t *r) {
 }
 
 // ---------------------------------------------------------------------------
+// Firmware update (see platform_fw_* in platform.h)
+//   GET  /api/fw/info                  {"family":..,"base":..,"max":..}
+//   POST /api/fw/begin?size=N&crc=C    start (CRC-32 of the raw image)
+//   POST /api/fw/chunk?off=O           binary body, in order
+//   POST /api/fw/end                   verify and mark pending; then reboot
+// ---------------------------------------------------------------------------
+static uint32_t query_u32(const char *q, const char *key) {
+    char v[16];
+    return query_get(q, key, v, sizeof v) ? (uint32_t)strtoul(v, NULL, 0) : 0;
+}
+
+static void api_fw(const http_request_t *req, http_response_t *r, bool get, bool post) {
+    const char *op = req->path + 8;
+    const char *err = "bad request";
+    bool ok = false;
+    if (get && !strcmp(op, "info")) {
+        platform_fw_info_t fi;
+        platform_fw_info(&fi);
+        jbuf_t j;
+        if (!jb_init(&j, 128)) return respond_text(r, 500, "oom");
+        jb_printf(&j, "{\"family\":%lu,\"base\":%lu,\"max\":%lu}", (unsigned long)fi.uf2_family,
+                  (unsigned long)fi.base, (unsigned long)fi.max_size);
+        return respond_json(r, &j);
+    }
+    if (!post) return respond_text(r, 405, "POST");
+    if (!strcmp(op, "begin")) {
+        ok = platform_fw_begin(query_u32(req->query, "size"), query_u32(req->query, "crc"), &err);
+        if (ok) LOG("fw: update started (%lu bytes)", (unsigned long)query_u32(req->query, "size"));
+    } else if (!strcmp(op, "chunk")) {
+        ok = platform_fw_write(query_u32(req->query, "off"), (const uint8_t *)req->body, (uint32_t)req->body_len, &err);
+    } else if (!strcmp(op, "end")) {
+        ok = platform_fw_finish(&err);
+        LOG("fw: %s", ok ? "image verified, installs at the next restart" : err);
+    }
+    if (!ok && strcmp(op, "chunk")) LOG("fw: %s failed: %s", op, err);
+    respond_text(r, ok ? 200 : 400, ok ? "ok" : err);
+}
+
+// ---------------------------------------------------------------------------
 // Router
 // ---------------------------------------------------------------------------
 void web_api_handle(const http_request_t *req, http_response_t *r) {
@@ -408,6 +447,7 @@ void web_api_handle(const http_request_t *req, http_response_t *r) {
     if (get && !strcmp(req->path, "/api/settings")) return api_settings_get(r);
     if (post && !strcmp(req->path, "/api/settings")) return api_settings_post(req, r);
     if (post && !strcmp(req->path, "/api/action")) return api_action(req, r);
+    if (!strncmp(req->path, "/api/fw/", 8)) return api_fw(req, r, get, post);
     if (get && !strcmp(req->path, "/api/log")) {
         char *buf = malloc(8192);
         if (!buf) return respond_text(r, 500, "oom");

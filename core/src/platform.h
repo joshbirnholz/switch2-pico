@@ -33,6 +33,26 @@ void platform_reboot(bool bootloader);
 // Diagnostic output (debug UART / serial), one line at a time.
 void platform_log_output(const char *line);
 
+// Firmware update over the configuration channel (WebUSB / HTTP), without
+// the UF2 drive. The page sends the raw application image (extracted from
+// the .uf2) in order; the board stages it in flash it doesn't use, checks it
+// and records it as pending. On the next boot, before anything else,
+// platform_fw_apply_if_pending() copies it over the running firmware. Every
+// step leaves either the old firmware, the new one, or no valid app (the UF2
+// bootloader then keeps the board, for drag-and-drop recovery).
+typedef struct {
+    uint32_t uf2_family;   // UF2 family ID of this board's images
+    uint32_t base;         // flash address the image starts at
+    uint32_t max_size;     // largest image that can be staged
+} platform_fw_info_t;
+void platform_fw_info(platform_fw_info_t *out);
+bool platform_fw_begin(uint32_t size, uint32_t crc32, const char **err);
+// Sequential chunks: `off` must continue where the previous one ended.
+bool platform_fw_write(uint32_t off, const uint8_t *data, uint32_t len, const char **err);
+// Checks the staged CRC and image header, then marks the update pending.
+bool platform_fw_finish(const char **err);
+void platform_fw_apply_if_pending(void);
+
 // Watchdog: started by the board's startup code, fed from app_core_task().
 // If the main loop stops for ~8 s the board resets (and logs why next boot).
 void platform_watchdog_feed(void);
