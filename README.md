@@ -55,13 +55,15 @@ nice!nano boards ship with, the same as for openpuck.
 
 ## Installing
 
-Download the `.uf2` for your board from the
+Download the nRF52840 `.uf2` from the
 [**Latest build** release](https://github.com/joshbirnholz/switch2-pico/releases/tag/latest)
-(rebuilt on every push; each CI run also keeps them as artifacts), or
-[build it](#building). Then:
+(rebuilt on every push; each CI run also keeps it as an artifact), or
+[build it](#building). The Pico 2 W isn't a focus at the moment: CI builds it
+only on request (**Actions → Build → Run workflow → Also build the Pico 2 W
+firmware**), and the configuration page doesn't offer it as an update. Then:
 
 * **Pico 2 W:** hold **BOOTSEL** while plugging it in; a drive named `RP2350`
-  appears. Copy the `…-pico2w.uf2` file onto it.
+  appears. Copy the `.uf2` file onto it.
 * **nRF52840:** double-tap reset (on a Pro Micro without a reset button,
   short RST to GND twice quickly); a drive such as `NICENANO` or
   `FTHR840BOOT` appears. Copy the `…-nrf52840.uf2` file onto it.
