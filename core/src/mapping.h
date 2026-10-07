@@ -78,6 +78,14 @@ void mapping_imu(const settings_t *s, const mapping_ctx_t *ctx, const s2_input_t
                  int16_t accel_out[3], int16_t gyro_out[3]);
 void mapping_apply(const settings_t *s, const mapping_ctx_t *ctx, const s2_input_t *in, procon_input_t *out);
 
+// Quick remap from the controller: hold C and GL (or GR), then press another
+// button to make GL (GR) send whatever that button sends; doing it again with
+// the same button clears GL (GR). `prev`/`raw` are consecutive raw Switch 2
+// button states. Returns true and sets *changed when a mapping changed.
+bool mapping_quick_remap(settings_t *s, uint32_t prev, uint32_t raw, in_button_t *changed);
+// True while a quick-remap chord is held (its buttons shouldn't reach the host).
+bool mapping_quick_remap_held(uint32_t raw);
+
 void mapping_pack_stick(const uint16_t v[2], uint8_t out[3]);
 
 #ifdef __cplusplus

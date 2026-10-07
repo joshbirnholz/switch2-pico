@@ -59,10 +59,13 @@ void procon_hook_player_lights(uint8_t lights) {
 }
 
 void s2_link_hook_controller_seen(void) {
-    if (g_settings.usb_remote_wakeup && tud_suspended()) {
-        LOG("usb: controller woke up, requesting host remote wakeup");
-        tud_remote_wakeup();
-    }
+    static uint32_t next;
+    if (!g_settings.usb_remote_wakeup || !tud_suspended() || !platform_time_reached(next)) return;
+    next = platform_deadline_ms(1000);
+    // Only works if the host armed remote wakeup (on Linux see
+    // tools/99-switch2-pico.rules); TinyUSB ignores the request otherwise.
+    LOG("usb: controller active, requesting host remote wakeup");
+    tud_remote_wakeup();
 }
 
 void s2_link_hook_connection_changed(bool connected) {
@@ -95,7 +98,22 @@ static void update_input(void) {
         last_seq = seq;
         procon_input_t out;
         mapping_apply(&g_settings, s2_link_mapping_ctx(), &in, &out);
+        uint32_t prev = s_raw_buttons;
         s_raw_buttons = in.buttons;
+        if (!g_settings.quick_remap_off) {
+            in_button_t back;
+            if (mapping_quick_remap(&g_settings, prev, in.buttons, &back)) {
+                uint8_t o = g_settings.button_map[back];
+                LOG("remap: %s -> %s", in_button_name(back), o ? out_button_name((out_button_t)o) : "nothing");
+                settings_save_later();
+                s2_link_test_rumble();   // feedback on the controller
+            }
+            // Keep the chord's buttons away from the host.
+            if (mapping_quick_remap_held(in.buttons)) out.buttons = 0;
+        }
+        // A button press while the host sleeps (controller still connected,
+        // i.e. within SUSPEND_DISCONNECT_MS) wakes it.
+        if ((in.buttons & ~prev) && tud_suspended()) s2_link_hook_controller_seen();
         // Charge state byte is non-zero while external power is connected.
         procon_set_input(&out, true, in.battery_mv, in.charge_state != 0 && in.charge_state != 0x20);
     } else {
@@ -149,6 +167,7 @@ void app_core_init(void) {
 }
 
 void app_core_task(void) {
+    platform_watchdog_feed();
     s2_link_task();
     update_input();
     usb_hid_task();

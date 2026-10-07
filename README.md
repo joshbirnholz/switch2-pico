@@ -26,9 +26,9 @@ Switch 2 Pro Controller  ──BLE──▶  dongle    ──USB──▶  PC / 
 | Feature | Notes |
 | --- | --- |
 | Pairing | Hold **Sync** on the controller. Uses Nintendo's own key-exchange commands; standard Bluetooth pairing would make the controller disconnect. The dongle remembers the controller. |
-| Reconnect / wake | After pairing, pressing any button reconnects. While the PC sleeps, the controller is let go so it can sleep too; a button press can wake the PC (USB remote wakeup). |
+| Reconnect / wake | After pairing, pressing any button reconnects. While the PC sleeps, the controller is let go so it can sleep too; a button press can wake the PC (USB remote wakeup; on Linux see [Waking the PC](#on-a-pc)). |
 | Buttons and sticks | Uses the controller's own calibration, with a configurable radial deadzone. |
-| GL / GR / C | Each can be mapped to any Pro Controller button (all other buttons can be remapped too). Defaults: GL → left stick click, GR → right stick click, C → unassigned. |
+| GL / GR / C | Each can be mapped to any Pro Controller button (all other buttons can be remapped too), on the configuration page or from the controller (hold C + GL/GR and press a button). Defaults: GL → left stick click, GR → right stick click, C → unassigned. |
 | Gyro and accelerometer | Converted to the Switch 1 axis layout and units. The gyro scale is auto-detected, can be calibrated, and sensitivity is adjustable. |
 | HD rumble | The host's Switch 1 HD rumble frames, including the packed multi-sample formats, are decoded and re-encoded for the Switch 2 actuators, left and right separately. |
 | Player LEDs | Follow the player number the host assigns. |
@@ -54,14 +54,16 @@ nice!nano boards ship with, the same as for openpuck.
 
 ## Installing
 
-Get the `.uf2` for your board from the GitHub Actions artifacts (or
-[build it](#building)), then:
+Download the `.uf2` for your board from the
+[**Latest build** release](https://github.com/joshbirnholz/switch2-pico/releases/tag/latest)
+(rebuilt on every push; each CI run also keeps them as artifacts), or
+[build it](#building). Then:
 
 * **Pico 2 W:** hold **BOOTSEL** while plugging it in; a drive named `RP2350`
-  appears. Copy `switch2_pico.uf2` onto it.
+  appears. Copy the `…-pico2w.uf2` file onto it.
 * **nRF52840:** double-tap reset (on a Pro Micro without a reset button,
   short RST to GND twice quickly); a drive such as `NICENANO` or
-  `FTHR840BOOT` appears. Copy `switch2_nrf52840.uf2` onto it.
+  `FTHR840BOOT` appears. Copy the `…-nrf52840.uf2` file onto it.
 
 The board reboots into the firmware. To update later, use **Firmware update
 mode** on the configuration page, which reboots into the same drive.
@@ -92,6 +94,24 @@ pairing. To forget the paired controller, hold the Pico's BOOTSEL button for
 Steam, SDL and the Linux kernel driver all treat the dongle as a wired Pro
 Controller, with gyro and rumble. In Steam, enable *Switch Controller Support*
 in Settings → Controller.
+
+**Waking the PC with the controller.** While the PC sleeps, a button press on
+the controller asks the PC to wake up. The PC has to allow it:
+
+* **Linux / SteamOS:** Linux only lets keyboards wake the PC by default.
+  Install the rule from `tools/99-switch2-pico.rules` once (in SteamOS Desktop
+  Mode, from Konsole) and replug the dongle:
+  `sudo cp tools/99-switch2-pico.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules`.
+  `cat /sys/bus/usb/devices/*/power/wakeup` should then list one more `enabled`.
+* **Windows:** Device Manager → the dongle → Power Management → *Allow this
+  device to wake the computer* (Windows may only offer this for keyboards and
+  mice).
+
+**Remapping GL/GR from the controller.** Hold **C** and **GL** (or **GR**) and
+press another button: GL (GR) now sends what that button sends, and the
+controller buzzes. Do the same again to clear it. While C + GL/GR are held,
+nothing reaches the host. Turn it off on the configuration page if you use C
+as a regular button.
 
 ### On a Switch 1 console
 
@@ -159,6 +179,13 @@ Pico LED blinks a code for 60 seconds:
 
 The full log (configuration page → Log → Download) shows the exact step and
 the Bluetooth error code. Please include it in bug reports.
+
+**The dongle stops responding** (LED frozen, the controller drops and the
+configuration page can't find it). If the firmware ever hangs, a watchdog
+restarts it after about 8 seconds. On nRF52840 boards the log from before the
+restart is usually kept: open the log after it comes back and look for
+`boot: last reset: watchdog` and the `stuck at pc=…` line just below the
+`----- reboot -----` marker.
 
 **The Wi-Fi network shows up but http://192.168.4.1 doesn't load.** Make sure
 your phone or computer stays on the `Switch2-Pico` network even though it has

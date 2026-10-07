@@ -99,6 +99,9 @@ typedef struct {
     // ---- added later: new fields go here, just before `crc`, so settings
     // saved by older firmware still load (see settings_init) ----
     uint8_t webusb_enabled;             // expose the WebUSB configuration interface
+    // Inverted so images saved before it existed (zero padding here) keep the
+    // shortcut on.
+    uint8_t quick_remap_off;            // disable the C + GL/GR + button remap shortcut
 
     uint32_t crc;
 } settings_t;

@@ -58,3 +58,39 @@ jobs:
           path: |
             build-nrf/switch2_nrf52840.uf2
             build-nrf/switch2_nrf.ino.hex
+
+  # Every push to the default branch refreshes one rolling pre-release,
+  # "latest", so the UF2 files can be downloaded directly (artifacts need a
+  # GitHub login and come zipped).
+  release:
+    if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
+    needs: [test, firmware-pico2w, firmware-nrf52840]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - name: Publish the "latest" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ver=$(head -n1 VERSION)
+          short=${GITHUB_SHA::7}
+          cp dist/switch2-nrf52840-firmware/switch2_nrf52840.uf2 "switch2-pico-v$ver-nrf52840.uf2"
+          cp dist/switch2-pico2w-firmware/switch2_pico.uf2 "switch2-pico-v$ver-pico2w.uf2"
+          notes="Built from $short on ${{ github.ref_name }}. Flash the .uf2 for your board (double-tap reset on nRF52840 boards, hold BOOTSEL on a Pico)."
+          git tag -f latest
+          git push -f origin latest
+          if gh release view latest >/dev/null 2>&1; then
+            # Drop the previous build's files (their names carry the old version).
+            for a in $(gh release view latest --json assets -q '.assets[].name'); do
+              gh release delete-asset latest "$a" -y
+            done
+            gh release edit latest --title "Latest build (v$ver, $short)" --notes "$notes" --prerelease
+          else
+            gh release create latest --title "Latest build (v$ver, $short)" --notes "$notes" --prerelease
+          fi
+          gh release upload latest switch2-pico-v$ver-*.uf2 --clobber

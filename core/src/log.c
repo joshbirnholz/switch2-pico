@@ -7,14 +7,37 @@
 #include "platform.h"
 
 #define LOG_BUF_SIZE 8192
+#define LOG_MAGIC 0x4C4F4721u   // "LOG!"
 
-static char s_buf[LOG_BUF_SIZE];
-static size_t s_head;      // next write position
-static uint32_t s_total;   // total bytes ever written
+// Kept out of the zero-initialised RAM where the board allows it, so the log
+// from before a watchdog or crash reset can still be read after the reboot.
+#if defined(S2P_LOG_NOINIT) || defined(ARDUINO_ARCH_NRF52)
+#define LOG_KEEP __attribute__((section(".noinit")))
+#else
+#define LOG_KEEP
+#endif
+
+LOG_KEEP static char s_buf[LOG_BUF_SIZE];
+LOG_KEEP static size_t s_head;      // next write position
+LOG_KEEP static uint32_t s_total;   // total bytes ever written
+LOG_KEEP static uint32_t s_magic;
+LOG_KEEP static uint32_t s_check;
 
 void log_init(void) {
+    if (s_magic == LOG_MAGIC && s_head < LOG_BUF_SIZE && s_check == (s_head ^ s_total ^ LOG_MAGIC)) {
+        static const char mark[] = "----- reboot (earlier log kept above) -----\n";
+        for (const char *p = mark; *p; p++) {
+            s_buf[s_head] = *p;
+            s_head = (s_head + 1) % LOG_BUF_SIZE;
+            s_total++;
+        }
+        s_check = s_head ^ s_total ^ LOG_MAGIC;
+        return;
+    }
     s_head = 0;
     s_total = 0;
+    s_magic = LOG_MAGIC;
+    s_check = s_head ^ s_total ^ LOG_MAGIC;
 }
 
 static void log_put(const char *s, size_t n) {
@@ -23,6 +46,7 @@ static void log_put(const char *s, size_t n) {
         s_head = (s_head + 1) % LOG_BUF_SIZE;
     }
     s_total += (uint32_t)n;
+    s_check = s_head ^ s_total ^ LOG_MAGIC;
 }
 
 void log_printf(const char *fmt, ...) {

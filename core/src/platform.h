@@ -33,6 +33,10 @@ void platform_reboot(bool bootloader);
 // Diagnostic output (debug UART / serial), one line at a time.
 void platform_log_output(const char *line);
 
+// Watchdog: started by the board's startup code, fed from app_core_task().
+// If the main loop stops for ~8 s the board resets (and logs why next boot).
+void platform_watchdog_feed(void);
+
 // Wrap-safe millisecond deadline helpers.
 static inline bool platform_time_reached(uint32_t deadline) {
     return (int32_t)(platform_millis() - deadline) >= 0;

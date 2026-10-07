@@ -125,3 +125,25 @@ void mapping_pack_stick(const uint16_t v[2], uint8_t out[3]) {
     out[1] = (uint8_t)(((v[0] >> 8) & 0x0F) | ((v[1] & 0x0F) << 4));
     out[2] = (uint8_t)(v[1] >> 4);
 }
+
+bool mapping_quick_remap_held(uint32_t raw) {
+    return (raw & S2_BTN_C) && (raw & (S2_BTN_GL | S2_BTN_GR));
+}
+
+bool mapping_quick_remap(settings_t *s, uint32_t prev, uint32_t raw, in_button_t *changed) {
+    if (!(raw & S2_BTN_C)) return false;
+    bool gl = raw & S2_BTN_GL, gr = raw & S2_BTN_GR;
+    if (gl == gr) return false;   // neither, or both (ambiguous)
+    in_button_t back = gl ? IN_GL : IN_GR;
+    uint32_t pressed = raw & ~prev;
+    for (int i = 0; i < IN_COUNT; i++) {
+        // Home stays out: C + Home is the configuration Wi-Fi hotkey.
+        if (i == IN_GL || i == IN_GR || i == IN_C || i == IN_HOME) continue;
+        if (!(pressed & IN_BITS[i])) continue;
+        uint8_t target = s->button_map[i];
+        s->button_map[back] = s->button_map[back] == target ? (uint8_t)OUT_NONE : target;
+        *changed = back;
+        return true;
+    }
+    return false;
+}

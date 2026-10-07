@@ -70,8 +70,10 @@ uint8_t const *tud_descriptor_configuration_cb(uint8_t index) {
     (void)index;
     uint16_t rlen;
     usb_hid_report_descriptor(&rlen);
-    uint8_t interval = g_settings.usb_report_interval_ms ? g_settings.usb_report_interval_ms : 8;
-    if (interval > 8) interval = 8;
+    // Poll every 1 ms: input reports are paced by usb_report_interval_ms,
+    // and replies to a host's burst of init commands go out without queueing
+    // behind an 8 ms poll.
+    const uint8_t interval = 1;
     bool webusb = g_settings.webusb_enabled;
     uint16_t total = webusb ? CONFIG_LEN : CONFIG_LEN_HID;
     const uint8_t desc[] = {

@@ -518,19 +518,7 @@ void procon_task(void) {
         LOG("procon: no host init seen, streaming 0x30 reports");
     }
 
-    // Diagnostics: a reply that can't go out for a while.
-    static uint32_t s_reply_wait_since, s_replies_logged;
-    if (s_reply_count > 0 && !usb_hid_ready()) {
-        if (!s_reply_wait_since) s_reply_wait_since = platform_millis() | 1u;
-        else if (platform_millis() - s_reply_wait_since > 200) {
-            LOG("procon: reply 0x%02x stuck: mounted=%d suspended=%d ep_ready=%d", s_replies[s_reply_head].id,
-                usb_hid_mounted(), usb_hid_suspended(), usb_hid_ep_ready());
-            s_reply_wait_since = platform_millis() | 1u;
-        }
-    } else {
-        s_reply_wait_since = 0;
-    }
-
+    static uint32_t s_replies_logged;
     if (!usb_hid_ready()) return;
 
     if (s_reply_count > 0) {

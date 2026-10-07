@@ -227,6 +227,39 @@ static void test_mapping(void) {
     CHECK(mapping_buttons(&s, &ctx, &in) & S1_BTN_L);
 }
 
+static void test_quick_remap(void) {
+    settings_t s;
+    test_defaults(&s);
+    s.button_map[IN_GL] = OUT_LSTICK;
+    in_button_t changed = IN_COUNT;
+    uint32_t chord = S2_BTN_C | S2_BTN_GL;
+
+    // C alone, or C + GL without another press: nothing.
+    CHECK(!mapping_quick_remap(&s, 0, S2_BTN_C, &changed));
+    CHECK(!mapping_quick_remap(&s, S2_BTN_C, chord, &changed));
+    CHECK(mapping_quick_remap_held(chord) && !mapping_quick_remap_held(S2_BTN_GL));
+
+    // C + GL + A: GL now sends A.
+    CHECK(mapping_quick_remap(&s, chord, chord | S2_BTN_A, &changed));
+    CHECK(changed == IN_GL && s.button_map[IN_GL] == OUT_A);
+    // Holding A doesn't repeat.
+    CHECK(!mapping_quick_remap(&s, chord | S2_BTN_A, chord | S2_BTN_A, &changed));
+    // Same again clears it.
+    CHECK(mapping_quick_remap(&s, chord, chord | S2_BTN_A, &changed));
+    CHECK(s.button_map[IN_GL] == OUT_NONE);
+    // GL follows what the pressed button currently sends.
+    s.button_map[IN_B] = OUT_X;
+    CHECK(mapping_quick_remap(&s, chord, chord | S2_BTN_B, &changed));
+    CHECK(s.button_map[IN_GL] == OUT_X);
+
+    // GR works the same and leaves GL alone; both held is ambiguous; Home is skipped.
+    uint32_t chord_r = S2_BTN_C | S2_BTN_GR;
+    CHECK(mapping_quick_remap(&s, chord_r, chord_r | S2_BTN_UP, &changed));
+    CHECK(changed == IN_GR && s.button_map[IN_GR] == OUT_UP && s.button_map[IN_GL] == OUT_X);
+    CHECK(!mapping_quick_remap(&s, chord | S2_BTN_GR, chord | S2_BTN_GR | S2_BTN_Y, &changed));
+    CHECK(!mapping_quick_remap(&s, chord, chord | S2_BTN_HOME, &changed));
+}
+
 int main(void) {
     test_s1_rumble_classic();
     test_s1_rumble_packed();
@@ -235,6 +268,7 @@ int main(void) {
     test_commands();
     test_input_report();
     test_mapping();
+    test_quick_remap();
     printf("%d passed, %d failed\n", g_pass, g_fail);
     return g_fail ? 1 : 0;
 }

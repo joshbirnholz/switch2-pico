@@ -169,13 +169,13 @@ static void api_settings_get(http_response_t *r) {
               "\"gyro_bias\":[%d,%d,%d],"
               "\"rumble_enabled\":%u,\"rumble_strength\":%u,\"rumble_freq_mode\":%u,\"rumble_freq_slope\":%u,"
               "\"usb_interval\":%u,\"led_follow_host\":%u,"
-              "\"usb_detach\":%u,\"usb_wakeup\":%u,\"webusb\":%u,\"hotkey\":%u,\"wifi_autostart\":%u,\"wifi_channel\":%u,"
+              "\"quick_remap\":%u,\"usb_detach\":%u,\"usb_wakeup\":%u,\"webusb\":%u,\"hotkey\":%u,\"wifi_autostart\":%u,\"wifi_channel\":%u,"
               "\"wifi_ssid\":",
               s->stick_deadzone_pct, s->stick_outer_pct, s->swap_sticks, s->gc_trigger_threshold, s->gyro_enabled,
               s->gyro_range, s->gyro_scale_pct, s->accel_scale_pct, s->gyro_bias[0], s->gyro_bias[1],
               s->gyro_bias[2], s->rumble_enabled, s->rumble_strength_pct, s->rumble_freq_mode,
               s->rumble_freq_slope, s->usb_report_interval_ms,
-              s->led_follow_host, s->usb_detach_when_idle, s->usb_remote_wakeup, s->webusb_enabled, s->hotkey_enabled,
+              s->led_follow_host, !s->quick_remap_off, s->usb_detach_when_idle, s->usb_remote_wakeup, s->webusb_enabled, s->hotkey_enabled,
               s->wifi_autostart, s->wifi_channel);
     jb_str(&j, s->wifi_ssid);
     jb_printf(&j, ",\"wifi_has_pass\":%s}", s->wifi_pass[0] ? "true" : "false");
@@ -217,6 +217,10 @@ static bool apply_kv(settings_t *s, const char *k, const char *v, bool *usb_reco
             }
         }
         return false;
+    }
+    if (strcmp(k, "quick_remap") == 0) {
+        s->quick_remap_off = atoi(v) ? 0 : 1;
+        return true;
     }
     if (strcmp(k, "wifi_ssid") == 0) {
         snprintf(s->wifi_ssid, sizeof s->wifi_ssid, "%s", v);

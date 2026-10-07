@@ -86,8 +86,10 @@ public:
         uint8_t ep_out = TinyUSBDevice.allocEndpoint(TUSB_DIR_OUT);
         uint16_t rlen;
         usb_hid_report_descriptor(&rlen);
-        uint8_t interval = g_settings.usb_report_interval_ms ? g_settings.usb_report_interval_ms : 8;
-        if (interval > 8) interval = 8;
+        // Poll every 1 ms: input reports are paced by usb_report_interval_ms,
+        // and replies to a host's burst of init commands go out without
+        // queueing behind an 8 ms poll (as openpuck does).
+        const uint8_t interval = 1;
         const uint8_t desc[] = {
             9, TUSB_DESC_INTERFACE, itf, 0, 2, TUSB_CLASS_HID, 0, 0, 0,
             9, HID_DESC_TYPE_HID, U16_TO_U8S_LE(0x0111), 0, 1, HID_DESC_TYPE_REPORT, U16_TO_U8S_LE(rlen),
@@ -130,6 +132,9 @@ static void usb_setup(void) {
     if (!g_settings.usb_detach_when_idle) TinyUSBDevice.attach();
 }
 
+extern "C" void platform_watchdog_start(void);
+extern "C" void platform_log_reset_reason(void);
+
 extern "C" void app_wifi_stop(void) {
     // No Wi-Fi on this board.
 }
@@ -143,6 +148,8 @@ void setup() {
 #endif
     log_init();
     LOG("switch2-pico %s starting on nRF52840", S2P_VERSION);
+    platform_log_reset_reason();
+    platform_watchdog_start();
     InternalFS.begin();
     settings_init();
     usb_setup();

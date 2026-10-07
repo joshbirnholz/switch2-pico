@@ -87,6 +87,8 @@ int main(void) {
     stdio_init_all();
     log_init();
     LOG("switch2-pico %s starting", S2P_VERSION);
+    // Only a real timeout counts; platform_reboot() also resets via the watchdog.
+    if (watchdog_enable_caused_reboot()) LOG("boot: last reset: watchdog (main loop stuck)");
     settings_init();
 
     tud_init(0);
@@ -99,6 +101,9 @@ int main(void) {
     app_core_init();
     wifi_ap_init();
     if (g_settings.wifi_autostart && !g_settings.bonded) wifi_ap_start();
+
+    // Reset if the main loop stops for 8 s (fed from app_core_task()).
+    watchdog_enable(8000, true);
 
     for (;;) {
         tud_task();

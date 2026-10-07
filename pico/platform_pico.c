@@ -9,6 +9,8 @@
 #include "pico/time.h"
 #include "pico/unique_id.h"
 
+#include "hardware/watchdog.h"
+
 #include "platform.h"
 
 // One flash sector for settings, well clear of the BTstack TLV bank at the
@@ -61,6 +63,10 @@ bool platform_settings_write(const void *src, size_t len) {
     memset(s_page_buf, 0xFF, sizeof s_page_buf);
     memcpy(s_page_buf, src, len);
     return flash_safe_execute(flash_write_cb, NULL, 500) == PICO_OK;
+}
+
+void platform_watchdog_feed(void) {
+    watchdog_update();
 }
 
 void platform_log_output(const char *line) {

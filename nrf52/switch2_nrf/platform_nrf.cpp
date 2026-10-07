@@ -6,6 +6,7 @@
 #include <InternalFileSystem.h>
 #include <bluefruit.h>
 
+#include "log.h"
 #include "platform.h"
 
 using namespace Adafruit_LittleFS_Namespace;
@@ -65,6 +66,72 @@ void platform_reboot(bool bootloader) {
     NVIC_SystemReset();
     for (;;) {
     }
+}
+
+// ---------------------------------------------------------------------------
+// Watchdog and reset diagnostics
+// ---------------------------------------------------------------------------
+// The WDT raises its TIMEOUT interrupt two 32 kHz cycles before it resets the
+// chip. The handler stores the interrupted PC/LR in RAM that isn't zeroed at
+// boot, so the next boot can log where the firmware was stuck (look the
+// address up with arm-none-eabi-addr2line -e switch2_nrf.ino.elf). Priority 2
+// is the highest an application may use alongside the SoftDevice; a hang with
+// interrupts masked therefore leaves no PC, which is itself a clue.
+struct hang_frame_t {
+    uint32_t pc, lr, magic;
+};
+#define HANG_MAGIC 0x48414E47u   // "HANG"
+__attribute__((section(".noinit"))) volatile hang_frame_t g_s2p_hang;
+
+extern "C" __attribute__((naked)) void WDT_IRQHandler(void) {
+    __asm volatile(
+        "tst lr, #4          \n"
+        "ite eq              \n"
+        "mrseq r0, msp       \n"
+        "mrsne r0, psp       \n"
+        "ldr r1, [r0, #24]   \n"   // stacked PC
+        "ldr r3, [r0, #20]   \n"   // stacked LR
+        "ldr r2, =g_s2p_hang \n"
+        "str r1, [r2, #0]    \n"
+        "str r3, [r2, #4]    \n"
+        "ldr r1, =0x48414E47 \n"
+        "str r1, [r2, #8]    \n"
+        "b .                 \n"   // the reset follows within microseconds
+        ".ltorg              \n");
+}
+
+void platform_watchdog_start(void) {
+    if (!NRF_WDT->RUNSTATUS) {
+        NRF_WDT->CONFIG = (WDT_CONFIG_HALT_Pause << WDT_CONFIG_HALT_Pos) | (WDT_CONFIG_SLEEP_Run << WDT_CONFIG_SLEEP_Pos);
+        NRF_WDT->CRV = 8UL * 32768UL - 1;   // ~8 s
+        NRF_WDT->RREN = WDT_RREN_RR0_Msk;
+        NRF_WDT->INTENSET = WDT_INTENSET_TIMEOUT_Msk;
+        NVIC_SetPriority(WDT_IRQn, 2);
+        NVIC_ClearPendingIRQ(WDT_IRQn);
+        NVIC_EnableIRQ(WDT_IRQn);
+        NRF_WDT->TASKS_START = 1;
+    }
+    NRF_WDT->RR[0] = WDT_RR_RR_Reload;
+}
+
+void platform_watchdog_feed(void) {
+    NRF_WDT->RR[0] = WDT_RR_RR_Reload;
+}
+
+void platform_log_reset_reason(void) {
+    uint32_t r = NRF_POWER->RESETREAS;
+    NRF_POWER->RESETREAS = r;   // write-1-to-clear, so the next boot sees fresh bits
+    const char *why = r & POWER_RESETREAS_DOG_Msk      ? "watchdog (main loop stuck)"
+                    : r & POWER_RESETREAS_LOCKUP_Msk   ? "CPU lockup"
+                    : r & POWER_RESETREAS_SREQ_Msk     ? "software (reboot or crash)"
+                    : r & POWER_RESETREAS_RESETPIN_Msk ? "reset button"
+                    : r & POWER_RESETREAS_VBUS_Msk     ? "USB power"
+                    : r ? "other" : "power on";
+    LOG("boot: last reset: %s (RESETREAS 0x%08lx)", why, (unsigned long)r);
+    if ((r & POWER_RESETREAS_DOG_Msk) && g_s2p_hang.magic == HANG_MAGIC) {
+        LOG("boot: stuck at pc=0x%08lx lr=0x%08lx", (unsigned long)g_s2p_hang.pc, (unsigned long)g_s2p_hang.lr);
+    }
+    g_s2p_hang.magic = 0;
 }
 
 void platform_log_output(const char *line) {
