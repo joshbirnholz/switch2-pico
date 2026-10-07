@@ -72,6 +72,9 @@ void settings_defaults(settings_t *s) {
     s->button_map[IN_GR] = OUT_RSTICK;
     s->button_map[IN_C] = OUT_NONE;
 
+    for (int m = 0; m < MODE_MAP_SLOTS; m++) settings_default_mode_map((usb_mode_t)m, s->mode_map[m]);
+    s->ext_rev = 1;
+
     s->stick_deadzone_pct = 6;
     s->stick_outer_pct = 95;
     s->swap_sticks = 0;
@@ -118,6 +121,9 @@ void settings_sanitize(settings_t *s) {
     for (int i = 0; i < IN_COUNT; i++) {
         if (s->button_map[i] >= OUT_COUNT) s->button_map[i] = OUT_NONE;
     if (s->usb_mode >= USB_MODE_COUNT) s->usb_mode = USB_MODE_SWITCH_PRO;
+    for (int m = 0; m < MODE_MAP_SLOTS; m++)
+        for (int i = 0; i < IN_COUNT; i++)
+            if (s->mode_map[m][i] >= GP_COUNT) s->mode_map[m][i] = GP_NONE;
     }
     s->stick_deadzone_pct = clamp_u8(s->stick_deadzone_pct, 0, 40);
     s->stick_outer_pct = clamp_u8(s->stick_outer_pct, 50, 100);
@@ -158,6 +164,11 @@ void settings_init(void) {
         settings_defaults(&g_settings);
         memcpy(&g_settings, raw, stored->size - 4u);
         g_settings.size = sizeof g_settings;
+        if (g_settings.ext_rev != 1) {
+            // Saved before the per-mode maps existed (that byte was padding).
+            for (int m = 0; m < MODE_MAP_SLOTS; m++) settings_default_mode_map((usb_mode_t)m, g_settings.mode_map[m]);
+            g_settings.ext_rev = 1;
+        }
         settings_sanitize(&g_settings);
         LOG("settings: loaded from flash (bonded=%d%s)", g_settings.bonded,
             stored->size != sizeof(settings_t) ? ", migrated" : "");

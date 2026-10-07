@@ -154,16 +154,29 @@ static void api_status(http_response_t *r) {
 // ---------------------------------------------------------------------------
 static void api_settings_get(http_response_t *r) {
     jbuf_t j;
-    if (!jb_init(&j, 2048)) return respond_text(r, 500, "oom");
+    if (!jb_init(&j, 3072)) return respond_text(r, 500, "oom");
     const settings_t *s = &g_settings;
-    jb_printf(&j, "{\"map\":{");
+    // The button map shown and edited is the active USB mode's: Switch Pro
+    // uses button_map (out_button_t), the other modes their mode_map
+    // (gp_out_t, outputs the mode lacks are null).
+    usb_mode_t mode = usb_mode_active();
+    bool sw = mode == USB_MODE_SWITCH_PRO;
+    const uint8_t *map = sw ? s->button_map : s->mode_map[mode];
+    uint8_t defaults[IN_COUNT];
+    settings_default_mode_map(mode, defaults);
+    jb_printf(&j, "{\"map_family\":\"%s\",\"map\":{", sw ? "switch" : "gp");
     for (int i = 0; i < IN_COUNT; i++) {
-        jb_printf(&j, "%s\"%s\":%u", i ? "," : "", in_button_name((in_button_t)i), s->button_map[i]);
+        jb_printf(&j, "%s\"%s\":%u", i ? "," : "", in_button_name((in_button_t)i), map[i]);
     }
-    jb_printf(&j, "},\"outputs\":[");
-    for (int i = 0; i < OUT_COUNT; i++) {
+    jb_printf(&j, "},\"default_map\":[");
+    for (int i = 0; i < IN_COUNT; i++) jb_printf(&j, "%s%u", i ? "," : "", defaults[i]);
+    jb_printf(&j, "],\"outputs\":[");
+    int n_out = sw ? OUT_COUNT : GP_COUNT;
+    for (int i = 0; i < n_out; i++) {
         jb_printf(&j, "%s", i ? "," : "");
-        jb_str(&j, out_button_name((out_button_t)i));
+        const char *name = sw ? out_button_name((out_button_t)i) : usb_mode_output_name(mode, (gp_out_t)i);
+        if (name) jb_str(&j, name);
+        else jb_printf(&j, "null");
     }
     jb_printf(&j,
               "],\"deadzone\":%u,\"outer\":%u,\"swap_sticks\":%u,\"gc_threshold\":%u,"
@@ -212,9 +225,11 @@ typedef struct {
 
 static bool apply_kv(settings_t *s, const char *k, const char *v, bool *usb_reconnect) {
     if (strncmp(k, "map_", 4) == 0) {
+        usb_mode_t mode = usb_mode_active();
+        uint8_t *map = mode == USB_MODE_SWITCH_PRO ? s->button_map : s->mode_map[mode];
         for (int i = 0; i < IN_COUNT; i++) {
             if (strcmp(k + 4, in_button_name((in_button_t)i)) == 0) {
-                s->button_map[i] = (uint8_t)atoi(v);
+                map[i] = (uint8_t)atoi(v);
                 return true;
             }
         }

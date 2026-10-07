@@ -11,6 +11,7 @@
 
 #include "app.h"
 #include "ds5.h"
+#include "x360.h"
 #include "log.h"
 #include "mapping.h"
 #include "platform.h"
@@ -107,9 +108,29 @@ static void update_input(void) {
         // A button press while the host sleeps (controller still connected,
         // i.e. within SUSPEND_DISCONNECT_MS) wakes it.
         if ((in.buttons & ~prev) && tud_suspended()) s2_link_hook_controller_seen();
-        if (usb_mode_active() == USB_MODE_DUALSENSE_EDGE) {
-            // GL/GR/C are real buttons in this mode: no quick remap or macros.
-            ds5_set_input(&in, s2_link_mapping_ctx(), true);
+        usb_mode_t mode = usb_mode_active();
+        if (mode != USB_MODE_SWITCH_PRO) {
+            // Generic modes: the mode's own map (gp_out_t), same shortcuts.
+            uint8_t *map = g_settings.mode_map[mode];
+            const mapping_ctx_t *ctx = s2_link_mapping_ctx();
+            if (!g_settings.quick_remap_off) {
+                in_button_t back;
+                if (mapping_quick_remap_map(map, prev, in.buttons, &back)) {
+                    const char *n = usb_mode_output_name(mode, (gp_out_t)map[back]);
+                    LOG("remap: %s -> %s", in_button_name(back), n ? n : "?");
+                    settings_save_later();
+                    s2_link_test_rumble();
+                }
+            }
+            uint32_t gp = mapping_gp_buttons(&g_settings, map, ctx, &in);
+            if (!g_settings.quick_remap_off && mapping_quick_remap_held(in.buttons)) gp = 0;
+            switch (mapping_macro_run(&macro, map, GP_MACRO_QAM, prev, in.buttons, platform_millis())) {
+            case MACRO_GUIDE: gp |= GP_BIT(GP_GUIDE); break;
+            case MACRO_GUIDE_SOUTH: gp |= GP_BIT(GP_GUIDE) | GP_BIT(GP_SOUTH); break;
+            default: break;
+            }
+            if (mode == USB_MODE_XBOX360) x360_set_input(&in, ctx, gp, true);
+            else ds5_set_input(&in, ctx, gp, true);
             return;
         }
         procon_input_t out;
@@ -134,7 +155,8 @@ static void update_input(void) {
         memset(&macro, 0, sizeof macro);
         s_raw_buttons = 0;
         procon_set_input(NULL, false, 0, false);
-        ds5_set_input(NULL, NULL, false);
+        ds5_set_input(NULL, NULL, 0, false);
+        x360_set_input(NULL, NULL, 0, false);
     }
 }
 
@@ -179,6 +201,7 @@ void app_core_init(void) {
     LOG("usb: mode %s", usb_mode_name(usb_mode_active()));
     procon_init();
     ds5_init();
+    x360_init();
     s2_link_init();
 }
 
@@ -187,8 +210,12 @@ void app_core_task(void) {
     s2_link_task();
     update_input();
     usb_hid_task();
-    if (usb_mode_active() == USB_MODE_DUALSENSE_EDGE) ds5_task();
-    else procon_task();
+    switch (usb_mode_active()) {
+    case USB_MODE_DUALSENSE_EDGE:
+    case USB_MODE_DUALSENSE: ds5_task(); break;
+    case USB_MODE_XBOX360: x360_task(); break;
+    default: procon_task(); break;
+    }
     webusb_task();
     suspend_task();
     settings_task();

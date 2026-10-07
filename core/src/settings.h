@@ -47,8 +47,30 @@ typedef enum {
 typedef enum {
     USB_MODE_SWITCH_PRO = 0,      // wired Switch (1) Pro Controller: Switch consoles, Steam, SDL
     USB_MODE_DUALSENSE_EDGE = 1,  // DualSense Edge: GL/GR/C become paddles/Fn that Steam Input can map
+    USB_MODE_DUALSENSE = 2,       // DualSense
+    USB_MODE_XBOX360 = 3,         // wired Xbox 360 controller (XInput)
     USB_MODE_COUNT
 } usb_mode_t;
+
+// Outputs of the non-Switch modes, by position (South = Cross / Xbox A).
+// Each mode renders the ones it has (see usb_mode.c) and ignores the rest.
+typedef enum {
+    GP_NONE = 0,
+    GP_SOUTH, GP_EAST, GP_WEST, GP_NORTH,
+    GP_L1, GP_R1, GP_L2, GP_R2,
+    GP_SELECT, GP_START, GP_L3, GP_R3, GP_GUIDE,
+    GP_UP, GP_DOWN, GP_LEFT, GP_RIGHT,
+    GP_TOUCHPAD,        // touchpad click, centre
+    GP_TP_LEFT,         // touchpad click, left half
+    GP_TP_RIGHT,        // touchpad click, right half
+    GP_MIC,
+    GP_PADDLE_L, GP_PADDLE_R,
+    GP_FN_L, GP_FN_R,
+    GP_MACRO_QAM,       // tap: Guide, then Guide + South (Steam quick access)
+    GP_COUNT
+} gp_out_t;
+
+#define MODE_MAP_SLOTS 8   // per-mode button maps (index = usb_mode_t); room for more modes
 
 #define SETTINGS_MAGIC   0x53325043u   // "S2PC"
 #define SETTINGS_VERSION 1
@@ -112,6 +134,8 @@ typedef struct {
     // shortcut on.
     uint8_t quick_remap_off;            // disable the C + GL/GR + button remap shortcut
     uint8_t usb_mode;                   // usb_mode_t (0 in images saved before it existed)
+    uint8_t ext_rev;                    // 0 in images saved before mode_map existed
+    uint8_t mode_map[MODE_MAP_SLOTS][IN_COUNT];   // gp_out_t per button, for the non-Switch modes
 
     uint32_t crc;
 } settings_t;
@@ -127,6 +151,9 @@ void settings_save_later(void);
 void settings_save_now(void);
 void settings_task(void);
 void settings_factory_reset(void);
+
+// Default button map of a non-Switch mode.
+void settings_default_mode_map(usb_mode_t mode, uint8_t map[IN_COUNT]);
 
 const char *in_button_name(in_button_t b);
 const char *out_button_name(out_button_t b);

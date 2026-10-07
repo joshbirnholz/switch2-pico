@@ -6,6 +6,8 @@
 #include <string.h>
 
 #include "ds5.h"
+#include "usb_mode.h"
+#include "x360.h"
 #include "hd_rumble.h"
 #include "mapping.h"
 #include "s2_proto.h"
@@ -41,6 +43,7 @@ bool usb_hid_send(uint8_t id, const uint8_t *d, uint16_t n) { (void)id; (void)d;
 void procon_hook_rumble(const rumble_sample_t *l, int nl, const rumble_sample_t *r, int nr) { (void)l; (void)nl; (void)r; (void)nr; }
 void procon_hook_player_lights(uint8_t lights) { (void)lights; }
 void log_printf(const char *fmt, ...) { (void)fmt; }
+usb_mode_t usb_mode_active(void) { return USB_MODE_DUALSENSE_EDGE; }
 
 static void test_defaults(settings_t *s) {
     memset(s, 0, sizeof *s);
@@ -319,22 +322,41 @@ static void test_ds5(void) {
     CHECK(r[33] == 0x80 && r[37] == 0x80);
     CHECK(r[28] == (3000 & 0xFF) && r[29] == (3000 >> 8));
 
-    // Positional face buttons, d-pad, extras, full stick deflection (y up = 0).
-    st.s1_buttons = S1_BTN_A | S1_BTN_B | S1_BTN_UP | S1_BTN_RIGHT | S1_BTN_HOME | S1_BTN_ZL;
-    st.gl = st.gr = st.c = true;
+    // Face buttons, d-pad, guide; full stick deflection (DualSense y up = 0).
+    st.gp = GP_BIT(GP_EAST) | GP_BIT(GP_SOUTH) | GP_BIT(GP_UP) | GP_BIT(GP_RIGHT) | GP_BIT(GP_GUIDE) |
+            GP_BIT(GP_L2) | GP_BIT(GP_PADDLE_L) | GP_BIT(GP_PADDLE_R) | GP_BIT(GP_FN_R) | GP_BIT(GP_MIC);
     st.stick_l[1] = S1_STICK_CENTER + S1_STICK_RANGE;
     st.stick_r[0] = S1_STICK_CENTER - S1_STICK_RANGE;
     st.trigger_l = 255;
     ds5_build_input(&st, 0, 0, r);
     CHECK((r[8] & 0x0F) == 1);              // up-right
-    CHECK((r[8] & 0x40) && (r[8] & 0x20));  // circle (A), cross (B)
+    CHECK((r[8] & 0x40) && (r[8] & 0x20));  // circle, cross
     CHECK(!(r[8] & 0x10) && !(r[8] & 0x80));
     CHECK(r[9] & 0x04);                     // L2
-    CHECK(r[10] == (0x01 | 0x20 | 0x40 | 0x80));   // PS, right Fn, paddles
+    CHECK(r[10] == (0x01 | 0x04));          // PS, mic; no paddles / Fn on a plain DualSense
+    st.edge = true;
+    ds5_build_input(&st, 0, 0, r);
+    CHECK(r[10] == (0x01 | 0x04 | 0x20 | 0x40 | 0x80));   // + right Fn, paddles
     CHECK(r[2] == 1 && r[3] == 1);
     CHECK(r[5] == 255);
 
+    // Touchpad clicks: click bit plus a touch on the matching side.
+    st.gp = GP_BIT(GP_TP_LEFT);
+    st.touch_id = 5;
+    ds5_build_input(&st, 0, 0, r);
+    int x = r[34] | ((r[35] & 0x0F) << 8), y = (r[35] >> 4) | (r[36] << 4);
+    CHECK((r[10] & 0x02) && r[33] == 5 && x < 960 && y == 540);
+    st.gp = GP_BIT(GP_TP_RIGHT);
+    ds5_build_input(&st, 0, 0, r);
+    x = r[34] | ((r[35] & 0x0F) << 8);
+    CHECK((r[10] & 0x02) && x > 960);
+    st.gp = GP_BIT(GP_TOUCHPAD);
+    ds5_build_input(&st, 0, 0, r);
+    x = r[34] | ((r[35] & 0x0F) << 8);
+    CHECK((r[10] & 0x02) && x == 960 && r[37] == 0x80);
+
     // Motion: 16 LSB per deg/s, 8192 LSB per g.
+    st.gp = 0;
     st.gyro_dps[1] = 100.0f;
     st.accel_g[2] = -1.0f;
     ds5_build_input(&st, 0, 0, r);
@@ -382,6 +404,64 @@ static void test_ds5(void) {
     CHECK(dl > 0 && d[0] == 0x05 && d[dl - 1] == 0xC0);
 }
 
+static void test_x360(void) {
+    uint16_t c[2] = {S1_STICK_CENTER, S1_STICK_CENTER};
+    uint16_t full[2] = {S1_STICK_CENTER + S1_STICK_RANGE, S1_STICK_CENTER - S1_STICK_RANGE};
+    uint8_t r[X360_INPUT_LEN];
+    x360_build_input(0, c, c, 0, 0, r);
+    CHECK(r[0] == 0x00 && r[1] == 20 && r[2] == 0 && r[3] == 0 && r[6] == 0 && r[7] == 0);
+    x360_build_input(GP_BIT(GP_SOUTH) | GP_BIT(GP_NORTH) | GP_BIT(GP_GUIDE) | GP_BIT(GP_L1) | GP_BIT(GP_UP) |
+                         GP_BIT(GP_START) | GP_BIT(GP_R2),
+                     full, c, 10, 0, r);
+    CHECK(r[2] == (0x01 | 0x10));                    // up, start
+    CHECK(r[3] == (0x01 | 0x04 | 0x10 | 0x80));      // LB, guide, A, Y
+    CHECK(r[4] == 10 && r[5] == 255);
+    CHECK((int16_t)(r[6] | r[7] << 8) == 32767);     // x right
+    CHECK((int16_t)(r[8] | r[9] << 8) == -32767);    // y down (XInput y grows upwards)
+
+    uint8_t rum[8] = {0x00, 0x08, 0x00, 200, 50, 0, 0, 0};
+    x360_output_t o;
+    CHECK(x360_parse_output(rum, sizeof rum, &o) && o.rumble && o.motor_left == 200 && o.motor_right == 50);
+    uint8_t led[3] = {0x01, 0x03, 0x07};
+    CHECK(x360_parse_output(led, sizeof led, &o) && o.led && o.player == 2);
+    led[2] = 0x02;
+    CHECK(x360_parse_output(led, sizeof led, &o) && o.player == 1);
+
+    uint8_t desc[X360_ITF_DESC_LEN];
+    x360_interface_desc(desc, 0, 0x81, 0x01);
+    CHECK(desc[5] == 0xFF && desc[6] == 0x5D && desc[7] == 0x01);   // vendor, XInput
+    CHECK(desc[9] == 17 && desc[10] == 0x21 && desc[15] == 0x81 && desc[22] == 0x01);
+    CHECK(desc[26 + 2] == 0x81 && desc[33 + 2] == 0x01);
+}
+
+static void test_gp_map(void) {
+    settings_t s;
+    test_defaults(&s);
+    uint8_t map[IN_COUNT];
+    settings_default_mode_map(USB_MODE_DUALSENSE_EDGE, map);
+    CHECK(map[IN_A] == GP_EAST && map[IN_B] == GP_SOUTH && map[IN_GL] == GP_PADDLE_L && map[IN_C] == GP_FN_R);
+    settings_default_mode_map(USB_MODE_XBOX360, map);
+    CHECK(map[IN_GL] == GP_NONE && map[IN_CAPTURE] == GP_NONE && map[IN_HOME] == GP_GUIDE);
+    s2_input_t in;
+    memset(&in, 0, sizeof in);
+    in.buttons = S2_BTN_A | S2_BTN_ZL | S2_BTN_GL;
+    map[IN_GL] = GP_MACRO_QAM;   // macros never set a button directly
+    CHECK(mapping_gp_buttons(&s, map, NULL, &in) == (GP_BIT(GP_EAST) | GP_BIT(GP_L2)));
+    // Quick remap works on generic maps: C + GR + Y -> GR = Y's output (West).
+    in_button_t changed;
+    uint32_t chord = S2_BTN_C | S2_BTN_GR;
+    CHECK(mapping_quick_remap_map(map, chord, chord | S2_BTN_Y, &changed) && changed == IN_GR &&
+          map[IN_GR] == GP_WEST);
+    CHECK(mapping_quick_remap_map(map, chord, chord | S2_BTN_Y, &changed) && map[IN_GR] == GP_NONE);
+    // Generic macro phases.
+    mapping_macro_t m;
+    memset(&m, 0, sizeof m);
+    map[IN_C] = GP_MACRO_QAM;
+    CHECK(mapping_macro_run(&m, map, GP_MACRO_QAM, 0, S2_BTN_C, 0) == MACRO_IDLE);
+    CHECK(mapping_macro_run(&m, map, GP_MACRO_QAM, S2_BTN_C, 0, 10) == MACRO_GUIDE);
+    CHECK(mapping_macro_run(&m, map, GP_MACRO_QAM, 0, 0, 10 + MACRO_HOME_MS) == MACRO_GUIDE_SOUTH);
+}
+
 static void test_imu_sdl(void) {
     settings_t s;
     test_defaults(&s);
@@ -421,6 +501,8 @@ int main(void) {
     test_quick_remap();
     test_macro();
     test_ds5();
+    test_x360();
+    test_gp_map();
     test_imu_sdl();
     printf("%d passed, %d failed\n", g_pass, g_fail);
     return g_fail ? 1 : 0;

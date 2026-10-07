@@ -7,6 +7,7 @@
 #include "platform.h"
 #include "settings.h"
 #include "usb_hid.h"
+#include "usb_mode.h"
 
 // Layouts follow the DualSense USB reports as documented by SDL
 // (SDL_hidapi_ps5.c) and the Linux hid-playstation driver.
@@ -88,7 +89,7 @@ uint16_t ds5_get_feature(uint8_t report_id, uint8_t *buf, uint16_t len) {
         memcpy(r + 1, "Jan  1 2026", 11);
         memcpy(r + 12, "00:00:00", 8);
         put16(r + 20, 0x0002);          // firmware type
-        put16(r + 22, 0x0044);          // software series
+        put16(r + 22, usb_mode_active() == USB_MODE_DUALSENSE_EDGE ? 0x0044 : 0x0004);   // software series
         put32(r + 24, 0x01000216);      // hardware info
         put32(r + 28, 0x01000100);      // firmware version
         put16(r + 44, 0x0300);          // update version
@@ -120,7 +121,7 @@ static int16_t sat16f(float v) {
 }
 
 static uint8_t hat(uint32_t b) {
-    bool up = b & S1_BTN_UP, down = b & S1_BTN_DOWN, left = b & S1_BTN_LEFT, right = b & S1_BTN_RIGHT;
+    bool up = b & GP_BIT(GP_UP), down = b & GP_BIT(GP_DOWN), left = b & GP_BIT(GP_LEFT), right = b & GP_BIT(GP_RIGHT);
     if (up && right) return 1;
     if (down && right) return 3;
     if (down && left) return 5;
@@ -132,9 +133,20 @@ static uint8_t hat(uint32_t b) {
     return 8;
 }
 
+#define TP_W 1920
+#define TP_H 1080
+
+static void touch_point(uint8_t *p, bool down, uint8_t id, int x, int y) {
+    p[0] = (uint8_t)(down ? (id & 0x7F) : 0x80);   // bit 7 set: not touching
+    p[1] = (uint8_t)x;
+    p[2] = (uint8_t)(((x >> 8) & 0x0F) | ((y & 0x0F) << 4));
+    p[3] = (uint8_t)(y >> 4);
+}
+
 void ds5_build_input(const ds5_state_t *st, uint8_t seq, uint32_t timestamp, uint8_t r[DS5_INPUT_REPORT_LEN]) {
     memset(r, 0, DS5_INPUT_REPORT_LEN);
-    uint32_t b = st->s1_buttons;
+    uint32_t b = st->gp;
+#define ON(g, bit) ((b & GP_BIT(g)) ? (bit) : 0)
     r[0] = 0x01;
     // DualSense Y axes grow downwards.
     r[1] = stick8(st->stick_l[0], false);
@@ -144,23 +156,26 @@ void ds5_build_input(const ds5_state_t *st, uint8_t seq, uint32_t timestamp, uin
     r[5] = st->trigger_l;
     r[6] = st->trigger_r;
     r[7] = seq;
-    // Face buttons by position: Nintendo A (right) = Circle, B (bottom) =
-    // Cross, X (top) = Triangle, Y (left) = Square.
-    r[8] = (uint8_t)(hat(b) | (b & S1_BTN_Y ? 0x10 : 0) | (b & S1_BTN_B ? 0x20 : 0) | (b & S1_BTN_A ? 0x40 : 0) |
-                     (b & S1_BTN_X ? 0x80 : 0));
-    r[9] = (uint8_t)((b & S1_BTN_L ? 0x01 : 0) | (b & S1_BTN_R ? 0x02 : 0) | (b & S1_BTN_ZL || st->trigger_l > 30 ? 0x04 : 0) |
-                     (b & S1_BTN_ZR || st->trigger_r > 30 ? 0x08 : 0) | (b & S1_BTN_MINUS ? 0x10 : 0) |
-                     (b & S1_BTN_PLUS ? 0x20 : 0) | (b & S1_BTN_LSTICK ? 0x40 : 0) | (b & S1_BTN_RSTICK ? 0x80 : 0));
-    r[10] = (uint8_t)((b & S1_BTN_HOME ? 0x01 : 0) | (b & S1_BTN_CAPTURE ? 0x02 : 0) |   // PS, touchpad click
-                      (st->c ? 0x20 : 0) |                                               // right Fn
-                      (st->gl ? 0x40 : 0) | (st->gr ? 0x80 : 0));                        // paddles
+    r[8] = (uint8_t)(hat(b) | ON(GP_WEST, 0x10) | ON(GP_SOUTH, 0x20) | ON(GP_EAST, 0x40) | ON(GP_NORTH, 0x80));
+    r[9] = (uint8_t)(ON(GP_L1, 0x01) | ON(GP_R1, 0x02) | (b & GP_BIT(GP_L2) || st->trigger_l > 30 ? 0x04 : 0) |
+                     (b & GP_BIT(GP_R2) || st->trigger_r > 30 ? 0x08 : 0) | ON(GP_SELECT, 0x10) | ON(GP_START, 0x20) |
+                     ON(GP_L3, 0x40) | ON(GP_R3, 0x80));
+    bool tp_l = b & GP_BIT(GP_TP_LEFT), tp_c = b & GP_BIT(GP_TOUCHPAD), tp_r = b & GP_BIT(GP_TP_RIGHT);
+    r[10] = (uint8_t)(ON(GP_GUIDE, 0x01) | (tp_l || tp_c || tp_r ? 0x02 : 0) | ON(GP_MIC, 0x04));
+    if (st->edge) {
+        r[10] |= (uint8_t)(ON(GP_FN_L, 0x10) | ON(GP_FN_R, 0x20) | ON(GP_PADDLE_L, 0x40) | ON(GP_PADDLE_R, 0x80));
+    }
+#undef ON
     for (int i = 0; i < 3; i++) {
         put16(r + 16 + i * 2, sat16f(st->gyro_dps[i] * DS5_GYRO_LSB_PER_DPS));
         put16(r + 22 + i * 2, sat16f(st->accel_g[i] * DS5_ACCEL_LSB_PER_G));
     }
     put32(r + 28, timestamp);
-    r[33] = 0x80;   // touch point 1: not touching
-    r[37] = 0x80;   // touch point 2: not touching
+    // A touchpad click also needs a finger on the pad where it clicks: hosts
+    // (Steam) tell left / right clicks apart by the touch position.
+    int x = tp_l ? TP_W / 4 : tp_r ? TP_W * 3 / 4 : TP_W / 2;
+    touch_point(r + 33, tp_l || tp_c || tp_r, st->touch_id, x, TP_H / 2);
+    touch_point(r + 37, false, 0, 0, 0);
     // Battery: low nibble in tens of percent, high nibble 0 discharging / 1 charging / 2 full.
     uint8_t level = (uint8_t)(st->battery_pct >= 100 ? 10 : st->battery_pct / 10);
     uint8_t status = st->charging ? (st->battery_pct >= 100 ? 2 : 1) : 0;
@@ -219,18 +234,15 @@ static uint8_t battery_pct(uint16_t mv) {
     return (uint8_t)(p < 0 ? 0 : p > 100 ? 100 : p);
 }
 
-void ds5_set_input(const s2_input_t *in, const mapping_ctx_t *ctx, bool connected) {
+void ds5_set_input(const s2_input_t *in, const mapping_ctx_t *ctx, uint32_t gp, bool connected) {
     ds5_state_t st;
     memset(&st, 0, sizeof st);
+    st.edge = usb_mode_active() == USB_MODE_DUALSENSE_EDGE;
     st.stick_l[0] = st.stick_l[1] = st.stick_r[0] = st.stick_r[1] = S1_STICK_CENTER;
     st.battery_pct = s_state.battery_pct;
+    st.touch_id = s_state.touch_id;
     if (in && connected) {
-        const uint32_t extras = S2_BTN_GL | S2_BTN_GR | S2_BTN_C;
-        // GL/GR/C are the Edge's own buttons here; Steam Input maps them.
-        st.s1_buttons = mapping_buttons_except(&g_settings, ctx, in, extras);
-        st.gl = in->buttons & S2_BTN_GL;
-        st.gr = in->buttons & S2_BTN_GR;
-        st.c = in->buttons & S2_BTN_C;
+        st.gp = gp;
         procon_input_t tmp;
         mapping_apply(&g_settings, ctx, in, &tmp);
         memcpy(st.stick_l, tmp.stick_l, sizeof st.stick_l);
@@ -242,12 +254,15 @@ void ds5_set_input(const s2_input_t *in, const mapping_ctx_t *ctx, bool connecte
             st.trigger_l = (uint8_t)(l <= 0 ? 0 : l * 255 / (span_l > 0 ? span_l : 255));
             st.trigger_r = (uint8_t)(r <= 0 ? 0 : r * 255 / (span_r > 0 ? span_r : 255));
         }
-        if (st.s1_buttons & S1_BTN_ZL) st.trigger_l = 255;
-        if (st.s1_buttons & S1_BTN_ZR) st.trigger_r = 255;
+        if (gp & GP_BIT(GP_L2)) st.trigger_l = 255;
+        if (gp & GP_BIT(GP_R2)) st.trigger_r = 255;
         mapping_imu_sdl(&g_settings, ctx, in, st.accel_g, st.gyro_dps);
         st.battery_pct = battery_pct(in->battery_mv);
         st.charging = in->charge_state != 0 && in->charge_state != 0x20;
     }
+    // A new touch gets a new tracking id.
+    const uint32_t touch = GP_BIT(GP_TOUCHPAD) | GP_BIT(GP_TP_LEFT) | GP_BIT(GP_TP_RIGHT);
+    if ((st.gp & touch) && !(s_state.gp & touch)) st.touch_id = (uint8_t)((s_state.touch_id + 1) & 0x7F);
     s_state = st;
 }
 

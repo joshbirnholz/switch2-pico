@@ -1,6 +1,7 @@
 #include "mapping.h"
 
 #include <math.h>
+#include <string.h>
 
 // Macros map to 0 here; see mapping_macro_step().
 static const uint32_t OUT_BITS[OUT_COUNT] = {
@@ -22,6 +23,33 @@ static const uint32_t IN_BITS[IN_COUNT] = {
     [IN_UP] = S2_BTN_UP, [IN_DOWN] = S2_BTN_DOWN, [IN_LEFT] = S2_BTN_LEFT, [IN_RIGHT] = S2_BTN_RIGHT,
     [IN_GL] = S2_BTN_GL, [IN_GR] = S2_BTN_GR, [IN_C] = S2_BTN_C,
 };
+
+// Declared in settings.h (settings_defaults() uses it).
+void settings_default_mode_map(usb_mode_t mode, uint8_t map[IN_COUNT]) {
+    static const uint8_t base[IN_COUNT] = {
+        // Nintendo letters by position: A right, B bottom, X top, Y left.
+        [IN_A] = GP_EAST, [IN_B] = GP_SOUTH, [IN_X] = GP_NORTH, [IN_Y] = GP_WEST,
+        [IN_L] = GP_L1, [IN_R] = GP_R1, [IN_ZL] = GP_L2, [IN_ZR] = GP_R2,
+        [IN_MINUS] = GP_SELECT, [IN_PLUS] = GP_START, [IN_LSTICK] = GP_L3, [IN_RSTICK] = GP_R3,
+        [IN_HOME] = GP_GUIDE, [IN_CAPTURE] = GP_NONE,
+        [IN_UP] = GP_UP, [IN_DOWN] = GP_DOWN, [IN_LEFT] = GP_LEFT, [IN_RIGHT] = GP_RIGHT,
+        [IN_GL] = GP_NONE, [IN_GR] = GP_NONE, [IN_C] = GP_NONE,
+    };
+    memcpy(map, base, IN_COUNT);
+    switch (mode) {
+    case USB_MODE_DUALSENSE_EDGE:
+        map[IN_CAPTURE] = GP_TOUCHPAD;
+        map[IN_GL] = GP_PADDLE_L;
+        map[IN_GR] = GP_PADDLE_R;
+        map[IN_C] = GP_FN_R;
+        break;
+    case USB_MODE_DUALSENSE:
+        map[IN_CAPTURE] = GP_TOUCHPAD;
+        break;
+    default:
+        break;
+    }
+}
 
 uint32_t mapping_out_button_bit(out_button_t b) {
     return b < OUT_COUNT ? OUT_BITS[b] : 0;
@@ -157,6 +185,10 @@ bool mapping_quick_remap_held(uint32_t raw) {
 }
 
 bool mapping_quick_remap(settings_t *s, uint32_t prev, uint32_t raw, in_button_t *changed) {
+    return mapping_quick_remap_map(s->button_map, prev, raw, changed);
+}
+
+bool mapping_quick_remap_map(uint8_t map[IN_COUNT], uint32_t prev, uint32_t raw, in_button_t *changed) {
     if (!(raw & S2_BTN_C)) return false;
     bool gl = raw & S2_BTN_GL, gr = raw & S2_BTN_GR;
     if (gl == gr) return false;   // neither, or both (ambiguous)
@@ -166,8 +198,8 @@ bool mapping_quick_remap(settings_t *s, uint32_t prev, uint32_t raw, in_button_t
         // Home stays out: C + Home is the configuration Wi-Fi hotkey.
         if (i == IN_GL || i == IN_GR || i == IN_C || i == IN_HOME) continue;
         if (!(pressed & IN_BITS[i])) continue;
-        uint8_t target = s->button_map[i];
-        s->button_map[back] = s->button_map[back] == target ? (uint8_t)OUT_NONE : target;
+        uint8_t target = map[i];
+        map[back] = map[back] == target ? 0 : target;   // 0: OUT_NONE / GP_NONE
         *changed = back;
         return true;
     }
@@ -179,6 +211,15 @@ bool mapping_macro_busy(const mapping_macro_t *m) {
 }
 
 uint32_t mapping_macro_step(mapping_macro_t *m, const settings_t *s, uint32_t prev, uint32_t raw, uint32_t now_ms) {
+    switch (mapping_macro_run(m, s->button_map, OUT_HOME_A, prev, raw, now_ms)) {
+    case MACRO_GUIDE: return S1_BTN_HOME;
+    case MACRO_GUIDE_SOUTH: return S1_BTN_HOME | S1_BTN_A;
+    default: return 0;
+    }
+}
+
+macro_phase_t mapping_macro_run(mapping_macro_t *m, const uint8_t map[IN_COUNT], uint8_t macro_value, uint32_t prev,
+                                uint32_t raw, uint32_t now_ms) {
     uint32_t pressed = raw & ~prev;
     if (m->held) {
         if (pressed & ~m->held) m->spoiled = true;
@@ -191,7 +232,7 @@ uint32_t mapping_macro_step(mapping_macro_t *m, const settings_t *s, uint32_t pr
         }
     } else {
         for (int i = 0; i < IN_COUNT; i++) {
-            if (s->button_map[i] == OUT_HOME_A && (pressed & IN_BITS[i])) {
+            if (map[i] == macro_value && (pressed & IN_BITS[i])) {
                 m->held = IN_BITS[i];
                 // Pressed together with others (e.g. already holding GL): not a tap.
                 m->spoiled = (raw & ~IN_BITS[i]) != 0;
@@ -199,10 +240,27 @@ uint32_t mapping_macro_step(mapping_macro_t *m, const settings_t *s, uint32_t pr
             }
         }
     }
-    if (!m->running) return 0;
+    if (!m->running) return MACRO_IDLE;
     uint32_t t = now_ms - m->start_ms;
-    if (t < MACRO_HOME_MS) return S1_BTN_HOME;
-    if (t < MACRO_HOME_MS + MACRO_HOME_A_MS) return S1_BTN_HOME | S1_BTN_A;
+    if (t < MACRO_HOME_MS) return MACRO_GUIDE;
+    if (t < MACRO_HOME_MS + MACRO_HOME_A_MS) return MACRO_GUIDE_SOUTH;
     m->running = false;
-    return 0;
+    return MACRO_IDLE;
+}
+
+uint32_t mapping_gp_buttons(const settings_t *s, const uint8_t map[IN_COUNT], const mapping_ctx_t *ctx,
+                            const s2_input_t *in) {
+    uint32_t raw = in->buttons;
+    if (ctx && ctx->is_gamecube) {
+        int l = (int)in->trigger_l - ctx->gc_trigger_neutral[0];
+        int r = (int)in->trigger_r - ctx->gc_trigger_neutral[1];
+        if (l > s->gc_trigger_threshold) raw |= S2_BTN_L;
+        if (r > s->gc_trigger_threshold) raw |= S2_BTN_R;
+    }
+    uint32_t out = 0;
+    for (int i = 0; i < IN_COUNT; i++) {
+        uint8_t o = map[i];
+        if ((raw & IN_BITS[i]) && o != GP_NONE && o != GP_MACRO_QAM && o < GP_COUNT) out |= GP_BIT(o);
+    }
+    return out;
 }

@@ -38,6 +38,7 @@ uint8_t const *tud_descriptor_device_cb(void) {
     const usb_identity_t *id = usb_mode_identity();
     s_device.idVendor = id->vid;
     s_device.idProduct = id->pid;
+    s_device.bDeviceClass = s_device.bDeviceSubClass = s_device.bDeviceProtocol = id->device_class;
     // A distinct bcdDevice keeps Windows from reusing a cached "no MS OS
     // descriptor" answer from a genuine controller.
     s_device.bcdUSB = g_settings.webusb_enabled ? 0x0210 : 0x0200;
@@ -63,36 +64,26 @@ uint8_t const *tud_descriptor_bos_cb(void) {
 #define EP_OUT 0x01
 #define EP_VENDOR_IN  0x82
 #define EP_VENDOR_OUT 0x02
-#define CONFIG_LEN_HID (TUD_CONFIG_DESC_LEN + 9 + 9 + 7 + 7)
-#define CONFIG_LEN (CONFIG_LEN_HID + TUD_VENDOR_DESC_LEN)
+#define CONFIG_MAX (TUD_CONFIG_DESC_LEN + 64 + TUD_VENDOR_DESC_LEN)
 
-static uint8_t s_config[CONFIG_LEN];
+static uint8_t s_config[CONFIG_MAX];
 
 uint8_t const *tud_descriptor_configuration_cb(uint8_t index) {
     (void)index;
-    uint16_t rlen;
-    usb_hid_report_descriptor(&rlen);
-    // Poll every 1 ms: input reports are paced by usb_report_interval_ms,
-    // and replies to a host's burst of init commands go out without queueing
-    // behind an 8 ms poll.
-    const uint8_t interval = 1;
     bool webusb = g_settings.webusb_enabled;
-    uint16_t total = webusb ? CONFIG_LEN : CONFIG_LEN_HID;
-    const uint8_t desc[] = {
-        // Configuration: 1 or 2 interfaces, bus powered, remote wakeup, 500 mA
-        9, TUSB_DESC_CONFIGURATION, U16_TO_U8S_LE(total), (uint8_t)(webusb ? 2 : 1), 1, 0, 0xA0, 0xFA,
-        // Interface 0: HID, no boot protocol
-        9, TUSB_DESC_INTERFACE, 0, 0, 2, TUSB_CLASS_HID, 0, 0, 0,
-        // HID descriptor
-        9, HID_DESC_TYPE_HID, U16_TO_U8S_LE(0x0111), 0, 1, HID_DESC_TYPE_REPORT, U16_TO_U8S_LE(rlen),
-        // Endpoints
-        7, TUSB_DESC_ENDPOINT, EP_IN, TUSB_XFER_INTERRUPT, U16_TO_U8S_LE(USB_HID_EP_SIZE), interval,
-        7, TUSB_DESC_ENDPOINT, EP_OUT, TUSB_XFER_INTERRUPT, U16_TO_U8S_LE(USB_HID_EP_SIZE), interval,
+    // Interface 0: the controller (HID, or XInput in Xbox 360 mode).
+    uint16_t n = TUD_CONFIG_DESC_LEN;
+    n += usb_mode_interface_desc(s_config + n, (uint16_t)(sizeof s_config - n), 0, EP_IN, EP_OUT);
+    if (webusb) {
         // Interface 1: WebUSB configuration (vendor class, bulk)
-        TUD_VENDOR_DESCRIPTOR(1, 4, EP_VENDOR_OUT, EP_VENDOR_IN, 64),
-    };
-    static_assert(sizeof desc == CONFIG_LEN, "config descriptor length");
-    memcpy(s_config, desc, sizeof desc);
+        const uint8_t vendor[] = {TUD_VENDOR_DESCRIPTOR(1, 4, EP_VENDOR_OUT, EP_VENDOR_IN, 64)};
+        memcpy(s_config + n, vendor, sizeof vendor);
+        n += sizeof vendor;
+    }
+    // Configuration: 1 or 2 interfaces, bus powered, remote wakeup, 500 mA
+    const uint8_t head[] = {9, TUSB_DESC_CONFIGURATION, U16_TO_U8S_LE(n), (uint8_t)(webusb ? 2 : 1), 1, 0, 0xA0, 0xFA};
+    static_assert(sizeof head == TUD_CONFIG_DESC_LEN, "config header length");
+    memcpy(s_config, head, sizeof head);
     return s_config;
 }
 

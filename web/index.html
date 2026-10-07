@@ -80,13 +80,13 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
 
 <section class="card">
   <h2>Button mapping</h2>
-  <p class="note" style="margin-top:0">Choose what each physical button sends to the host. GL, GR and C have no Switch 1 equivalent and can be mapped to any button.</p>
+  <p class="note" style="margin-top:0">Choose what each physical button sends to the host, in the current USB mode (each mode keeps its own mapping). Shortcut: hold C + GL (or GR) and press a button.</p>
   <div class="grid" id="map"></div>
   <div class="row" style="margin-top:12px">
-    <button onclick="presetIdentity()">Reset to labels</button>
-    <button onclick="presetSwapFace()">Swap A/B and X/Y (positional)</button>
+    <button id="preset-reset" onclick="presetIdentity()">Reset to labels</button>
+    <button id="preset-swap" onclick="presetSwapFace()">Swap A/B and X/Y (positional)</button>
   </div>
-  <label class="check" style="margin-top:12px"><input type="checkbox" data-k="quick_remap">Remap GL/GR from the controller: hold C + GL (or GR) and press a button. Do it again to clear.</label>
+  <label class="check" style="margin-top:12px"><input type="checkbox" data-k="quick_remap">Remap GL/GR from the controller (all modes): hold C + GL (or GR) and press a button. Do it again to clear.</label>
 </section>
 
 <section class="card">
@@ -131,7 +131,7 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
   <h2>USB and system</h2>
   <div class="grid">
     <label>Appear on USB as
-      <select data-k="usb_mode"><option value="0">Switch Pro Controller (Switch consoles, PC)</option><option value="1">DualSense Edge (PC: GL/GR/C mappable in Steam)</option></select></label>
+      <select data-k="usb_mode"><option value="0">Switch Pro Controller (Switch consoles, PC)</option><option value="1">DualSense Edge (PC: GL/GR/C as paddles / Fn)</option><option value="2">DualSense</option><option value="3">Xbox 360 controller</option></select></label>
     <label>Report interval (ms)<input type="number" min="4" max="16" data-k="usb_interval"></label>
     <label class="check"><input type="checkbox" data-k="led_follow_host">Player LEDs follow the host</label>
     <label class="check"><input type="checkbox" data-k="usb_detach">Only appear on USB while a controller is connected</label>
@@ -258,7 +258,10 @@ function buildStatic(){
 }
 function render(){
   const m=$('map');
-  m.innerHTML=IN.map(n=>`<label>${n}<select data-map="${n}">${S.outputs.map((o,i)=>`<option value="${i}">${o}</option>`).join('')}</select></label>`).join('');
+  // Outputs the active USB mode lacks come back as null.
+  m.innerHTML=IN.map(n=>`<label>${n}<select data-map="${n}">${S.outputs.map((o,i)=>o===null?'':`<option value="${i}">${o}</option>`).join('')}</select></label>`).join('');
+  $('preset-swap').style.display=S.map_family==='switch'?'':'none';
+  $('preset-reset').textContent=S.map_family==='switch'?'Reset to labels':'Reset to defaults';
   for(const n of IN)m.querySelector(`[data-map="${n}"]`).value=S.map[n];
   document.querySelectorAll('[data-k]').forEach(el=>{
     const k=el.dataset.k,v=S[k];
@@ -279,7 +282,7 @@ async function save(){
   const r=await api('/api/settings',{method:'POST',body:p.toString()});
   if(r.ok){S=r.json();render();toast('Saved')}else toast('Save failed');
 }
-function presetIdentity(){IN.forEach((n,i)=>{const el=document.querySelector(`[data-map="${n}"]`);el.value=i<18?i+1:(n==='GL'?11:n==='GR'?12:0)})}
+function presetIdentity(){IN.forEach((n,i)=>{const el=document.querySelector(`[data-map="${n}"]`);el.value=S.map_family==='gp'?S.default_map[i]:(i<18?i+1:(n==='GL'?11:n==='GR'?12:0))})}
 function presetSwapFace(){const sw={A:'B',B:'A',X:'Y',Y:'X'};for(const n in sw){document.querySelector(`[data-map="${n}"]`).value=S.outputs.indexOf(sw[n])}}
 function kv(el,rows){el.innerHTML=rows.map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join('')}
 function stick(el,x,y){const i=el.querySelector('i');i.style.left=(42+(x-2048)/2048*42)+'px';i.style.top=(42-(y-2048)/2048*42)+'px'}
@@ -300,7 +303,7 @@ async function poll(){
       ['Battery',L.battery_mv?(L.battery_mv/1000).toFixed(2)+' V':'—'],
       ['Report rate',ready?L.report_hz+' Hz ('+L.conn_interval_ms+' ms interval)':'—'],
       ['Gyro scale',['not detected','16.4','14.3'][L.gyro_range]||'—'],
-      ['USB mode',s.usb_mode==='dualsense_edge'?'DualSense Edge':'Switch Pro Controller'],
+      ['USB mode',{switch_pro:'Switch Pro Controller',dualsense_edge:'DualSense Edge',dualsense:'DualSense',xbox360:'Xbox 360 controller'}[s.usb_mode]||s.usb_mode],
       ['Host',s.usb.mounted?`handshake ${s.usb.handshake?'yes':'no'}, mode 0x${s.usb.report_mode.toString(16)}, IMU ${s.usb.imu?'on':'off'}, ${s.usb.subcommands} subcommands, ${s.usb.reports} reports sent, rumble frames ${s.usb.rumble_frames}`:'—'],
     ]);
     if(s.input){

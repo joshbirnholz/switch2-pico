@@ -71,34 +71,21 @@ static void status_led_task(void) {
 }
 
 // ---------------------------------------------------------------------------
-// USB: present a wired Switch Pro Controller (057E:2009). Interface 0 is our
-// own HID class driver (core/src/usb_hid.c); interface 1 is the optional
-// WebUSB configuration channel.
+// USB: present the controller of the active USB mode (core/src/usb_mode.c).
+// Interface 0 is our own class driver (core/src/usb_hid.c: HID, or XInput in
+// Xbox 360 mode); interface 1 is the optional WebUSB configuration channel.
 // ---------------------------------------------------------------------------
 class ProControllerInterface : public Adafruit_USBD_Interface {
 public:
     uint16_t getInterfaceDescriptor(uint8_t itfnum_deprecated, uint8_t *buf, uint16_t bufsize) override {
         (void)itfnum_deprecated;
-        const uint16_t len = 9 + 9 + 7 + 7;
+        const uint16_t len = usb_mode_interface_desc_len();
         if (!buf) return len;
         if (bufsize < len) return 0;
         uint8_t itf = TinyUSBDevice.allocInterface(1);
         uint8_t ep_in = TinyUSBDevice.allocEndpoint(TUSB_DIR_IN);
         uint8_t ep_out = TinyUSBDevice.allocEndpoint(TUSB_DIR_OUT);
-        uint16_t rlen;
-        usb_hid_report_descriptor(&rlen);
-        // Poll every 1 ms: input reports are paced by usb_report_interval_ms,
-        // and replies to a host's burst of init commands go out without
-        // queueing behind an 8 ms poll (as openpuck does).
-        const uint8_t interval = 1;
-        const uint8_t desc[] = {
-            9, TUSB_DESC_INTERFACE, itf, 0, 2, TUSB_CLASS_HID, 0, 0, 0,
-            9, HID_DESC_TYPE_HID, U16_TO_U8S_LE(0x0111), 0, 1, HID_DESC_TYPE_REPORT, U16_TO_U8S_LE(rlen),
-            7, TUSB_DESC_ENDPOINT, ep_in, TUSB_XFER_INTERRUPT, U16_TO_U8S_LE(USB_HID_EP_SIZE), interval,
-            7, TUSB_DESC_ENDPOINT, ep_out, TUSB_XFER_INTERRUPT, U16_TO_U8S_LE(USB_HID_EP_SIZE), interval,
-        };
-        memcpy(buf, desc, len);
-        return len;
+        return usb_mode_interface_desc(buf, bufsize, itf, ep_in, ep_out);
     }
 };
 

@@ -95,14 +95,17 @@ static void prohid_reset(uint8_t rhport) {
 }
 
 static uint16_t prohid_open(uint8_t rhport, tusb_desc_interface_t const *desc_itf, uint16_t max_len) {
-    TU_VERIFY(desc_itf->bInterfaceClass == TUSB_CLASS_HID, 0);
-    uint16_t const drv_len = (uint16_t)(sizeof(tusb_desc_interface_t) + sizeof(tusb_hid_descriptor_hid_t) +
-                                        desc_itf->bNumEndpoints * sizeof(tusb_desc_endpoint_t));
-    TU_ASSERT(max_len >= drv_len, 0);
-
+    // HID, or the Xbox 360's vendor-class XInput interface (same shape: one
+    // class descriptor of type 0x21, then an interrupt IN/OUT pair).
+    bool hid = desc_itf->bInterfaceClass == TUSB_CLASS_HID;
+    bool xinput = desc_itf->bInterfaceClass == 0xFF && desc_itf->bInterfaceSubClass == 0x5D;
+    TU_VERIFY(hid || xinput, 0);
     uint8_t const *p_desc = tu_desc_next(desc_itf);
     TU_ASSERT(tu_desc_type(p_desc) == HID_DESC_TYPE_HID, 0);
-    s_hid.hid_desc = (tusb_hid_descriptor_hid_t const *)p_desc;
+    uint16_t const drv_len = (uint16_t)(sizeof(tusb_desc_interface_t) + tu_desc_len(p_desc) +
+                                        desc_itf->bNumEndpoints * sizeof(tusb_desc_endpoint_t));
+    TU_ASSERT(max_len >= drv_len, 0);
+    s_hid.hid_desc = hid ? (tusb_hid_descriptor_hid_t const *)p_desc : NULL;
     p_desc = tu_desc_next(p_desc);
     TU_ASSERT(usbd_open_edpt_pair(rhport, p_desc, desc_itf->bNumEndpoints, TUSB_XFER_INTERRUPT,
                                   &s_hid.ep_out, &s_hid.ep_in), 0);
@@ -117,6 +120,16 @@ static uint16_t prohid_open(uint8_t rhport, tusb_desc_interface_t const *desc_it
 static bool prohid_control_xfer_cb(uint8_t rhport, uint8_t stage, tusb_control_request_t const *request) {
     TU_VERIFY(request->bmRequestType_bit.recipient == TUSB_REQ_RCPT_INTERFACE);
     TU_VERIFY(tu_u16_low(request->wIndex) == s_hid.itf_num);
+
+    if (!s_hid.hid_desc && request->bmRequestType_bit.type == TUSB_REQ_TYPE_VENDOR) {
+        // XInput: hosts may probe with vendor requests; answer IN requests
+        // with zeros and accept OUT data, rather than stalling.
+        if (stage != CONTROL_STAGE_SETUP) return true;
+        uint16_t n = tu_min16(request->wLength, sizeof s_ctrl_buf);
+        memset(s_ctrl_buf, 0, sizeof s_ctrl_buf);
+        if (n == 0) return tud_control_status(rhport, request);
+        return tud_control_xfer(rhport, request, s_ctrl_buf, n);
+    }
 
     if (request->bmRequestType_bit.type == TUSB_REQ_TYPE_STANDARD) {
         if (stage != CONTROL_STAGE_SETUP) return true;

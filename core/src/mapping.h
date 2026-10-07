@@ -80,6 +80,11 @@ void mapping_imu(const settings_t *s, const mapping_ctx_t *ctx, const s2_input_t
                  int16_t accel_out[3], int16_t gyro_out[3]);
 void mapping_apply(const settings_t *s, const mapping_ctx_t *ctx, const s2_input_t *in, procon_input_t *out);
 
+// Generic (positional) buttons of the non-Switch modes: bit GP_BIT(gp_out_t).
+#define GP_BIT(g) (1u << (g))
+uint32_t mapping_gp_buttons(const settings_t *s, const uint8_t map[IN_COUNT], const mapping_ctx_t *ctx,
+                            const s2_input_t *in);
+
 // IMU in SDL's frame, which is also the DualSense's: accel in g (x right,
 // y up, z towards the player), gyro in deg/s (x pitch, y yaw, z roll).
 // Applies the gyro bias, scale settings and on/off switch.
@@ -91,6 +96,8 @@ void mapping_imu_sdl(const settings_t *s, const mapping_ctx_t *ctx, const s2_inp
 // the same button clears GL (GR). `prev`/`raw` are consecutive raw Switch 2
 // button states. Returns true and sets *changed when a mapping changed.
 bool mapping_quick_remap(settings_t *s, uint32_t prev, uint32_t raw, in_button_t *changed);
+// Same on any button map (0 = unassigned), e.g. a non-Switch mode's map.
+bool mapping_quick_remap_map(uint8_t map[IN_COUNT], uint32_t prev, uint32_t raw, in_button_t *changed);
 // True while a quick-remap chord is held (its buttons shouldn't reach the host).
 bool mapping_quick_remap_held(uint32_t raw);
 
@@ -108,7 +115,13 @@ typedef struct {
 #define MACRO_HOME_MS    60    // Home alone, then
 #define MACRO_HOME_A_MS  100   // Home + A, then release
 
+// Switch mode: returns the S1 buttons to add (Home, then Home + A).
 uint32_t mapping_macro_step(mapping_macro_t *m, const settings_t *s, uint32_t prev, uint32_t raw, uint32_t now_ms);
+
+typedef enum { MACRO_IDLE, MACRO_GUIDE, MACRO_GUIDE_SOUTH } macro_phase_t;
+// Any map: buttons mapped to `macro_value` run the macro; returns its phase.
+macro_phase_t mapping_macro_run(mapping_macro_t *m, const uint8_t map[IN_COUNT], uint8_t macro_value, uint32_t prev,
+                                uint32_t raw, uint32_t now_ms);
 bool mapping_macro_busy(const mapping_macro_t *m);
 
 void mapping_pack_stick(const uint16_t v[2], uint8_t out[3]);
