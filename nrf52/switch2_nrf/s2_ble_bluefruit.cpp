@@ -9,6 +9,10 @@
 // Unlike BTstack, Bluefruit never starts SMP pairing on its own (a Security
 // Request from the peripheral is simply ignored), which is what Switch 2
 // controllers need.
+//
+// Bluefruit's enableNotify() writes the CCCD with a Write Command (no
+// response). Switch 2 controllers ignore that, so notifications never start;
+// CCCDs are written here with proper Write Requests instead.
 
 #include <Arduino.h>
 #include <bluefruit.h>
@@ -93,14 +97,61 @@ static BLEClientService *s_svc;
 static BLEClientCharacteristic *s_ch_input, *s_ch_cmd, *s_ch_rsp, *s_ch_vib_pro, *s_ch_vib_jl, *s_ch_vib_jr;
 static BLEClientCharacteristic *s_ch_vib;   // whichever rumble characteristic exists
 
-// Commands go out as ATT Write Requests when the characteristic allows it
-// (that's what the controller answers; Write Commands are silently ignored).
-// A Write Request keeps its buffer until the response, one at a time.
+// One outstanding ATT Write Request per link (SoftDevice rule). Used for CCCD
+// writes from the Bluefruit task and, if the command characteristic only
+// allows "write", for commands from the loop. The buffer must stay valid until
+// the response.
 static bool s_cmd_use_req;
 static volatile bool s_req_pending;
-static volatile bool s_cccd_busy;        // enable_input_worker owns the request slot
+static volatile uint16_t s_req_handle;
+static volatile uint16_t s_req_status;
+static volatile bool s_cccd_busy;        // a CCCD write owns the request slot
+static volatile bool s_mtu_done;
 static uint32_t s_req_started;
 static uint8_t s_req_buf[256];
+static uint8_t s_cccd_buf[2];
+
+static uint16_t effective_mtu(BLEConnection *c) {
+    // Bluefruit stores the peer's MTU without clamping it to ours.
+    if (!c) return 23;
+    uint16_t m = c->getMtu();
+    return m > ATT_MTU_WANTED ? ATT_MTU_WANTED : m;
+}
+
+// Write a CCCD with a Write Request and wait for the response (Bluefruit task).
+static bool write_cccd(uint16_t conn, uint16_t handle, uint16_t value, uint16_t *status) {
+    *status = 0xFFFF;
+    s_cccd_busy = true;
+    uint32_t t0 = millis();
+    while (s_req_pending && millis() - t0 < 2000) delay(5);
+    s_req_pending = false;
+    s_cccd_buf[0] = (uint8_t)value;
+    s_cccd_buf[1] = (uint8_t)(value >> 8);
+    ble_gattc_write_params_t p;
+    memset(&p, 0, sizeof p);
+    p.write_op = BLE_GATT_OP_WRITE_REQ;
+    p.handle = handle;
+    p.len = 2;
+    p.p_value = s_cccd_buf;
+    s_req_handle = handle;
+    s_req_status = 0xFFFF;
+    s_req_pending = true;
+    uint32_t err;
+    t0 = millis();
+    while ((err = sd_ble_gattc_write(conn, &p)) == NRF_ERROR_BUSY && millis() - t0 < 1000) delay(5);
+    bool ok = false;
+    if (err == NRF_SUCCESS) {
+        t0 = millis();
+        while (s_req_pending && millis() - t0 < 3000) delay(2);
+        ok = !s_req_pending && s_req_status == BLE_GATT_STATUS_SUCCESS;
+        *status = s_req_pending ? 0xFFFE : s_req_status;
+    } else {
+        *status = (uint16_t)(0xE000 | (err & 0xFFF));
+    }
+    s_req_pending = false;
+    s_cccd_busy = false;
+    return ok;
+}
 
 static volatile uint16_t s_conn = BLE_CONN_HANDLE_INVALID;
 static volatile bool s_connecting;
@@ -152,11 +203,21 @@ static void connect_cb(uint16_t conn) {
     post_simple(EV_LINK_UP, 1, c ? c->getConnectionInterval() : 0);
 
     // Discovery runs here (blocking calls are fine in this task).
-    if (c) c->requestMtuExchange(ATT_MTU_WANTED);
-    uint32_t t0 = millis();
-    while (c && c->getMtu() <= 23 && millis() - t0 < 1000) delay(10);
+    // Let the MTU exchange finish first: the SoftDevice runs one GATT client
+    // procedure at a time, so discovery would fail while it is pending.
+    s_mtu_done = false;
+    if (c && c->requestMtuExchange(ATT_MTU_WANTED)) {
+        uint32_t t0 = millis();
+        while (!s_mtu_done && millis() - t0 < 2000) delay(5);
+    }
 
-    if (!s_svc->discover(conn)) {
+    bool found = false;
+    for (int attempt = 0; attempt < 3 && !found; attempt++) {
+        if (attempt) delay(200);
+        if (s_conn != conn) return;
+        found = s_svc->discover(conn);
+    }
+    if (!found) {
         post_simple(EV_GATT_READY, 0, 0, "Switch 2 HID service not found");
         return;
     }
@@ -171,7 +232,10 @@ static void connect_cb(uint16_t conn) {
              : s_ch_vib_jr->discovered()  ? s_ch_vib_jr
                                           : nullptr;
     s_cmd_use_req = (s_ch_cmd->properties() & 0x08) != 0;   // "write" property
-    if (!s_ch_rsp->enableNotify()) {
+    // The CCCD directly follows the value attribute on these controllers.
+    uint16_t st;
+    if (!write_cccd(conn, s_ch_rsp->valueHandle() + 1, 0x0001, &st)) {
+        post_simple(EV_WRITE_FAILED, 1, st);
         post_simple(EV_GATT_READY, 0, 0, "could not enable command responses");
         return;
     }
@@ -187,20 +251,28 @@ static void connect_cb(uint16_t conn) {
         e.data[8] = s_ch_cmd->properties();
         e.data[9] = s_ch_rsp->properties();
         e.data[10] = s_ch_vib ? s_ch_vib->properties() : 0;
-        e.data[11] = (uint8_t)(c ? c->getMtu() : 23);
+        e.data[11] = (uint8_t)effective_mtu(c);
         e.len = 12;
         post(e);
     }
 }
 
 static void ble_event_cb(ble_evt_t *evt) {
-    if (evt->header.evt_id != BLE_GATTC_EVT_WRITE_RSP) return;
-    const ble_gattc_evt_write_rsp_t &w = evt->evt.gattc_evt.params.write_rsp;
-    if (w.write_op != BLE_GATT_OP_WRITE_REQ || !s_req_pending) return;
-    if (s_ch_cmd && w.handle != s_ch_cmd->valueHandle()) return;
-    s_req_pending = false;
-    if (evt->evt.gattc_evt.gatt_status != BLE_GATT_STATUS_SUCCESS)
-        post_simple(EV_WRITE_FAILED, 0, evt->evt.gattc_evt.gatt_status);
+    switch (evt->header.evt_id) {
+    case BLE_GATTC_EVT_EXCHANGE_MTU_RSP:
+        s_mtu_done = true;
+        break;
+    case BLE_GATTC_EVT_WRITE_RSP: {
+        const ble_gattc_evt_write_rsp_t &w = evt->evt.gattc_evt.params.write_rsp;
+        if (w.write_op != BLE_GATT_OP_WRITE_REQ || !s_req_pending || w.handle != s_req_handle) break;
+        s_req_status = evt->evt.gattc_evt.gatt_status;
+        s_req_pending = false;
+        if (!s_cccd_busy && s_req_status != BLE_GATT_STATUS_SUCCESS) post_simple(EV_WRITE_FAILED, 0, s_req_status);
+        break;
+    }
+    default:
+        break;
+    }
 }
 
 static void disconnect_cb(uint16_t conn, uint8_t reason) {
@@ -213,12 +285,9 @@ static void disconnect_cb(uint16_t conn, uint8_t reason) {
 }
 
 static void enable_input_worker(void) {
-    // The SoftDevice runs one Write Request at a time per link.
-    s_cccd_busy = true;
-    uint32_t t0 = millis();
-    while (s_req_pending && millis() - t0 < 2000) delay(5);
-    bool ok = s_conn != BLE_CONN_HANDLE_INVALID && s_ch_input->enableNotify();
-    s_cccd_busy = false;
+    uint16_t conn = s_conn, st = 0;
+    bool ok = conn != BLE_CONN_HANDLE_INVALID && write_cccd(conn, s_ch_input->valueHandle() + 1, 0x0001, &st);
+    if (!ok && conn != BLE_CONN_HANDLE_INVALID) post_simple(EV_WRITE_FAILED, 2, st);
     post_simple(EV_INPUT_ENABLED, ok);
 }
 
@@ -294,7 +363,10 @@ void s2t_task(void) {
             }
             s2c_on_gatt_ready(e.ok, e.error);
             break;
-        case EV_WRITE_FAILED: LOG("s2: command write rejected, ATT status 0x%04x", e.value); break;
+        case EV_WRITE_FAILED:
+            if (e.ok) LOG("s2: enabling %s notifications failed (status 0x%04x)", e.ok == 1 ? "command response" : "input", e.value);
+            else LOG("s2: command write rejected, ATT status 0x%04x", e.value);
+            break;
         case EV_CMD_RSP: s2c_on_command_response(e.data, e.len); break;
         case EV_INPUT: s2c_on_input_report(e.data, e.len); break;
         case EV_INPUT_ENABLED: s2c_on_input_enabled(e.ok); break;
@@ -363,7 +435,7 @@ s2t_write_result_t s2t_write(s2t_char_t ch, const uint8_t *data, uint16_t len) {
     BLEClientCharacteristic *chr = ch == S2T_CHAR_COMMAND ? s_ch_cmd : s_ch_vib;
     BLEConnection *c = Bluefruit.Connection(conn);
     if (!c) return S2T_WRITE_ERROR;
-    if (len + 3u > c->getMtu()) return S2T_WRITE_ERROR;
+    if (len + 3u > effective_mtu(c)) return S2T_WRITE_ERROR;
     if (ch == S2T_CHAR_COMMAND && s_cmd_use_req) {
         if (s_cccd_busy) return S2T_WRITE_BUSY;
         if (s_req_pending) {
@@ -379,6 +451,7 @@ s2t_write_result_t s2t_write(s2t_char_t ch, const uint8_t *data, uint16_t len) {
         p.handle = chr->valueHandle();
         p.len = len;
         p.p_value = s_req_buf;
+        s_req_handle = p.handle;
         s_req_pending = true;
         s_req_started = millis();
         uint32_t err = sd_ble_gattc_write(conn, &p);
@@ -416,7 +489,7 @@ void s2t_local_address(uint8_t out[6]) {
 uint16_t s2t_mtu(void) {
     uint16_t conn = s_conn;
     BLEConnection *c = conn != BLE_CONN_HANDLE_INVALID ? Bluefruit.Connection(conn) : nullptr;
-    return c ? c->getMtu() : 23;
+    return effective_mtu(c);
 }
 
 }  // extern "C"
