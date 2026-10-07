@@ -390,7 +390,13 @@ static void api_action(const http_request_t *req, http_response_t *r) {
     if (!strcmp(what, "forget")) s2_link_forget();
     else if (!strcmp(what, "disconnect")) s2_link_disconnect();
     else if (!strcmp(what, "rumble")) s2_link_test_rumble();
-    else if (!strcmp(what, "sample")) {
+    else if (!strcmp(what, "motors")) {
+        // Classic rumble test: l / r = 0..255, for 600 ms.
+        char v[8];
+        int l = query_get(req->query, "l", v, sizeof v) ? atoi(v) : 0;
+        int rr = query_get(req->query, "r", v, sizeof v) ? atoi(v) : 0;
+        s2_link_test_motors((uint8_t)(l < 0 ? 0 : l > 255 ? 255 : l), (uint8_t)(rr < 0 ? 0 : rr > 255 ? 255 : rr), 600);
+    } else if (!strcmp(what, "sample")) {
         // Built-in vibration sample n (for finding which one is which).
         char v[8];
         int n = query_get(req->query, "n", v, sizeof v) ? atoi(v) : 1;

@@ -267,13 +267,9 @@ void ds5_set_input(const s2_input_t *in, const mapping_ctx_t *ctx, uint32_t gp, 
 }
 
 static void send_rumble(void) {
-    rumble_sample_t s = {
-        .hi_freq_hz = 320.0f,
-        .hi_amp = s_motor_r / 255.0f,
-        .lo_freq_hz = 160.0f,
-        .lo_amp = s_motor_l / 255.0f,
-    };
-    procon_hook_rumble(&s, 1, &s, 1);
+    rumble_sample_t l, r;
+    rumble_from_motors(s_motor_l, s_motor_r, &l, &r);
+    procon_hook_rumble(&l, 1, &r, 1);
     s_status.rumble_frames++;
 }
 

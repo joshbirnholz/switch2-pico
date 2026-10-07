@@ -30,6 +30,14 @@
 // log2(linear amplitude of code 127) on dekuNukem's curve: 2^(127/32) / 8.7
 #define LVL_REF_LINEAR 1.8016f
 
+void rumble_from_motors(uint8_t left_strong, uint8_t right_weak, rumble_sample_t *left, rumble_sample_t *right) {
+    float l = left_strong / 255.0f, r = right_weak / 255.0f;
+    // Strong motor: deep thump, mostly in the low band with a little body above.
+    *left = (rumble_sample_t){.hi_freq_hz = 280.0f, .hi_amp = 0.30f * l, .lo_freq_hz = 140.0f, .lo_amp = l};
+    // Weak motor: a lighter, higher buzz.
+    *right = (rumble_sample_t){.hi_freq_hz = 320.0f, .hi_amp = 0.70f * r, .lo_freq_hz = 200.0f, .lo_amp = 0.15f * r};
+}
+
 float s1_amp_code_to_linear(int code) {
     if (code <= 0) return 0.0f;
     if (code > 127) code = 127;

@@ -396,7 +396,22 @@ static bool haptic_task(uint32_t now) {
     return true;
 }
 
+static rumble_sample_t s_test_l, s_test_r;
+static uint32_t s_test_until;
+static bool s_test_on;
+
+void s2_link_test_motors(uint8_t left_strong, uint8_t right_weak, uint16_t ms) {
+    rumble_from_motors(left_strong, right_weak, &s_test_l, &s_test_r);
+    s_test_until = now_ms() + ms;
+    s_test_on = true;
+}
+
 static void rumble_task(void) {
+    if (s_test_on) {
+        // Fed like host rumble; it fades out by itself once this stops.
+        if ((int32_t)(now_ms() - s_test_until) >= 0) s_test_on = false;
+        else s2_link_rumble_submit(&s_test_l, 1, &s_test_r, 1);
+    }
     if (s_state != S2_LINK_READY) {
         s_hap = -1;
         return;

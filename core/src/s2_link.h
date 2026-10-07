@@ -57,6 +57,8 @@ const mapping_ctx_t *s2_link_mapping_ctx(void);
 // Rumble from the host, decoded (see hd_rumble.h).
 void s2_link_rumble_submit(const rumble_sample_t *left, int nl, const rumble_sample_t *right, int nr);
 void s2_link_test_rumble(void);
+// Play classic two-motor rumble (see rumble_from_motors) for `ms`.
+void s2_link_test_motors(uint8_t left_strong, uint8_t right_weak, uint16_t ms);
 // Play one of the controller's built-in vibration samples (1 = low buzz).
 void s2_link_play_sample(uint8_t sample);
 

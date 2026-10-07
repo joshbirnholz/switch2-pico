@@ -40,6 +40,13 @@ int s1_rumble_decode(s1_rumble_state_t *st, const uint8_t data[4], rumble_sample
 // Linear amplitude for a Switch 1 7-bit amplitude code (dekuNukem's curve).
 float s1_amp_code_to_linear(int code);
 
+// Classic two-motor rumble (Xbox, DualShock, DualSense compatibility mode):
+// a heavy, strong, low-frequency motor in the left grip and a small, weak,
+// high-frequency one in the right grip (0..255 each). Each plays on its own
+// side only, so games that signal left vs right (e.g. Fez's L2/R2 hints)
+// stay readable.
+void rumble_from_motors(uint8_t left_strong, uint8_t right_weak, rumble_sample_t *left, rumble_sample_t *right);
+
 // ---- Switch 2 ----
 #define S2_RUMBLE_NEUTRAL_HI_FREQ 0x187   // what the console sends while idle
 #define S2_RUMBLE_NEUTRAL_LO_FREQ 0x112

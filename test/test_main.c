@@ -545,6 +545,32 @@ static void test_mode_select(void) {
     CHECK(mode_select_update(&m, slots, CH, 10000, &mode) == MODE_SELECT_NONE && !m.active);
 }
 
+static void test_classic_rumble(void) {
+    rumble_sample_t l, r;
+    s2_rumble_params_t p = {.translate_freq = true, .freq_slope = 117, .strength_pct = 100};
+    uint8_t bl[S2_RUMBLE_BLOCK_LEN], br[S2_RUMBLE_BLOCK_LEN];
+    // Left motor only: only the left actuator moves.
+    rumble_from_motors(255, 0, &l, &r);
+    CHECK(l.lo_amp > 0.9f && r.lo_amp == 0.0f && r.hi_amp == 0.0f);
+    s2_rumble_encode_block(0, &l, 1, &p, bl);
+    s2_rumble_encode_block(0, &r, 1, &p, br);
+    CHECK(s2_rumble_block_active(bl) && !s2_rumble_block_active(br));
+    // Right motor only: only the right actuator moves.
+    rumble_from_motors(0, 255, &l, &r);
+    CHECK(l.lo_amp == 0.0f && l.hi_amp == 0.0f && r.hi_amp > 0.5f);
+    s2_rumble_encode_block(0, &l, 1, &p, bl);
+    s2_rumble_encode_block(0, &r, 1, &p, br);
+    CHECK(!s2_rumble_block_active(bl) && s2_rumble_block_active(br));
+    // Strong vs weak: the left motor is the heavier, lower one.
+    rumble_from_motors(255, 255, &l, &r);
+    CHECK(l.lo_amp + l.hi_amp > r.lo_amp + r.hi_amp);
+    CHECK(l.lo_freq_hz < r.lo_freq_hz && l.hi_freq_hz < r.hi_freq_hz);
+    // Off is silent.
+    rumble_from_motors(0, 0, &l, &r);
+    s2_rumble_encode_block(0, &l, 1, &p, bl);
+    CHECK(!s2_rumble_block_active(bl));
+}
+
 int main(void) {
     test_s1_rumble_classic();
     test_s1_rumble_packed();
@@ -560,6 +586,7 @@ int main(void) {
     test_gp_map();
     test_imu_sdl();
     test_mode_select();
+    test_classic_rumble();
     printf("%d passed, %d failed\n", g_pass, g_fail);
     return g_fail ? 1 : 0;
 }

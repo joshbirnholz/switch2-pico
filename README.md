@@ -188,7 +188,12 @@ DualSense modes add these outputs to the map:
   Guide + A).
 
 Rumble is the two-motor kind these controllers have, played on the Switch 2's
-HD rumble actuators. Gyro is reported in the DualSense modes (the Xbox 360
+HD rumble actuators like the motors of a real pad: the strong, heavy motor in
+the left grip and the weak, light one in the right, each on its own side, so
+games that signal left vs right (Fez's L2/R2 hints, for example) can be told
+apart. **Haptics test → Left motor / Right motor** plays each one. The
+DualSense's audio-driven haptics aren't available (the emulated DualSense has
+no audio interface); games fall back to this rumble. Gyro is reported in the DualSense modes (the Xbox 360
 controller has none). Player LEDs follow the host. Switch consoles need the
 Switch Pro Controller mode.
 

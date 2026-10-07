@@ -185,9 +185,11 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
 
 <section class="card" data-collapsed-default>
   <h2>Haptics test</h2>
-  <p class="note" style="margin-top:0">Plays feedback on the connected controller. The effects are the ones the shortcuts use; the built-in samples are stored in the controller (number 1 is the old remap buzz).</p>
+  <p class="note" style="margin-top:0">Plays feedback on the connected controller. Left / right motor play the classic rumble the DualSense and Xbox modes use (strong left, weak right, each on its own side). The effects are the ones the shortcuts use; the built-in samples are stored in the controller (number 1 is the old remap buzz).</p>
   <div class="row">
     <button onclick="act('rumble')">Test rumble</button>
+    <button onclick="act('motors&l=255&r=0')">Left motor (strong)</button>
+    <button onclick="act('motors&l=0&r=255')">Right motor (weak)</button>
     <button onclick="haptic('ba_thump')">Mode select (ba-thump)</button>
     <button onclick="haptic('thump')">Mode chosen (thump)</button>
     <button onclick="haptic('tick')">Remap (tick)</button>
