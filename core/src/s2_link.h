@@ -57,8 +57,24 @@ const mapping_ctx_t *s2_link_mapping_ctx(void);
 // Rumble from the host, decoded (see hd_rumble.h).
 void s2_link_rumble_submit(const rumble_sample_t *left, int nl, const rumble_sample_t *right, int nr);
 void s2_link_test_rumble(void);
+// Play one of the controller's built-in vibration samples (1 = low buzz).
+void s2_link_play_sample(uint8_t sample);
+
+// Short feedback effects, played on the HD rumble actuators over whatever the
+// host is sending (which resumes afterwards). Controllers without them
+// (GameCube) get the built-in buzz instead.
+typedef enum {
+    S2_HAPTIC_TICK,        // a crisp tick: shortcut accepted (GL/GR remap)
+    S2_HAPTIC_BA_THUMP,    // two low pulses: mode selection started
+    S2_HAPTIC_THUMP,       // one firm pulse: mode chosen
+    S2_HAPTIC_COUNT
+} s2_haptic_t;
+void s2_link_haptic(s2_haptic_t effect);
+const char *s2_link_haptic_name(s2_haptic_t effect);
 
 void s2_link_set_player_leds(uint8_t pattern);
+// Show `pattern` instead of the player LEDs until cleared with -1.
+void s2_link_set_led_override(int pattern);
 
 void s2_link_disconnect(void);
 void s2_link_forget(void);

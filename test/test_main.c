@@ -8,6 +8,7 @@
 #include "ds5.h"
 #include "usb_mode.h"
 #include "x360.h"
+#include "mode_select.h"
 #include "hd_rumble.h"
 #include "mapping.h"
 #include "s2_proto.h"
@@ -490,6 +491,60 @@ static void test_imu_sdl(void) {
     CHECK(a[0] == 0 && g[1] == 0);
 }
 
+static void test_mode_select(void) {
+    const uint32_t CH = S2_BTN_C | S2_BTN_HOME;
+    uint8_t slots[MODE_SLOT_COUNT];
+    settings_default_mode_slots(slots);
+    CHECK(slots[MODE_SLOT_A] == USB_MODE_DUALSENSE_EDGE + 1 && slots[MODE_SLOT_B] == USB_MODE_XBOX360 + 1);
+    CHECK(slots[MODE_SLOT_X] == USB_MODE_DUALSENSE + 1 && slots[MODE_SLOT_Y] == USB_MODE_SWITCH_PRO + 1);
+    CHECK(slots[MODE_SLOT_UP] == MODE_SLOT_EMPTY && slots[MODE_SLOT_RIGHT] == MODE_SLOT_EMPTY);
+    mode_select_t m;
+    usb_mode_t mode = USB_MODE_COUNT;
+    mode_select_init(&m);
+    // A short hold does nothing; the full hold enters once.
+    CHECK(mode_select_update(&m, slots, CH, 1000, &mode) == MODE_SELECT_NONE);
+    CHECK(mode_select_update(&m, slots, CH, 1000 + MODE_SELECT_HOLD_MS - 1, &mode) == MODE_SELECT_NONE);
+    CHECK(mode_select_update(&m, slots, CH, 1000 + MODE_SELECT_HOLD_MS, &mode) == MODE_SELECT_ENTER);
+    CHECK(m.active);
+    CHECK(mode_select_update(&m, slots, CH, 4000, &mode) == MODE_SELECT_NONE);   // still holding: no cancel
+    CHECK(mode_select_update(&m, slots, 0, 4100, &mode) == MODE_SELECT_NONE);
+    // Empty D-pad slot: ignored, still active.
+    CHECK(mode_select_update(&m, slots, S2_BTN_UP, 4200, &mode) == MODE_SELECT_NONE && m.active);
+    CHECK(mode_select_update(&m, slots, 0, 4300, &mode) == MODE_SELECT_NONE);
+    // B: Xbox 360.
+    CHECK(mode_select_update(&m, slots, S2_BTN_B, 4400, &mode) == MODE_SELECT_CHOSEN);
+    CHECK(mode == USB_MODE_XBOX360 && !m.active);
+
+    // C + Home again leaves; so does the timeout.
+    mode_select_init(&m);
+    mode_select_update(&m, slots, CH, 0, &mode);
+    CHECK(mode_select_update(&m, slots, CH, MODE_SELECT_HOLD_MS + 5, &mode) == MODE_SELECT_ENTER);
+    CHECK(mode_select_update(&m, slots, 0, 2000, &mode) == MODE_SELECT_NONE);
+    CHECK(mode_select_update(&m, slots, S2_BTN_C, 2100, &mode) == MODE_SELECT_NONE);
+    CHECK(mode_select_update(&m, slots, CH, 2200, &mode) == MODE_SELECT_CANCEL);
+    // Still held after leaving: no re-entry until released.
+    CHECK(mode_select_update(&m, slots, CH, 9000, &mode) == MODE_SELECT_NONE && !m.active);
+    mode_select_update(&m, slots, 0, 9100, &mode);
+    mode_select_update(&m, slots, CH, 9200, &mode);
+    CHECK(mode_select_update(&m, slots, CH, 9200 + MODE_SELECT_HOLD_MS, &mode) == MODE_SELECT_ENTER);
+    CHECK(mode_select_update(&m, slots, 0, 11000, &mode) == MODE_SELECT_NONE);
+    CHECK(mode_select_update(&m, slots, 0, 10700 + MODE_SELECT_TIMEOUT_MS - 1, &mode) == MODE_SELECT_NONE);
+    CHECK(mode_select_update(&m, slots, 0, 10700 + MODE_SELECT_TIMEOUT_MS, &mode) == MODE_SELECT_CANCEL);
+
+    // D-pad slot with a mode; no slots at all disables the shortcut.
+    slots[MODE_SLOT_LEFT] = USB_MODE_DUALSENSE + 1;
+    mode_select_init(&m);
+    mode_select_update(&m, slots, CH, 0, &mode);
+    mode_select_update(&m, slots, CH, MODE_SELECT_HOLD_MS, &mode);
+    CHECK(mode_select_update(&m, slots, CH | S2_BTN_LEFT, MODE_SELECT_HOLD_MS + 10, &mode) == MODE_SELECT_CHOSEN);
+    CHECK(mode == USB_MODE_DUALSENSE);
+    memset(slots, MODE_SLOT_EMPTY, sizeof slots);
+    CHECK(!mode_select_enabled(slots));
+    mode_select_init(&m);
+    mode_select_update(&m, slots, CH, 0, &mode);
+    CHECK(mode_select_update(&m, slots, CH, 10000, &mode) == MODE_SELECT_NONE && !m.active);
+}
+
 int main(void) {
     test_s1_rumble_classic();
     test_s1_rumble_packed();
@@ -504,6 +559,7 @@ int main(void) {
     test_x360();
     test_gp_map();
     test_imu_sdl();
+    test_mode_select();
     printf("%d passed, %d failed\n", g_pass, g_fail);
     return g_fail ? 1 : 0;
 }

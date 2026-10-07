@@ -72,6 +72,16 @@ typedef enum {
 
 #define MODE_MAP_SLOTS 8   // per-mode button maps (index = usb_mode_t); room for more modes
 
+// Mode shortcut (hold C + Home, then press one of these): which USB mode each
+// button selects, stored as usb_mode_t + 1 (0 = nothing on that button).
+typedef enum {
+    MODE_SLOT_A = 0, MODE_SLOT_B, MODE_SLOT_X, MODE_SLOT_Y,
+    MODE_SLOT_UP, MODE_SLOT_DOWN, MODE_SLOT_LEFT, MODE_SLOT_RIGHT,
+    MODE_SLOT_COUNT
+} mode_slot_t;
+#define MODE_SLOT_EMPTY 0
+#define SETTINGS_EXT_REV 2   // 1: mode_map valid; 2: mode_slot valid
+
 #define SETTINGS_MAGIC   0x53325043u   // "S2PC"
 #define SETTINGS_VERSION 1
 
@@ -134,8 +144,9 @@ typedef struct {
     // shortcut on.
     uint8_t quick_remap_off;            // disable the C + GL/GR + button remap shortcut
     uint8_t usb_mode;                   // usb_mode_t (0 in images saved before it existed)
-    uint8_t ext_rev;                    // 0 in images saved before mode_map existed
+    uint8_t ext_rev;                    // SETTINGS_EXT_REV; 0 in images saved before mode_map existed
     uint8_t mode_map[MODE_MAP_SLOTS][IN_COUNT];   // gp_out_t per button, for the non-Switch modes
+    uint8_t mode_slot[MODE_SLOT_COUNT]; // usb_mode_t + 1 per mode_slot_t (MODE_SLOT_EMPTY: none)
 
     uint32_t crc;
 } settings_t;
@@ -154,6 +165,8 @@ void settings_factory_reset(void);
 
 // Default button map of a non-Switch mode.
 void settings_default_mode_map(usb_mode_t mode, uint8_t map[IN_COUNT]);
+// Default mode shortcut buttons.
+void settings_default_mode_slots(uint8_t slots[MODE_SLOT_COUNT]);
 
 const char *in_button_name(in_button_t b);
 const char *out_button_name(out_button_t b);

@@ -14,6 +14,7 @@
 #include "x360.h"
 #include "log.h"
 #include "mapping.h"
+#include "mode_select.h"
 #include "platform.h"
 #include "procon.h"
 #include "s2_link.h"
@@ -90,12 +91,108 @@ void s2_link_hook_controller_colors(const uint8_t rgb[12]) {
 }
 
 // ---------------------------------------------------------------------------
+// USB mode selection on the controller (mode_select.h): the controller's LEDs
+// blink while it is active, the host sees no buttons, and buttons still held
+// when it ends stay hidden from the host until released.
+// ---------------------------------------------------------------------------
+#define MODE_BLINK_MS      170
+#define MODE_SWITCH_DELAY  250   // let the "chosen" thump play before the flash write
+
+static mode_select_t s_msel;
+static uint32_t s_swallow;            // raw buttons kept from the host until released
+static uint32_t s_blink_at;
+static bool s_blink_on;
+static int s_mode_switch = -1;        // usb_mode_t to switch to, -1: none
+static uint32_t s_mode_switch_at;
+
+void app_mode_select_cancel(void) {
+    if (!s_msel.active) return;
+    mode_select_cancel(&s_msel);
+    s_swallow = s_raw_buttons;
+    s2_link_set_led_override(-1);
+    LOG("mode select: cancelled");
+}
+
+static void mode_select_step(uint32_t raw) {
+    usb_mode_t chosen;
+    uint32_t now = platform_millis();
+    switch (mode_select_update(&s_msel, g_settings.mode_slot, raw, now, &chosen)) {
+    case MODE_SELECT_ENTER:
+        LOG("mode select: press a button with a mode (C + Home again to leave)");
+        s2_link_haptic(S2_HAPTIC_BA_THUMP);
+        s_blink_on = true;
+        s_blink_at = now;
+        s2_link_set_led_override(0x0F);
+        break;
+    case MODE_SELECT_CANCEL:
+        LOG("mode select: left without a change");
+        s_swallow = raw;
+        s2_link_set_led_override(-1);
+        break;
+    case MODE_SELECT_CHOSEN:
+        s_swallow = raw;
+        if (chosen == usb_mode_active() && chosen == g_settings.usb_mode) {
+            LOG("mode select: already %s", usb_mode_name(chosen));
+            s2_link_haptic(S2_HAPTIC_TICK);
+            s2_link_set_led_override(-1);
+        } else {
+            LOG("mode select: %s, restarting", usb_mode_name(chosen));
+            s2_link_haptic(S2_HAPTIC_THUMP);
+            s2_link_set_led_override(0x0F);
+            s_mode_switch = chosen;
+            s_mode_switch_at = platform_deadline_ms(MODE_SWITCH_DELAY);
+        }
+        break;
+    default:
+        break;
+    }
+    if (s_msel.active && now - s_blink_at >= MODE_BLINK_MS) {
+        s_blink_at = now;
+        s_blink_on = !s_blink_on;
+        s2_link_set_led_override(s_blink_on ? 0x0F : 0x00);
+    }
+}
+
+static void mode_select_task(void) {
+    // A chosen mode is applied even if the controller drops meanwhile.
+    if (s_mode_switch >= 0 && platform_time_reached(s_mode_switch_at)) {
+        g_settings.usb_mode = (uint8_t)s_mode_switch;
+        s_mode_switch = -1;
+        settings_save_now();
+        app_request_reboot(false);
+        return;
+    }
+    if (s2_link_state() != S2_LINK_READY) {
+        if (s_msel.active) {
+            mode_select_cancel(&s_msel);
+            s2_link_set_led_override(-1);
+        }
+        return;
+    }
+    mode_select_step(s_raw_buttons);
+}
+
+// The buttons the host may see, from the raw ones.
+static uint32_t host_buttons(uint32_t raw) {
+    s_swallow &= raw;
+    if (s_msel.active || s_mode_switch >= 0) return 0;
+    raw &= ~s_swallow;
+    // C + Home is a shortcut (mode selection; on Wi-Fi boards also the access
+    // point): keep Home from the host while C is held, so holding it doesn't
+    // open the host's home menu first.
+    bool shortcut = mode_select_enabled(g_settings.mode_slot) || (g_settings.hotkey_enabled && platform_has_wifi());
+    if (shortcut && (raw & S2_BTN_C)) raw &= ~S2_BTN_HOME;
+    return raw;
+}
+
+// ---------------------------------------------------------------------------
 // Input path: latest Switch 2 report -> Pro Controller report fields
 // ---------------------------------------------------------------------------
 static void update_input(void) {
     static uint32_t last_seq;
     static bool was_connected;
     static mapping_macro_t macro;
+    static uint32_t host_prev;
     s2_input_t in;
     uint32_t seq;
     if (s2_link_get_input(&in, &seq)) {
@@ -103,11 +200,23 @@ static void update_input(void) {
         if (was_connected && seq == last_seq && !mapping_macro_busy(&macro)) return;
         was_connected = true;
         last_seq = seq;
-        uint32_t prev = s_raw_buttons;
+        uint32_t raw_prev = s_raw_buttons;
         s_raw_buttons = in.buttons;
         // A button press while the host sleeps (controller still connected,
         // i.e. within SUSPEND_DISCONNECT_MS) wakes it.
-        if ((in.buttons & ~prev) && tud_suspended()) s2_link_hook_controller_seen();
+        if ((in.buttons & ~raw_prev) && tud_suspended()) s2_link_hook_controller_seen();
+        mode_select_step(in.buttons);
+        // From here on, `in` holds what the host may see.
+        uint32_t prev = host_prev;
+        in.buttons = host_prev = host_buttons(in.buttons);
+        if (s_msel.active || s_mode_switch >= 0) {
+            // Selecting a mode: sticks centred, triggers released.
+            const mapping_ctx_t *c = s2_link_mapping_ctx();
+            memcpy(in.stick_l, c->cal_l.center, sizeof in.stick_l);
+            memcpy(in.stick_r, c->cal_r.center, sizeof in.stick_r);
+            in.trigger_l = c->gc_trigger_neutral[0];
+            in.trigger_r = c->gc_trigger_neutral[1];
+        }
         usb_mode_t mode = usb_mode_active();
         if (mode != USB_MODE_SWITCH_PRO) {
             // Generic modes: the mode's own map (gp_out_t), same shortcuts.
@@ -119,7 +228,7 @@ static void update_input(void) {
                     const char *n = usb_mode_output_name(mode, (gp_out_t)map[back]);
                     LOG("remap: %s -> %s", in_button_name(back), n ? n : "?");
                     settings_save_later();
-                    s2_link_test_rumble();
+                    s2_link_haptic(S2_HAPTIC_TICK);
                 }
             }
             uint32_t gp = mapping_gp_buttons(&g_settings, map, ctx, &in);
@@ -141,7 +250,7 @@ static void update_input(void) {
                 uint8_t o = g_settings.button_map[back];
                 LOG("remap: %s -> %s", in_button_name(back), o ? out_button_name((out_button_t)o) : "nothing");
                 settings_save_later();
-                s2_link_test_rumble();   // feedback on the controller
+                s2_link_haptic(S2_HAPTIC_TICK);   // feedback on the controller
             }
             // Keep the chord's buttons away from the host.
             if (mapping_quick_remap_held(in.buttons)) out.buttons = 0;
@@ -154,6 +263,8 @@ static void update_input(void) {
         was_connected = false;
         memset(&macro, 0, sizeof macro);
         s_raw_buttons = 0;
+        host_prev = 0;
+        s_swallow = 0;
         procon_set_input(NULL, false, 0, false);
         ds5_set_input(NULL, NULL, 0, false);
         x360_set_input(NULL, NULL, 0, false);
@@ -168,7 +279,8 @@ bool app_combo_held(uint32_t combo, uint32_t hold_ms, bool *armed, uint32_t *sin
         return false;
     }
     if (!*since) *since = platform_millis() | 1u;
-    if (*armed && platform_millis() - *since > hold_ms) {
+    // Signed: `since` may be 1 ms ahead of now (it is never 0).
+    if (*armed && (int32_t)(platform_millis() - *since) > (int32_t)hold_ms) {
         *armed = false;
         return true;
     }
@@ -199,6 +311,7 @@ static void maintenance_task(void) {
 
 void app_core_init(void) {
     LOG("usb: mode %s", usb_mode_name(usb_mode_active()));
+    mode_select_init(&s_msel);
     procon_init();
     ds5_init();
     x360_init();
@@ -209,6 +322,7 @@ void app_core_task(void) {
     platform_watchdog_feed();
     s2_link_task();
     update_input();
+    mode_select_task();
     usb_hid_task();
     switch (usb_mode_active()) {
     case USB_MODE_DUALSENSE_EDGE:

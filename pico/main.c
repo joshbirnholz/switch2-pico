@@ -46,7 +46,8 @@ void platform_reboot(bool bootloader) {
     for (;;) tight_loop_contents();
 }
 
-// C + Home held for 3 s toggles the configuration access point.
+// C + Home held for 3 s toggles the configuration access point (after 1.5 s
+// it has also entered USB mode selection, which this leaves again).
 static void hotkey_task(void) {
     static bool armed = true;
     static uint32_t since;
@@ -54,7 +55,8 @@ static void hotkey_task(void) {
     if (app_combo_held(S2_BTN_C | S2_BTN_HOME, HOTKEY_HOLD_MS, &armed, &since)) {
         LOG("hotkey: toggling configuration access point");
         wifi_ap_toggle();
-        s2_link_test_rumble();
+        app_mode_select_cancel();
+        s2_link_haptic(S2_HAPTIC_TICK);
     }
 }
 

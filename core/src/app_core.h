@@ -17,6 +17,9 @@ void app_core_task(void);
 // bits) has been held for `hold_ms`.
 bool app_combo_held(uint32_t combo, uint32_t hold_ms, bool *armed, uint32_t *since);
 
+// Leave USB mode selection (C + Home) if it is active, without a change.
+void app_mode_select_cancel(void);
+
 #ifdef __cplusplus
 }
 #endif

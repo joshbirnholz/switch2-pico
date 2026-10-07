@@ -147,6 +147,28 @@ Under **USB and system → Appear on USB as** the dongle can present itself as:
 | DualSense | PCs and games that expect a PlayStation pad | mapped to existing buttons |
 | Xbox 360 controller | anything that only speaks XInput | mapped to existing buttons |
 
+**Switching from the controller:** hold **C + Home** for 1.5 seconds. The
+controller gives a "ba-thump" and all four of its lights blink. Then press the
+button for the mode you want; the controller thumps and the dongle restarts in
+that mode. Defaults:
+
+| Button | Mode |
+| --- | --- |
+| A | DualSense Edge |
+| B | Xbox 360 controller |
+| X | DualSense |
+| Y | Switch Pro Controller |
+| D-pad | nothing |
+
+**USB and system → Mode shortcut** assigns any mode, or nothing, to each face
+button and D-pad direction. Buttons set to nothing are ignored. Press C + Home
+again, or wait 5 seconds without pressing anything, to leave without a change.
+While choosing, the host sees no buttons pressed. While C is held, Home doesn't
+reach the host, so the hold doesn't open the host's home menu (setting every
+button to nothing turns the shortcut and this off, except on the Pico 2 W while
+the Wi-Fi hotkey is on). The **Haptics test** section plays these effects, and
+the controller's built-in vibration samples.
+
 Changing the mode restarts the dongle, which then has that controller's USB
 IDs; the configuration page still finds it (Linux: install the current
 `tools/99-switch2-pico.rules`, which covers every mode's IDs). Each mode keeps its own button map,
@@ -207,7 +229,8 @@ enable it once under **Settings → Pages → Source: GitHub Actions**.
 Turn the configuration Wi-Fi on in one of three ways:
 
 * press the Pico's **BOOTSEL** button briefly
-* hold **C + Home** on the controller for 3 seconds
+* hold **C + Home** on the controller for 3 seconds (it enters USB mode
+  selection after 1.5 s; keep holding, and the Wi-Fi toggle leaves it again)
 * plug in the dongle while no controller is paired (it starts automatically)
 
 (Pico 2 W only.) Then join the Wi-Fi network **`Switch2-Pico-XXXX`** (default password
@@ -331,6 +354,7 @@ sketch.
 | `core/src/usb_hid.c`, `usb_pro_desc.c` | TinyUSB HID class driver and the Pro Controller report descriptor |
 | `core/src/hd_rumble.c` | Switch 1 HD rumble decoder and Switch 2 encoder |
 | `core/src/mapping.c` | Button remapping, stick calibration and deadzones, IMU conversion |
+| `core/src/mode_select.c` | USB mode shortcut on the controller (C + Home, then a button) |
 | `core/src/web_api.c`, `webusb.c` | Configuration API, served over HTTP or WebUSB |
 | `core/src/app_core.c`, `settings.c` | Glue, USB suspend / wakeup, settings |
 | `core/src/platform.h` | Board services (time, storage, reboot, firmware update) |

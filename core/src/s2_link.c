@@ -297,9 +297,112 @@ static void gc_rumble_task(uint32_t now) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Feedback effects: a few timed steps, each a steady (high band, low band)
+// tone on both actuators; played instead of the host's rumble while running.
+// ---------------------------------------------------------------------------
+typedef struct {
+    uint16_t ms;
+    float hi_hz, hi_amp, lo_hz, lo_amp;
+} haptic_step_t;
+
+static const haptic_step_t HAP_TICK[] = {
+    {22, 320.0f, 0.80f, 200.0f, 0.45f},
+};
+static const haptic_step_t HAP_BA_THUMP[] = {
+    {45, 300.0f, 0.35f, 150.0f, 1.00f},   // "ba"
+    {90, 0, 0, 0, 0},
+    {40, 280.0f, 0.20f, 130.0f, 0.65f},   // "thump", softer
+};
+static const haptic_step_t HAP_THUMP[] = {
+    {75, 260.0f, 0.45f, 130.0f, 1.00f},
+};
+static const struct {
+    const haptic_step_t *steps;
+    uint8_t n;
+    const char *name;
+} HAPTICS[S2_HAPTIC_COUNT] = {
+    [S2_HAPTIC_TICK] = {HAP_TICK, 1, "tick"},
+    [S2_HAPTIC_BA_THUMP] = {HAP_BA_THUMP, 3, "ba_thump"},
+    [S2_HAPTIC_THUMP] = {HAP_THUMP, 1, "thump"},
+};
+
+#define HAPTIC_FRAME_MS  5    // each of the 3 frames in a rumble packet
+#define HAPTIC_PACKET_MS 15
+
+static int s_hap = -1;        // effect playing, -1: none
+static uint32_t s_hap_start;
+static uint32_t s_hap_last_send;
+
+const char *s2_link_haptic_name(s2_haptic_t effect) {
+    return effect < S2_HAPTIC_COUNT ? HAPTICS[effect].name : "?";
+}
+
+void s2_link_haptic(s2_haptic_t effect) {
+    if (s_state != S2_LINK_READY || effect >= S2_HAPTIC_COUNT) return;
+    if (s_map.is_gamecube || !s2t_has_char(S2T_CHAR_VIBRATION)) {
+        s2_link_test_rumble();
+        return;
+    }
+    s_hap = effect;
+    s_hap_start = now_ms();
+    s_hap_last_send = s_hap_start - HAPTIC_PACKET_MS;
+}
+
+// Sample of the playing effect `t` ms after its start; false once it is over.
+static bool haptic_at(uint32_t t, rumble_sample_t *out) {
+    memset(out, 0, sizeof *out);
+    out->hi_freq_hz = 320.0f;
+    out->lo_freq_hz = 160.0f;
+    const haptic_step_t *st = HAPTICS[s_hap].steps;
+    for (int i = 0; i < HAPTICS[s_hap].n; i++) {
+        if (t < st[i].ms) {
+            if (st[i].hi_amp > 0 || st[i].lo_amp > 0) {
+                *out = (rumble_sample_t){st[i].hi_hz, st[i].hi_amp, st[i].lo_hz, st[i].lo_amp};
+            }
+            return true;
+        }
+        t -= st[i].ms;
+    }
+    return false;
+}
+
+// Returns true while an effect owns the actuators.
+static bool haptic_task(uint32_t now) {
+    if (s_hap < 0) return false;
+    if (now - s_hap_last_send < HAPTIC_PACKET_MS) return true;
+    uint32_t t = now - s_hap_start;
+    rumble_sample_t smp[3];
+    bool more = false;
+    for (int k = 0; k < 3; k++) more |= haptic_at(t + (uint32_t)k * HAPTIC_FRAME_MS, &smp[k]);
+    // Fixed strength and real frequencies: the same feel whatever the rumble settings.
+    s2_rumble_params_t p = {.translate_freq = true, .freq_slope = g_settings.rumble_freq_slope, .strength_pct = 100};
+    uint8_t pkt[S2_RUMBLE_PRO_PACKET_LEN];
+    pkt[0] = 0x00;
+    s2_rumble_encode_block(s_rum_seq, smp, 3, &p, pkt + 1);
+    s2_rumble_encode_block(s_rum_seq, smp, 3, &p, pkt + 1 + S2_RUMBLE_BLOCK_LEN);
+    uint16_t len = s_peer_pid == S2_PID_PRO2 ? S2_RUMBLE_PRO_PACKET_LEN : 1 + S2_RUMBLE_BLOCK_LEN;
+    if (s2t_write(S2T_CHAR_VIBRATION, pkt, len) != S2T_WRITE_OK) return true;
+    s_rum_seq++;
+    s_hap_last_send = now;
+    s_info.rumble_packets++;
+    if (!more) {
+        // That was the silent tail; hand the actuators back to the host's rumble.
+        s_hap = -1;
+        s_rum_active = false;
+        s_rum_dirty = true;
+        s_rum_last_send_ms = now;
+    }
+    return true;
+}
+
 static void rumble_task(void) {
-    if (s_state != S2_LINK_READY || !g_settings.rumble_enabled) return;
+    if (s_state != S2_LINK_READY) {
+        s_hap = -1;
+        return;
+    }
     uint32_t now = now_ms();
+    if (haptic_task(now) || !g_settings.rumble_enabled) return;
     if (s_map.is_gamecube) {
         gc_rumble_task(now);
         return;
@@ -343,26 +446,37 @@ static void rumble_task(void) {
     }
 }
 
-void s2_link_test_rumble(void) {
+void s2_link_play_sample(uint8_t sample) {
     if (s_state != S2_LINK_READY) return;
-    uint8_t d[4] = {0x01, 0, 0, 0};   // built-in low frequency buzz
+    uint8_t d[4] = {sample, 0, 0, 0};
     cmd_submit(S2_CMD_VIBRATION, S2_SUB_VIB_PLAY_SAMPLE, d, sizeof d, NULL, 0);
 }
+
+void s2_link_test_rumble(void) {
+    s2_link_play_sample(0x01);   // built-in low frequency buzz
+}
+
 
 // ---------------------------------------------------------------------------
 // Player LEDs
 // ---------------------------------------------------------------------------
 static uint8_t s_led_wanted = 0x01;
 static uint8_t s_led_sent = 0xFF;
+static int s_led_override = -1;
 
 void s2_link_set_player_leds(uint8_t pattern) {
     s_led_wanted = pattern & 0x0F;
 }
 
+void s2_link_set_led_override(int pattern) {
+    s_led_override = pattern < 0 ? -1 : (pattern & 0x0F);
+}
+
 static void led_task(void) {
-    if (s_state != S2_LINK_READY || s_led_wanted == s_led_sent) return;
-    uint8_t d[8] = {s_led_wanted, 0, 0, 0, 0, 0, 0, 0};
-    if (cmd_submit(S2_CMD_LEDS, S2_SUB_LEDS_SET_PATTERN, d, sizeof d, NULL, 0)) s_led_sent = s_led_wanted;
+    uint8_t want = s_led_override >= 0 ? (uint8_t)s_led_override : s_led_wanted;
+    if (s_state != S2_LINK_READY || want == s_led_sent) return;
+    uint8_t d[8] = {want, 0, 0, 0, 0, 0, 0, 0};
+    if (cmd_submit(S2_CMD_LEDS, S2_SUB_LEDS_SET_PATTERN, d, sizeof d, NULL, 0)) s_led_sent = want;
 }
 
 // ---------------------------------------------------------------------------

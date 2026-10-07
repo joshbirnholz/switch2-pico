@@ -85,6 +85,9 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
     <label class="check wifi-only"><input type="checkbox" data-k="hotkey">Hold C + Home 3 s to toggle the config Wi-Fi</label>
     <label class="check"><input type="checkbox" data-k="webusb">WebUSB configuration interface (turn off if a console misbehaves)</label>
   </div>
+  <h3 style="margin:16px 0 4px;font-size:15px">Mode shortcut</h3>
+  <p class="note" style="margin-top:0">On the controller, hold <b>C + Home</b> until its lights blink, then press a button below to switch to that mode (the dongle restarts). C + Home again, or a few seconds without pressing anything, leaves without a change. Buttons set to <i>nothing</i> are ignored; with every button set to nothing the shortcut is off.</p>
+  <div class="grid" id="slots"></div>
 </section>
 
 <section class="card">
@@ -156,6 +159,22 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
   </div>
   <div class="row" style="margin-top:12px">
     <button onclick="act('wifi_off')">Turn Wi-Fi off now</button>
+  </div>
+</section>
+
+<section class="card" data-collapsed-default>
+  <h2>Haptics test</h2>
+  <p class="note" style="margin-top:0">Plays feedback on the connected controller. The effects are the ones the shortcuts use; the built-in samples are stored in the controller (number 1 is the old remap buzz).</p>
+  <div class="row">
+    <button onclick="haptic('ba_thump')">Mode select (ba-thump)</button>
+    <button onclick="haptic('thump')">Mode chosen (thump)</button>
+    <button onclick="haptic('tick')">Remap (tick)</button>
+  </div>
+  <div class="row" style="margin-top:12px">
+    <label>Built-in sample <input type="number" id="sample-n" min="0" max="255" value="1" style="width:5em"></label>
+    <button onclick="playSample(0)">Play</button>
+    <button onclick="playSample(-1)">◀ Previous</button>
+    <button onclick="playSample(1)">Next ▶</button>
   </div>
 </section>
 
@@ -264,6 +283,9 @@ const S2BIT={A:3,B:2,X:1,Y:0,L:22,R:6,ZL:23,ZR:7,Minus:8,Plus:9,LStick:11,RStick
 let S=null;
 const $=id=>document.getElementById(id);
 function toast(t){const e=$('toast');e.textContent=t;e.classList.add('show');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove('show'),1800)}
+async function haptic(e){try{const r=await api('/api/action?do=haptic&effect='+e,{method:'POST'});if(!r.ok)toast(r.text()||'Failed')}catch(x){toast('Failed')}}
+async function playSample(step){const el=$('sample-n');const n=Math.max(0,Math.min(255,(+el.value||0)+step));el.value=n;
+  try{const r=await api('/api/action?do=sample&n='+n,{method:'POST'});toast(r.ok?'Sample '+n:(r.text()||'Failed'))}catch(x){toast('Failed')}}
 async function act(what){try{const r=await api('/api/action?do='+what,{method:'POST'});toast(r.ok?'Done':'Failed');setTimeout(loadSettings,700)}catch(e){toast('Failed')}}
 function buildStatic(){
   $('live-btns').innerHTML=IN.map(n=>`<span class="btn" id="b-${n}">${n}</span>`).join('');
@@ -283,6 +305,15 @@ function renderMap(mode){
   const sel=document.querySelector('[data-k="usb_mode"]');
   $('map-mode').textContent=sel?sel.options[MAP_MODE].text.replace(/ \(.*\)$/,''):'';
 }
+const SLOTS=['A','B','X','Y','Up','Down','Left','Right'];
+function renderSlots(){
+  const sel=document.querySelector('[data-k="usb_mode"]');
+  const names=[...sel.options].map(o=>o.text.replace(/ \(.*\)$/,''));
+  const opts='<option value="0">nothing</option>'+names.map((n,i)=>`<option value="${i+1}">${n}</option>`).join('');
+  $('slots').innerHTML=SLOTS.map(n=>`<label>${n}<select data-slot="${n}">${opts}</select></label>`).join('');
+  const v=S.mode_slots||{};
+  SLOTS.forEach(n=>$('slots').querySelector(`[data-slot="${n}"]`).value=v[n]||0);
+}
 function render(){
   document.querySelectorAll('[data-k]').forEach(el=>{
     const k=el.dataset.k,v=S[k];
@@ -294,12 +325,14 @@ function render(){
   const sel=document.querySelector('[data-k="usb_mode"]');
   sel.onchange=()=>renderMap(sel.value);
   renderMap(S.usb_mode);
+  renderSlots();
 }
 async function loadSettings(){S=(await api('/api/settings')).json();render()}
 async function save(){
   const p=new URLSearchParams();
   p.append('map_mode',MAP_MODE);   // the grid holds this mode's map
   document.querySelectorAll('[data-map]').forEach(el=>p.append('map_'+el.dataset.map,el.value));
+  document.querySelectorAll('[data-slot]').forEach(el=>p.append('slot_'+el.dataset.slot,el.value));
   document.querySelectorAll('[data-k]').forEach(el=>p.append(el.dataset.k,el.type==='checkbox'?(el.checked?1:0):el.value));
   const pw=$('wifi_pass').value;if(pw)p.append('wifi_pass',pw);
   const modeEl=document.querySelector('[data-k="usb_mode"]');

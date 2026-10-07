@@ -24,6 +24,7 @@
 #include "platform.h"
 #include "settings.h"
 #include "usb_mode.h"
+#include "mode_select.h"
 #include "version.h"
 #include "web_api.h"
 
@@ -187,7 +188,13 @@ static void api_settings_get(http_response_t *r) {
         }
         jb_printf(&j, "]}");
     }
-    jb_printf(&j, "],\"inputs\":[");
+    jb_printf(&j, "],\"mode_slots\":{");
+    for (int i = 0; i < MODE_SLOT_COUNT; i++) {
+        jb_printf(&j, "%s", i ? "," : "");
+        jb_str(&j, mode_select_slot_name((mode_slot_t)i));
+        jb_printf(&j, ":%u", s->mode_slot[i]);
+    }
+    jb_printf(&j, "},\"inputs\":[");
     for (int i = 0; i < IN_COUNT; i++) {
         jb_printf(&j, "%s", i ? "," : "");
         jb_str(&j, in_button_name((in_button_t)i));
@@ -253,6 +260,16 @@ static bool apply_kv(settings_t *s, const char *k, const char *v, bool *usb_reco
         for (int i = 0; i < IN_COUNT; i++) {
             if (strcmp(k + 4, in_button_name((in_button_t)i)) == 0) {
                 map[i] = (uint8_t)atoi(v);
+                return true;
+            }
+        }
+        return false;
+    }
+    if (strncmp(k, "slot_", 5) == 0) {
+        for (int i = 0; i < MODE_SLOT_COUNT; i++) {
+            if (strcmp(k + 5, mode_select_slot_name((mode_slot_t)i)) == 0) {
+                int v2 = atoi(v);
+                s->mode_slot[i] = (uint8_t)(v2 >= 0 && v2 <= USB_MODE_COUNT ? v2 : MODE_SLOT_EMPTY);
                 return true;
             }
         }
@@ -373,6 +390,20 @@ static void api_action(const http_request_t *req, http_response_t *r) {
     if (!strcmp(what, "forget")) s2_link_forget();
     else if (!strcmp(what, "disconnect")) s2_link_disconnect();
     else if (!strcmp(what, "rumble")) s2_link_test_rumble();
+    else if (!strcmp(what, "sample")) {
+        // Built-in vibration sample n (for finding which one is which).
+        char v[8];
+        int n = query_get(req->query, "n", v, sizeof v) ? atoi(v) : 1;
+        if (n < 0 || n > 255) return respond_text(r, 400, "n out of range");
+        s2_link_play_sample((uint8_t)n);
+    } else if (!strcmp(what, "haptic")) {
+        char v[16];
+        if (!query_get(req->query, "effect", v, sizeof v)) return respond_text(r, 400, "missing effect=");
+        int e = 0;
+        while (e < S2_HAPTIC_COUNT && strcmp(v, s2_link_haptic_name((s2_haptic_t)e))) e++;
+        if (e == S2_HAPTIC_COUNT) return respond_text(r, 400, "unknown effect");
+        s2_link_haptic((s2_haptic_t)e);
+    }
     else if (!strcmp(what, "gyrocal")) s2_link_start_gyro_calibration();
     else if (!strcmp(what, "gyroclear")) {
         g_settings.gyro_bias[0] = g_settings.gyro_bias[1] = g_settings.gyro_bias[2] = 0;
