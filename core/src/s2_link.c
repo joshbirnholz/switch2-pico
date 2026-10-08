@@ -45,6 +45,7 @@ static uint32_t s_sleep_quiet_until;   // after s2_link_let_controller_sleep()
 static bool s_pair_open;               // pairing window (settings.pair_button)
 static uint32_t s_pair_until;
 static uint32_t s_pair_ignored_log;
+static uint32_t s_unbonded_log;
 static bool s_sleep_quiet;
 static uint32_t s_seen_hook_next;
 static uint32_t s_phase_deadline;
@@ -917,7 +918,17 @@ void s2c_on_advertisement(const uint8_t addr[6], uint8_t addr_type, int8_t rssi,
         LOG("s2: controller %s in pairing mode", addr_str(addr));
         s_need_pairing = true;
     } else if (for_us) {
-        s_need_pairing = !is_bonded;
+        // A controller that still remembers us but that we don't (pairing
+        // forgotten, or another controller paired since) must be paired
+        // again with Sync, like a new one.
+        if (!is_bonded) {
+            if (platform_time_reached(s_unbonded_log)) {
+                s_unbonded_log = platform_deadline_ms(10000);
+                LOG("s2: controller %s isn't paired with the dongle: hold Sync on it to pair", addr_str(addr));
+            }
+            return;
+        }
+        s_need_pairing = false;
     } else {
         return;   // reconnecting to another host (e.g. a console)
     }

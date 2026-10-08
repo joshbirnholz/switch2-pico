@@ -103,7 +103,9 @@ for a different board is refused.
 
 To pair a different controller, hold Sync on the new one (on the Pico, press
 BOOTSEL first). It replaces the old pairing. To forget the paired controller,
-hold the Pico's BOOTSEL button for 5 seconds, or use the configuration page.
+hold the Pico's BOOTSEL button for 5 seconds, or use the configuration page. After
+that the controller no longer reconnects by itself (it still remembers the
+dongle, but the dongle ignores it); hold Sync on it to pair it again.
 
 **Pairing only on request (Pico, on by default).** The Pico ignores
 controllers in pairing mode unless its pairing window is open: a short
