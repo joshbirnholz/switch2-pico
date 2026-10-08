@@ -93,7 +93,10 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
 </header>
 <div id="usb-help" class="card" style="display:none;max-width:948px;margin:0 auto 16px">
   <b>Connect to your dongle over USB.</b> Plug in the Switch2-Pico, click <i>Connect over USB</i> and choose
-  "Pro Controller". Needs Chrome, Edge or another Chromium browser.
+  it. Its name follows the mode: "Pro Controller", "DualSense Edge Wireless Controller", "DualSense Wireless
+  Controller", "Controller" (Xbox 360) or "WUP-028" (GameCube adapter). Each mode is a separate USB device to the
+  browser, so the first time in a mode it has to be chosen once; after that the page connects by itself.
+  Needs Chrome, Edge or another Chromium browser.
   <span class="note">Linux: install the udev rule from the README first. If WebUSB is turned off on the dongle, use the
   Wi-Fi page instead (tap BOOTSEL, join Switch2-Pico-XXXX, open http://192.168.4.1).</span>
 </div>
