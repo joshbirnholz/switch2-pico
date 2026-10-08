@@ -41,6 +41,8 @@ static uint8_t s_peer_type;
 static uint16_t s_peer_pid;
 static bool s_paused;              // host asleep: scan for wake-ups but don't connect
 static uint32_t s_pause_quiet_until;
+static uint32_t s_sleep_quiet_until;   // after s2_link_let_controller_sleep()
+static bool s_sleep_quiet;
 static uint32_t s_seen_hook_next;
 static uint32_t s_phase_deadline;
 
@@ -879,6 +881,14 @@ void s2c_on_advertisement(const uint8_t addr[6], uint8_t addr_type, int8_t rssi,
         return;
     }
 
+    // Right after we let the controller sleep it keeps advertising on its own
+    // for a while; reconnect only once it advertises again later (a button
+    // press). Pairing mode always counts.
+    if (s_sleep_quiet && !adv.pairing_mode) {
+        if (!platform_time_reached(s_sleep_quiet_until)) return;
+        s_sleep_quiet = false;
+    }
+
     if (adv.pairing_mode) {
         LOG("s2: controller %s in pairing mode", addr_str(addr));
         s_need_pairing = true;
@@ -1064,6 +1074,13 @@ const mapping_ctx_t *s2_link_mapping_ctx(void) {
 
 void s2_link_disconnect(void) {
     if (s_connected) s2t_disconnect();
+}
+
+void s2_link_let_controller_sleep(void) {
+    if (!s_connected) return;
+    s_sleep_quiet = true;
+    s_sleep_quiet_until = platform_deadline_ms(20000);
+    s2t_disconnect();
 }
 
 void s2_link_forget(void) {

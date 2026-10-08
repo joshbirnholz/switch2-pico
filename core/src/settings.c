@@ -102,6 +102,8 @@ void settings_defaults(settings_t *s) {
     s->usb_detach_when_idle = 0;
     s->usb_remote_wakeup = 1;
     s->webusb_enabled = 1;
+    s->idle_disconnect_off = 0;
+    s->idle_minutes = 15;   // like an Xbox controller
 
     s->hotkey_enabled = 1;
     s->wifi_autostart = 1;
@@ -127,6 +129,8 @@ void settings_sanitize(settings_t *s) {
     }
     if (s->usb_mode >= USB_MODE_COUNT) s->usb_mode = USB_MODE_SWITCH_PRO;
     if (s->ble_tx_power > 3) s->ble_tx_power = 0;
+    s->idle_disconnect_off = s->idle_disconnect_off ? 1 : 0;
+    s->idle_minutes = s->idle_minutes ? clamp_u8(s->idle_minutes, 1, 240) : 15;
     for (int m = 0; m < MODE_MAP_SLOTS; m++)
         for (int i = 0; i < IN_COUNT; i++)
             if (s->mode_map[m][i] >= GP_COUNT) s->mode_map[m][i] = GP_NONE;
@@ -176,6 +180,10 @@ void settings_init(void) {
         }
         if (rev < 2) settings_default_mode_slots(g_settings.mode_slot);
         if (rev < 3) g_settings.ble_tx_power = 0;
+        if (rev < 4) {
+            g_settings.idle_disconnect_off = 0;
+            g_settings.idle_minutes = 15;
+        }
         g_settings.ext_rev = SETTINGS_EXT_REV;
         settings_sanitize(&g_settings);
         LOG("settings: loaded from flash (bonded=%d%s)", g_settings.bonded,

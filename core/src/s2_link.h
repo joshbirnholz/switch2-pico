@@ -80,6 +80,10 @@ void s2_link_set_player_leds(uint8_t pattern);
 void s2_link_set_led_override(int pattern);
 
 void s2_link_disconnect(void);
+// Disconnect so the controller can go to sleep (e.g. after inactivity): its
+// own reconnection attempts right afterwards are ignored; a button press
+// later on reconnects as usual.
+void s2_link_let_controller_sleep(void);
 void s2_link_forget(void);
 // Pause/resume scanning and connecting (e.g. while the USB host is asleep).
 void s2_link_set_paused(bool paused);

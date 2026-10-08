@@ -219,7 +219,8 @@ static void api_settings_get(http_response_t *r) {
               s->led_follow_host, !s->quick_remap_off, s->usb_mode, s->usb_detach_when_idle, s->usb_remote_wakeup, s->webusb_enabled, s->hotkey_enabled,
               s->wifi_autostart, s->wifi_channel);
     jb_str(&j, s->wifi_ssid);
-    jb_printf(&j, ",\"wifi_has_pass\":%s,\"ble_tx_power\":%u}", s->wifi_pass[0] ? "true" : "false", s->ble_tx_power);
+    jb_printf(&j, ",\"wifi_has_pass\":%s,\"ble_tx_power\":%u,\"idle_disconnect\":%u,\"idle_minutes\":%u}",
+              s->wifi_pass[0] ? "true" : "false", s->ble_tx_power, !s->idle_disconnect_off, s->idle_minutes);
     respond_json(r, &j);
 }
 
@@ -284,6 +285,10 @@ static bool apply_kv(settings_t *s, const char *k, const char *v, bool *usb_reco
         s->quick_remap_off = atoi(v) ? 0 : 1;
         return true;
     }
+    if (strcmp(k, "idle_disconnect") == 0) {
+        s->idle_disconnect_off = atoi(v) ? 0 : 1;
+        return true;
+    }
     if (strcmp(k, "wifi_ssid") == 0) {
         snprintf(s->wifi_ssid, sizeof s->wifi_ssid, "%s", v);
         return true;
@@ -313,6 +318,7 @@ static bool apply_kv(settings_t *s, const char *k, const char *v, bool *usb_reco
         {"usb_mode", &s->usb_mode, 1, false},
         {"hotkey", &s->hotkey_enabled, 1, false},
         {"ble_tx_power", &s->ble_tx_power, 1, false},
+        {"idle_minutes", &s->idle_minutes, 1, false},
         {"wifi_autostart", &s->wifi_autostart, 1, false},
         {"wifi_channel", &s->wifi_channel, 1, false},
     };

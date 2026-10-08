@@ -189,6 +189,44 @@ static uint32_t host_buttons(uint32_t raw) {
 }
 
 // ---------------------------------------------------------------------------
+// Inactivity: disconnect an unused controller so it sleeps (saves its
+// battery). Activity = a button change or a stick moving more than
+// IDLE_STICK_DELTA (raw 12-bit) from where it was at the last activity.
+// ---------------------------------------------------------------------------
+#define IDLE_STICK_DELTA 250
+
+static uint32_t s_idle_since;
+static uint16_t s_idle_sticks[4];
+
+static void idle_reset(const s2_input_t *in) {
+    s_idle_since = platform_millis();
+    s_idle_sticks[0] = in->stick_l[0];
+    s_idle_sticks[1] = in->stick_l[1];
+    s_idle_sticks[2] = in->stick_r[0];
+    s_idle_sticks[3] = in->stick_r[1];
+}
+
+static void idle_check(const s2_input_t *in, uint32_t prev_buttons, bool first) {
+    const uint16_t now[4] = {in->stick_l[0], in->stick_l[1], in->stick_r[0], in->stick_r[1]};
+    bool active = first || in->buttons != prev_buttons;
+    for (int i = 0; i < 4 && !active; i++) {
+        int d = (int)now[i] - (int)s_idle_sticks[i];
+        if (d > IDLE_STICK_DELTA || d < -IDLE_STICK_DELTA) active = true;
+    }
+    if (active) {
+        idle_reset(in);
+        return;
+    }
+    if (g_settings.idle_disconnect_off || s_msel.active || s_mode_switch >= 0) return;
+    uint32_t limit = (uint32_t)g_settings.idle_minutes * 60000u;
+    if (platform_millis() - s_idle_since >= limit) {
+        LOG("idle: no input for %u min, disconnecting the controller so it can sleep", g_settings.idle_minutes);
+        idle_reset(in);
+        s2_link_let_controller_sleep();
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Input path: latest Switch 2 report -> Pro Controller report fields
 // ---------------------------------------------------------------------------
 static void update_input(void) {
@@ -201,9 +239,11 @@ static void update_input(void) {
     if (s2_link_get_input(&in, &seq)) {
         // A running macro advances on time, not only on new reports.
         if (was_connected && seq == last_seq && !mapping_macro_busy(&macro)) return;
+        bool first = !was_connected;   // newly connected: starts the idle timer
         was_connected = true;
         last_seq = seq;
         uint32_t raw_prev = s_raw_buttons;
+        idle_check(&in, raw_prev, first);
         s_raw_buttons = in.buttons;
         // A button press while the host sleeps (controller still connected,
         // i.e. within SUSPEND_DISCONNECT_MS) wakes it.

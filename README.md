@@ -125,6 +125,13 @@ the controller asks the PC to wake up. The PC has to allow it:
   device to wake the computer* (Windows may only offer this for keyboards and
   mice).
 
+**Sleeping when unused.** After 15 minutes without a button press or stick
+movement the dongle disconnects the controller so it goes to sleep and saves
+its battery; press any button to reconnect (within the first 20 seconds
+after it disconnects, the controller's own reconnection attempts are
+ignored). Change the time or turn it off in the configuration page's
+**Controller** section.
+
 **Remapping GL/GR from the controller.** Hold **C** and **GL** (or **GR**) and
 press another button: GL (GR) now sends what that button sends, and the
 controller ticks. Do the same again to clear it. While C + GL/GR are held,

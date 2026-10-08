@@ -98,6 +98,12 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
     <button onclick="act('disconnect')">Disconnect</button>
     <button class="danger" onclick="if(confirm('Forget the paired controller? Hold Sync on a controller to pair again.'))act('forget')">Forget pairing</button>
   </div>
+  <div class="row" style="margin-top:12px;align-items:center;gap:8px">
+    <label class="check"><input type="checkbox" data-k="idle_disconnect">Disconnect the controller after</label>
+    <input type="number" min="1" max="240" data-k="idle_minutes" style="width:5em" aria-label="Minutes">
+    <span>minutes without use</span>
+  </div>
+  <p class="note" style="margin-top:4px">The controller then sleeps to save its battery; press any button to reconnect.</p>
   <p class="note">To pair: hold the small Sync button on the Switch 2 controller until the lights sweep. The dongle pairs automatically and remembers it; afterwards any button press wakes and reconnects it.</p>
 </section>
 
