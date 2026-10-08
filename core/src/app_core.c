@@ -362,6 +362,23 @@ static void suspend_task(void) {
     if (s && platform_millis() - since > SUSPEND_DISCONNECT_MS) s2_link_set_paused(true);
 }
 
+// Why the host connection went away: USB power gone (port, cable or hub) or
+// the host dropped / reset the device with power still there.
+static void usb_watch_task(void) {
+    static bool was_mounted;
+    bool m = tud_mounted();
+    if (m == was_mounted) return;
+    was_mounted = m;
+    if (m) return;
+    platform_supply_t sup;
+    bool have_sup = platform_supply(&sup);
+    int p = platform_usb_power();
+    LOG("usb: host connection lost (%s%s%u mV)", p == 1 ? "USB power still present: the host reset or dropped the device"
+                                                : p == 0 ? "USB power lost: port, cable or hub"
+                                                         : "USB power unknown",
+        have_sup ? ", USB supply " : "", have_sup ? sup.vbus : 0);
+}
+
 static void maintenance_task(void) {
     if (s_usb_reconnect && platform_time_reached(s_usb_reconnect_at)) {
         s_usb_reconnect = false;
@@ -395,6 +412,7 @@ void app_core_task(void) {
     }
     webusb_task();
     suspend_task();
+    usb_watch_task();
     settings_task();
     maintenance_task();
 }

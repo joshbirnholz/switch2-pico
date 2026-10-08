@@ -13,6 +13,11 @@ using namespace Adafruit_LittleFS_Namespace;
 
 #define SETTINGS_FILE "/s2p_settings.bin"
 
+// Restart markers in GPREGRET2 (see platform_log_reset_reason).
+#define ALIVE_MARK   0xA5u   // running
+#define PLANNED_MARK 0xA6u   // restarting on purpose (update, mode change, reboot)
+extern "C" void platform_set_restart_mark(uint8_t mark);
+
 extern "C" {
 
 uint32_t platform_millis(void) {
@@ -61,6 +66,7 @@ bool platform_settings_write(const void *src, size_t len) {
 
 void platform_reboot(bool bootloader) {
     platform_log_flush();   // keep the log up to the restart
+    platform_set_restart_mark(PLANNED_MARK);
     if (bootloader) {
         enterUf2Dfu();   // Adafruit bootloader: mass storage UF2 mode
     }
@@ -143,6 +149,12 @@ static void supply_task(void) {
     }
 }
 
+int platform_usb_power(void) {
+    uint32_t st = 0;
+    if (sd_power_usbregstatus_get(&st) != NRF_SUCCESS) return -1;
+    return (st & POWER_USBREGSTATUS_VBUSDETECT_Msk) ? 1 : 0;
+}
+
 bool platform_supply(platform_supply_t *out) {
     if (!s_sup.vdd) return false;
     *out = s_sup;
@@ -160,6 +172,9 @@ void platform_stack_check(void) {
     next = millis() + 2000;
     UBaseType_t n = uxTaskGetSystemState(st, 12, NULL);
     for (UBaseType_t i = 0; i < n; i++) {
+        // The idle task's 400-byte stack is fixed by the core and its use is
+        // steady (it runs no code of ours): not worth a warning.
+        if (st[i].xHandle == xTaskGetIdleTaskHandle()) continue;
         uint16_t free_words = (uint16_t)st[i].usStackHighWaterMark;
         uint32_t id = st[i].xTaskNumber % 12;
         if (free_words < 64 && (low[id] == 0 || free_words < low[id])) {
@@ -174,25 +189,37 @@ void platform_stack_check(void) {
 // bootloader uses GPREGRET). Set while the firmware runs, it tells a real
 // power loss apart from a restart that leaves no reset reason (the firmware
 // jumping back to its start, e.g. after memory corruption).
-#define ALIVE_MARK 0xA5u
+
+// Set the marker; through the SoftDevice once it runs (POWER is restricted then).
+extern "C" void platform_set_restart_mark(uint8_t mark) {
+    uint8_t sd = 0;
+    sd_softdevice_is_enabled(&sd);
+    if (sd) {
+        sd_power_gpregret_clr(1, 0xFF);
+        sd_power_gpregret_set(1, mark);
+    } else {
+        NRF_POWER->GPREGRET2 = mark;
+    }
+}
 
 void platform_log_reset_reason(void) {
     // Called before the SoftDevice starts: the POWER registers are still ours.
     uint32_t r = NRF_POWER->RESETREAS;
     NRF_POWER->RESETREAS = r;   // write-1-to-clear, so the next boot sees fresh bits
-    bool was_alive = (NRF_POWER->GPREGRET2 & 0xFF) == ALIVE_MARK;
-    bool wdt_running = NRF_WDT->RUNSTATUS;   // a real reset stops it
+    // RESETREAS is often already cleared here (this board's bootloader seems
+    // to do it), so the retained marker decides: 0 = power was lost.
+    uint8_t mark = (uint8_t)(NRF_POWER->GPREGRET2 & 0xFF);
     NRF_POWER->GPREGRET2 = ALIVE_MARK;
     const char *why = r & POWER_RESETREAS_DOG_Msk      ? "watchdog (main loop stuck)"
                     : r & POWER_RESETREAS_LOCKUP_Msk   ? "CPU lockup"
-                    : r & POWER_RESETREAS_SREQ_Msk     ? "software (reboot or crash)"
+                    : mark == PLANNED_MARK             ? "restart by the firmware (update, mode change or reboot)"
+                    : r & POWER_RESETREAS_SREQ_Msk     ? "software (crash)"
                     : r & POWER_RESETREAS_RESETPIN_Msk ? "reset button"
                     : r & POWER_RESETREAS_VBUS_Msk     ? "USB power"
                     : r ? "other"
-                    : was_alive ? "none: the firmware restarted itself without a reset (crash)"
-                                : "power on (power was off or dropped)";
-    LOG("boot: last reset: %s (RESETREAS 0x%08lx, retained 0x%02lx, watchdog %s)", why, (unsigned long)r,
-        (unsigned long)(was_alive ? ALIVE_MARK : 0), wdt_running ? "running" : "stopped");
+                    : mark == ALIVE_MARK ? "unexpected restart (crash, hang or reset button; no reason recorded)"
+                                         : "power on (power was off or dropped)";
+    LOG("boot: last reset: %s (RESETREAS 0x%08lx, retained 0x%02x)", why, (unsigned long)r, mark);
     LOG("boot: supply %lu mV, USB %lu mV", (unsigned long)(analogReadVDD() * 3600UL / 1023),
         (unsigned long)(analogReadVDDHDIV5() * 3600UL * 5 / 1023));
     if ((r & POWER_RESETREAS_DOG_Msk) && g_s2p_hang.magic == HANG_MAGIC) {

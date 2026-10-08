@@ -45,6 +45,8 @@ typedef struct {
     uint16_t vdd, vbus, vdd_min, vbus_min;
 } platform_supply_t;
 bool platform_supply(platform_supply_t *out);
+// USB power (VBUS) present: 1 yes, 0 no, -1 unknown.
+int platform_usb_power(void);
 size_t platform_saved_log(char *dst, size_t cap);
 
 // Firmware update over the configuration channel (WebUSB / HTTP), without

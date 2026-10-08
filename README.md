@@ -289,8 +289,10 @@ restart, a crash and even unplugging the dongle. The configuration page's log
 shows the saved part first, then a `===== saved log from before this start is
 above =====` line, then the current start. `boot: last reset:` tells why the
 dongle last started: `power on` means it lost power (unplugged, or the USB
-port's power dropped), `watchdog` that the firmware hung, `software` a
-restart or crash.
+port's power dropped), `restart by the firmware` an update, mode change or
+reboot, `unexpected restart` a crash or hang. `usb: host connection lost`
+says whether USB power was still there (the computer reset the port) or
+went away (port, cable or hub).
 
 **The dongle restarts by itself (nRF52840) and the log says `power on (power
 was off or dropped)`.** The board really lost power for a moment: the USB

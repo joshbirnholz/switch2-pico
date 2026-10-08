@@ -23,6 +23,10 @@ __attribute__((weak)) bool platform_supply(platform_supply_t *out) {
     return false;
 }
 
+__attribute__((weak)) int platform_usb_power(void) {
+    return -1;
+}
+
 // Boards without a saved log.
 __attribute__((weak)) void platform_log_flush(void) {}
 __attribute__((weak)) size_t platform_saved_log(char *dst, size_t cap) {

@@ -223,6 +223,7 @@ void platform_fw_apply_if_pending(void) {
         return;
     }
     digitalWrite(LED_BUILTIN, HIGH);
+    NRF_POWER->GPREGRET2 = 0xA6;   // a planned restart (see platform_nrf.cpp)
     __disable_irq();
     ram_apply(m->size);   // does not return
 }
