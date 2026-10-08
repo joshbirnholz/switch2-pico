@@ -290,6 +290,59 @@ static bool samples_active(const rumble_sample_t *s, int n) {
     return false;
 }
 
+// NSO GameCube controller: one classic motor, driven through its own
+// vibration characteristic with 42-byte packets: 00, 0x50|seq, state (1 on,
+// 0 off, 2 stop), zeros. Strength is the share of 12 ms slots it is on
+// (error diffusion, as SDL does over USB).
+#define GC_PACKET_LEN  42
+#define GC_SLOT_MS     12
+static float s_gc_err;
+static bool s_gc_running;
+static uint32_t s_gc_last_send;
+
+static bool gc_motor_write(uint8_t state) {
+    uint8_t pkt[GC_PACKET_LEN];
+    memset(pkt, 0, sizeof pkt);
+    pkt[1] = (uint8_t)(0x50 | (s_rum_seq & 0x0F));
+    pkt[2] = state;
+    if (s2t_write(S2T_CHAR_VIBRATION, pkt, sizeof pkt) != S2T_WRITE_OK) return false;
+    s_rum_seq++;
+    s_info.rumble_packets++;
+    return true;
+}
+
+// duty 0..1; call often, it paces itself.
+static void gc_motor_task(uint32_t now, float duty) {
+    if (now - s_gc_last_send < GC_SLOT_MS) return;
+    if (duty < 0.02f) {
+        if (s_gc_running && gc_motor_write(2)) {   // stop
+            s_gc_running = false;
+            s_gc_err = 0.0f;
+            s_gc_last_send = now;
+        }
+        return;
+    }
+    if (duty > 1.0f) duty = 1.0f;
+    float err = s_gc_err + duty;
+    uint8_t state = err >= 1.0f ? 1 : 0;
+    if (state) err -= 1.0f;
+    if (gc_motor_write(state)) {
+        s_gc_err = err;
+        s_gc_running = true;
+        s_gc_last_send = now;
+    }
+}
+
+static float host_rumble_magnitude(uint32_t now) {
+    float mag = 0.0f;
+    for (int i = 0; i < s_rum_nl; i++) mag = fmaxf(mag, fmaxf(s_rum_l[i].hi_amp, s_rum_l[i].lo_amp));
+    for (int i = 0; i < s_rum_nr; i++) mag = fmaxf(mag, fmaxf(s_rum_r[i].hi_amp, s_rum_r[i].lo_amp));
+    mag *= (float)g_settings.rumble_strength_pct / 100.0f;
+    if (now - s_rum_last_host_ms > RUMBLE_IDLE_STOP_MS) mag = 0.0f;
+    return mag;
+}
+
+// GameCube controller without the vibration characteristic: built-in samples.
 static void gc_rumble_task(uint32_t now) {
     float mag = 0.0f;
     for (int i = 0; i < s_rum_nl; i++) mag = fmaxf(mag, fmaxf(s_rum_l[i].hi_amp, s_rum_l[i].lo_amp));
@@ -355,7 +408,7 @@ void s2_link_haptic(s2_haptic_t effect) {
         s2_link_play_sample(HAPTICS[effect].sample);
         return;
     }
-    if (s_map.is_gamecube || !s2t_has_char(S2T_CHAR_VIBRATION)) {
+    if (!s2t_has_char(S2T_CHAR_VIBRATION)) {
         s2_link_test_rumble();
         return;
     }
@@ -385,6 +438,17 @@ static bool haptic_at(uint32_t t, rumble_sample_t *out) {
 // Returns true while an effect owns the actuators.
 static bool haptic_task(uint32_t now) {
     if (s_hap < 0) return false;
+    if (s_map.is_gamecube) {
+        // One motor: on while the effect's step is strong enough, then stop.
+        rumble_sample_t smp;
+        if (!haptic_at(now - s_hap_start, &smp)) {
+            gc_motor_task(now, 0.0f);
+            if (!s_gc_running) s_hap = -1;
+            return true;
+        }
+        gc_motor_task(now, fmaxf(smp.hi_amp, smp.lo_amp) > 0.3f ? 1.0f : 0.0f);
+        return true;
+    }
     if (now - s_hap_last_send < HAPTIC_PACKET_MS) return true;
     uint32_t t = now - s_hap_start;
     rumble_sample_t smp[3];
@@ -429,12 +493,15 @@ static void rumble_task(void) {
     }
     if (s_state != S2_LINK_READY) {
         s_hap = -1;
+        s_gc_running = false;
+        s_gc_err = 0.0f;
         return;
     }
     uint32_t now = now_ms();
     if (haptic_task(now) || !g_settings.rumble_enabled) return;
     if (s_map.is_gamecube) {
-        gc_rumble_task(now);
+        if (s2t_has_char(S2T_CHAR_VIBRATION)) gc_motor_task(now, host_rumble_magnitude(now));
+        else gc_rumble_task(now);
         return;
     }
     if (!s2t_has_char(S2T_CHAR_VIBRATION)) return;

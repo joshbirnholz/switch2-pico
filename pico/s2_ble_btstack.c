@@ -105,7 +105,7 @@ static void gatt_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet,
         else if (uuid_eq(c.uuid128, S2_UUID_CMD_WRITE)) { s_ch_cmd = c; s_have_cmd = true; }
         else if (uuid_eq(c.uuid128, S2_UUID_CMD_RESPONSE)) { s_ch_cmd_rsp = c; s_have_cmd_rsp = true; }
         else if (uuid_eq(c.uuid128, S2_UUID_VIB_PRO) || uuid_eq(c.uuid128, S2_UUID_VIB_JOYCON_L) ||
-                 uuid_eq(c.uuid128, S2_UUID_VIB_JOYCON_R)) { s_ch_vib = c; s_have_vib = true; }
+                 uuid_eq(c.uuid128, S2_UUID_VIB_JOYCON_R) || uuid_eq(c.uuid128, S2_UUID_VIB_GC)) { s_ch_vib = c; s_have_vib = true; }
         break;
     }
     case GATT_EVENT_QUERY_COMPLETE: {

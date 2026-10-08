@@ -34,7 +34,7 @@ Switch 2 Pro Controller  ──BLE──▶  dongle    ──USB──▶  PC / 
 | Player LEDs | Follow the player number the host assigns. |
 | Battery | Reported to the host. |
 | USB modes | **Switch Pro Controller** (default; Switch consoles and PCs), **DualSense Edge** (GL, GR and C become its back paddles and Fn button, so Steam Input can map them), **DualSense**, or **Xbox 360 controller**. Each mode has its own button map. |
-| NSO GameCube controller | Basic support: buttons, sticks, analog triggers acting as L/R past a threshold, and rumble through built-in vibration presets. |
+| NSO GameCube controller | Basic support: buttons, sticks, analog triggers acting as L/R past a threshold, and rumble on its motor (strength by switching it on and off every 12 ms, as SDL does). |
 | Configuration page | Over **WebUSB** in Chrome/Edge with the dongle plugged in, or (Pico 2 W only) over the dongle's own Wi-Fi from any phone or computer. |
 
 ## Hardware

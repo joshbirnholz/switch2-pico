@@ -88,14 +88,15 @@ static void post_data(ev_type_t t, const uint8_t *data, uint16_t len) {
 // GATT objects. Bluefruit wants UUIDs least-significant byte first.
 // ---------------------------------------------------------------------------
 static uint8_t s_uuid_svc[16], s_uuid_input[16], s_uuid_cmd[16], s_uuid_rsp[16], s_uuid_vib_pro[16],
-    s_uuid_vib_jl[16], s_uuid_vib_jr[16];
+    s_uuid_vib_jl[16], s_uuid_vib_jr[16], s_uuid_vib_gc[16];
 
 static void reverse_uuid(uint8_t out[16], const uint8_t in[16]) {
     for (int i = 0; i < 16; i++) out[i] = in[15 - i];
 }
 
 static BLEClientService *s_svc;
-static BLEClientCharacteristic *s_ch_input, *s_ch_cmd, *s_ch_rsp, *s_ch_vib_pro, *s_ch_vib_jl, *s_ch_vib_jr;
+static BLEClientCharacteristic *s_ch_input, *s_ch_cmd, *s_ch_rsp, *s_ch_vib_pro, *s_ch_vib_jl, *s_ch_vib_jr,
+    *s_ch_vib_gc;
 static BLEClientCharacteristic *s_ch_vib;   // whichever rumble characteristic exists
 
 // One outstanding ATT Write Request per link (SoftDevice rule). Used for CCCD
@@ -234,7 +235,7 @@ static void connect_cb(uint16_t conn) {
         return;
     }
     Bluefruit.Discovery.discoverCharacteristic(conn, *s_ch_input, *s_ch_cmd, *s_ch_rsp, *s_ch_vib_pro, *s_ch_vib_jl,
-                                               *s_ch_vib_jr);
+                                               *s_ch_vib_jr, *s_ch_vib_gc);
     if (!s_ch_input->discovered() || !s_ch_cmd->discovered() || !s_ch_rsp->discovered()) {
         post_simple(EV_GATT_READY, 0, 0, "required characteristics missing");
         return;
@@ -242,6 +243,7 @@ static void connect_cb(uint16_t conn) {
     s_ch_vib = s_ch_vib_pro->discovered() ? s_ch_vib_pro
              : s_ch_vib_jl->discovered()  ? s_ch_vib_jl
              : s_ch_vib_jr->discovered()  ? s_ch_vib_jr
+             : s_ch_vib_gc->discovered()  ? s_ch_vib_gc
                                           : nullptr;
     s_cmd_use_req = (s_ch_cmd->properties() & 0x08) != 0;   // "write" property
     // The CCCD directly follows the value attribute on these controllers.
@@ -318,6 +320,7 @@ void s2t_init(void) {
     reverse_uuid(s_uuid_vib_pro, S2_UUID_VIB_PRO);
     reverse_uuid(s_uuid_vib_jl, S2_UUID_VIB_JOYCON_L);
     reverse_uuid(s_uuid_vib_jr, S2_UUID_VIB_JOYCON_R);
+    reverse_uuid(s_uuid_vib_gc, S2_UUID_VIB_GC);
     s_svc = new BLEClientService(BLEUuid(s_uuid_svc));
     s_ch_input = new BLEClientCharacteristic(BLEUuid(s_uuid_input));
     s_ch_cmd = new BLEClientCharacteristic(BLEUuid(s_uuid_cmd));
@@ -325,6 +328,7 @@ void s2t_init(void) {
     s_ch_vib_pro = new BLEClientCharacteristic(BLEUuid(s_uuid_vib_pro));
     s_ch_vib_jl = new BLEClientCharacteristic(BLEUuid(s_uuid_vib_jl));
     s_ch_vib_jr = new BLEClientCharacteristic(BLEUuid(s_uuid_vib_jr));
+    s_ch_vib_gc = new BLEClientCharacteristic(BLEUuid(s_uuid_vib_gc));
 
     // Large MTU and event length for the connection to the controller.
     Bluefruit.configCentralBandwidth(BANDWIDTH_MAX);
@@ -355,6 +359,7 @@ void s2t_init(void) {
     s_ch_vib_pro->begin(s_svc);
     s_ch_vib_jl->begin(s_svc);
     s_ch_vib_jr->begin(s_svc);
+    s_ch_vib_gc->begin(s_svc);
 
     Bluefruit.setEventCallback(ble_event_cb);
     Bluefruit.Central.setConnectCallback(connect_cb);
