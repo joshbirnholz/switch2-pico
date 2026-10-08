@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "ds5.h"
+#include "gc_adapter.h"
 #include "usb_hid.h"
 #include "x360.h"
 
@@ -13,6 +14,7 @@ static const usb_identity_t IDENTITIES[USB_MODE_COUNT] = {
     [USB_MODE_DUALSENSE] = {0x054C, 0x0CE6, 0x0100, 0x00, "Sony Interactive Entertainment",
                             "DualSense Wireless Controller"},
     [USB_MODE_XBOX360] = {0x045E, 0x028E, 0x0114, 0xFF, "Microsoft", "Controller"},
+    [USB_MODE_GC_ADAPTER] = {0x057E, 0x0337, 0x0100, 0x00, "Nintendo", "WUP-028"},
 };
 
 static const char *const NAMES[USB_MODE_COUNT] = {
@@ -20,6 +22,7 @@ static const char *const NAMES[USB_MODE_COUNT] = {
     [USB_MODE_DUALSENSE_EDGE] = "dualsense_edge",
     [USB_MODE_DUALSENSE] = "dualsense",
     [USB_MODE_XBOX360] = "xbox360",
+    [USB_MODE_GC_ADAPTER] = "gc_adapter",
 };
 
 usb_mode_t usb_mode_active(void) {
@@ -48,7 +51,29 @@ static bool is_ds(usb_mode_t m) {
     return m == USB_MODE_DUALSENSE || m == USB_MODE_DUALSENSE_EDGE;
 }
 
+// GameCube adapter: the outputs a GameCube controller has (gc_adapter.c
+// packs them: South A, West B, East X, North Y, R1 Z, L2 / R2 L / R).
+static const char *gc_output_name(gp_out_t g) {
+    switch (g) {
+    case GP_NONE: return "None";
+    case GP_SOUTH: return "A";
+    case GP_WEST: return "B";
+    case GP_EAST: return "X";
+    case GP_NORTH: return "Y";
+    case GP_R1: return "Z";
+    case GP_L2: return "L";
+    case GP_R2: return "R";
+    case GP_START: return "Start";
+    case GP_UP: return "Up";
+    case GP_DOWN: return "Down";
+    case GP_LEFT: return "Left";
+    case GP_RIGHT: return "Right";
+    default: return NULL;
+    }
+}
+
 const char *usb_mode_output_name(usb_mode_t m, gp_out_t g) {
+    if (m == USB_MODE_GC_ADAPTER) return gc_output_name(g);
     bool ds = is_ds(m), x = m == USB_MODE_XBOX360;
     switch (g) {
     case GP_NONE: return "None";
@@ -87,6 +112,7 @@ void usb_mode_get_status(procon_status_t *out) {
     case USB_MODE_DUALSENSE_EDGE:
     case USB_MODE_DUALSENSE: ds5_get_status(out); break;
     case USB_MODE_XBOX360: x360_get_status(out); break;
+    case USB_MODE_GC_ADAPTER: gc_adapter_get_status(out); break;
     default: procon_get_status(out); break;
     }
 }
@@ -121,6 +147,7 @@ uint16_t usb_mode_interface_desc_len(void) {
 
 const uint8_t *usb_hid_report_descriptor(uint16_t *len) {
     if (is_ds(usb_mode_active())) return ds5_report_descriptor(len);
+    if (usb_mode_active() == USB_MODE_GC_ADAPTER) return gc_adapter_report_descriptor(len);
     return procon_report_descriptor(len);
 }
 
@@ -139,6 +166,7 @@ void usb_hid_on_output(const uint8_t *buf, uint16_t len, bool via_control, uint8
     case USB_MODE_XBOX360:
         if (!via_control) x360_on_output(buf, len);
         break;
+    case USB_MODE_GC_ADAPTER: gc_adapter_on_output(buf, len); break;
     default: procon_on_output(buf, len, via_control, control_report_id); break;
     }
 }

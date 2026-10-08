@@ -165,7 +165,7 @@ modifier above. While the shortcut plays (about 0.16 s) the host sees only
 those buttons: everything else released, sticks centered. Don't use it on a Switch, where Home + A launches the selected
 game.
 
-### USB modes (DualSense Edge, DualSense, Xbox 360)
+### USB modes (DualSense Edge, DualSense, Xbox 360, GameCube adapter)
 
 Under **USB and system → Current mode** the dongle can present itself as:
 
@@ -175,6 +175,26 @@ Under **USB and system → Current mode** the dongle can present itself as:
 | DualSense Edge | PCs; Steam Input gets the extra buttons | back paddles and Fn buttons |
 | DualSense | PCs and games that expect a PlayStation pad | mapped to existing buttons |
 | Xbox 360 controller | anything that only speaks XInput | mapped to existing buttons |
+| GameCube adapter | Switch and Wii U games that take GameCube controllers (Smash), Dolphin / Slippi, Steam | mapped to existing buttons |
+
+**GameCube adapter mode** presents the dongle as Nintendo's Wii U / Switch
+GameCube controller adapter (WUP-028) with the controller in port 1 (ports
+2–4 empty). Made for the NSO GameCube controller: its analog triggers come
+through as analog L / R, Z (its ZR) as Z, Start (its Plus) as Start, the
+C-stick as the C-stick. Sticks are scaled to a real GameCube stick's range
+(128 ± 100). Other controllers work too: by default L / R give a full L / R
+press and ZR is Z; remap under **Button mapping**. Rumble is on / off, as on
+the real adapter. Notes:
+
+* On a Switch, use it where a GameCube adapter works (e.g. Smash Bros.
+  Ultimate). If a console doesn't accept it, turn off *WebUSB configuration
+  interface* so the dongle matches a real adapter exactly (the mode shortcut
+  and, on the Pico, the Wi-Fi page still work).
+* Dolphin / Slippi: Linux needs the current udev rule (above); Windows needs
+  the WinUSB driver on the adapter, as with a real one (Zadig, "WUP-028",
+  interface 0).
+* Reports go out at the *Report interval* (default 8 ms = 125 Hz, like the
+  real adapter; 4 ms for 250 Hz).
 
 **Switching from the controller:** hold **C + Home** for 1.5 seconds. The
 controller gives a "ba-thump" and all four of its lights blink. Then press the

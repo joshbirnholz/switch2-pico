@@ -13,6 +13,7 @@
 #include "battery.h"
 #include "ds5.h"
 #include "x360.h"
+#include "gc_adapter.h"
 #include "log.h"
 #include "mapping.h"
 #include "mode_select.h"
@@ -301,6 +302,7 @@ static void update_input(void) {
                 break;
             }
             if (mode == USB_MODE_XBOX360) x360_set_input(&in, ctx, gp, true);
+            else if (mode == USB_MODE_GC_ADAPTER) gc_adapter_set_input(&in, ctx, gp, true);
             else ds5_set_input(&in, ctx, gp, true);
             return;
         }
@@ -335,6 +337,7 @@ static void update_input(void) {
         procon_set_input(NULL, false, 0, false);
         ds5_set_input(NULL, NULL, 0, false);
         x360_set_input(NULL, NULL, 0, false);
+        gc_adapter_set_input(NULL, NULL, 0, false);
     }
 }
 
@@ -400,6 +403,7 @@ void app_core_init(void) {
     procon_init();
     ds5_init();
     x360_init();
+    gc_adapter_init();
     s2_link_init();
 }
 
@@ -413,6 +417,7 @@ void app_core_task(void) {
     case USB_MODE_DUALSENSE_EDGE:
     case USB_MODE_DUALSENSE: ds5_task(); break;
     case USB_MODE_XBOX360: x360_task(); break;
+    case USB_MODE_GC_ADAPTER: gc_adapter_task(); break;
     default: procon_task(); break;
     }
     webusb_task();

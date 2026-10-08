@@ -46,6 +46,19 @@ void settings_default_mode_map(usb_mode_t mode, uint8_t map[IN_COUNT]) {
     case USB_MODE_DUALSENSE:
         map[IN_CAPTURE] = GP_TOUCHPAD;
         break;
+    case USB_MODE_GC_ADAPTER: {
+        // By label, as on the NSO GameCube controller (Z is its ZR, the
+        // analog triggers its L / R, Start its Plus). Buttons a GameCube
+        // controller lacks are unassigned (remappable).
+        static const uint8_t gc[IN_COUNT] = {
+            [IN_A] = GP_SOUTH, [IN_B] = GP_WEST, [IN_X] = GP_EAST, [IN_Y] = GP_NORTH,
+            [IN_L] = GP_L2, [IN_R] = GP_R2, [IN_ZL] = GP_NONE, [IN_ZR] = GP_R1,
+            [IN_PLUS] = GP_START,
+            [IN_UP] = GP_UP, [IN_DOWN] = GP_DOWN, [IN_LEFT] = GP_LEFT, [IN_RIGHT] = GP_RIGHT,
+        };
+        memcpy(map, gc, IN_COUNT);
+        break;
+    }
     default:
         break;
     }

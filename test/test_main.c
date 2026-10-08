@@ -10,6 +10,7 @@
 #include "x360.h"
 #include "mode_select.h"
 #include "battery.h"
+#include "gc_adapter.h"
 #include "hd_rumble.h"
 #include "mapping.h"
 #include "s2_proto.h"
@@ -604,6 +605,44 @@ static void test_battery(void) {
     CHECK(b.pct == p);
 }
 
+static void test_gc_adapter(void) {
+    uint8_t r[GC_REPORT_LEN];
+    // No controller: four empty ports with rumble power.
+    gc_build_report(NULL, r);
+    CHECK(r[0] == 0x21 && r[1] == 0x04 && r[10] == 0x04 && r[19] == 0x04 && r[28] == 0x04 && r[2] == 0);
+    // Controller in port 1.
+    gc_port_t p = {.connected = true, .stick = {128, 228}, .cstick = {28, 128}, .l = 200, .r = 0};
+    p.gp = GP_BIT(GP_SOUTH) | GP_BIT(GP_NORTH) | GP_BIT(GP_UP) | GP_BIT(GP_START) | GP_BIT(GP_R1) | GP_BIT(GP_L2);
+    gc_build_report(&p, r);
+    CHECK(r[1] == 0x14);
+    CHECK(r[2] == (0x01 | 0x08 | 0x80));          // A, Y, D-up
+    CHECK(r[3] == (0x01 | 0x02 | 0x08));          // Start, Z, L
+    CHECK(r[4] == 128 && r[5] == 228 && r[6] == 28 && r[7] == 128 && r[8] == 200 && r[9] == 0);
+    CHECK(r[10] == 0x04);                          // port 2 empty
+    // Stick scaling: center, full deflection = +-100, clamped.
+    CHECK(gc_axis(S1_STICK_CENTER) == 128);
+    CHECK(gc_axis(S1_STICK_CENTER + S1_STICK_RANGE) == 228 && gc_axis(S1_STICK_CENTER - S1_STICK_RANGE) == 28);
+    CHECK(gc_axis(4095) == 241 && gc_axis(0) == 15);   // beyond full deflection: no wrap
+    // Host commands.
+    gc_output_t o;
+    const uint8_t start[] = {0x13};
+    CHECK(gc_parse_output(start, 1, &o) && o.start && !o.rumble);
+    const uint8_t on[] = {0x11, 0x01, 0x00, 0x00, 0x00}, brake[] = {0x11, 0x02, 0, 0, 0};
+    CHECK(gc_parse_output(on, 5, &o) && o.rumble && o.rumble_on);
+    CHECK(gc_parse_output(brake, 5, &o) && o.rumble && !o.rumble_on);
+    const uint8_t bad[] = {0x55};
+    CHECK(!gc_parse_output(bad, 1, &o));
+    // Report descriptor: same length as the real adapter's.
+    uint16_t len;
+    gc_adapter_report_descriptor(&len);
+    CHECK(len == 214);
+    // Default map: by label.
+    uint8_t map[IN_COUNT];
+    settings_default_mode_map(USB_MODE_GC_ADAPTER, map);
+    CHECK(map[IN_A] == GP_SOUTH && map[IN_B] == GP_WEST && map[IN_ZR] == GP_R1 && map[IN_PLUS] == GP_START);
+    CHECK(map[IN_L] == GP_L2 && map[IN_R] == GP_R2 && map[IN_HOME] == GP_NONE);
+}
+
 int main(void) {
     test_s1_rumble_classic();
     test_s1_rumble_packed();
@@ -621,6 +660,7 @@ int main(void) {
     test_mode_select();
     test_classic_rumble();
     test_battery();
+    test_gc_adapter();
     printf("%d passed, %d failed\n", g_pass, g_fail);
     return g_fail ? 1 : 0;
 }

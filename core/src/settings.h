@@ -49,6 +49,7 @@ typedef enum {
     USB_MODE_DUALSENSE_EDGE = 1,  // DualSense Edge: GL/GR/C become paddles/Fn that Steam Input can map
     USB_MODE_DUALSENSE = 2,       // DualSense
     USB_MODE_XBOX360 = 3,         // wired Xbox 360 controller (XInput)
+    USB_MODE_GC_ADAPTER = 4,      // Wii U / Switch GameCube controller adapter (WUP-028), port 1
     USB_MODE_COUNT
 } usb_mode_t;
 

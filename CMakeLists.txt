@@ -61,6 +61,7 @@ add_executable(switch2_pico
         ${CORE}/usb_mode.c
         ${CORE}/usb_pro_desc.c
         ${CORE}/x360.c
+        ${CORE}/gc_adapter.c
         ${CORE}/web_api.c
         ${CORE}/webusb.c
         ${PICO_SRC}/fw_update_pico.c
