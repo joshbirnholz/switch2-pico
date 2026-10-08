@@ -126,15 +126,18 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
   </div>
   <h3 style="margin:16px 0 4px;font-size:15px">Mode shortcut</h3>
   <p class="note" style="margin-top:0">On the controller, hold <b>C + Home</b> until its lights blink, then press a button below to switch to that mode (the dongle restarts). C + Home again, or a few seconds without pressing anything, leaves without a change. Buttons set to – are ignored; with every button set to – the shortcut is off.</p>
+  <label style="max-width:260px;margin-bottom:8px">For<select id="slot-ctrl" onchange="switchSlotCtrl(this.value)"></select></label>
   <div class="diamonds" id="slots"></div>
 </section>
 
 <section class="card">
   <h2>Button mapping</h2>
   <div class="row" style="align-items:flex-end;gap:12px">
+    <label>Controller<select id="map-ctrl" onchange="switchMapCtrl(this.value)"></select></label>
     <label>Mapping for<select id="map-sel" onchange="switchMapMode(this.value)"></select></label>
-    <span class="note" style="flex:1;min-width:220px">Each mode keeps its own mapping; this follows the current mode unless you pick another. The picture shows the controller live: pressed buttons light up and the sticks move.</span>
+    <span class="note" style="flex:1;min-width:220px">Each controller type and mode keeps its own mapping; these follow the connected controller and the current mode unless you pick others. The picture shows the controller live: pressed buttons light up and the sticks move.</span>
   </div>
+  <p class="note" id="map-ctrl-note" style="margin:6px 0 0"></p>
   <div class="pad" id="map"></div>
   <div class="row" style="margin-top:12px">
     <button id="preset-reset" onclick="presetIdentity()">Reset to labels</button>
@@ -362,7 +365,9 @@ const PAD_GROUPS={
   face:['Face buttons',[['X','X','n'],['Y','Y','w'],['A','A','e'],['B','B','s']],'diamond'],
   rs:['Right stick',[['RStick','Pressed']]],
 };
-function mapMode(){return S.modes[MAP_MODE]}
+// Which controller type's maps / mode shortcut are shown (S.profiles index).
+let MAP_CTRL=0,SLOT_CTRL=0;
+function mapMode(){const P=S.profiles[MAP_CTRL];return {...S.modes[MAP_MODE],map:P.maps[MAP_MODE],default_map:P.defaults[MAP_MODE]}}
 function renderMap(mode){
   MAP_MODE=+mode;
   const M=mapMode(),m=$('map');
@@ -386,6 +391,8 @@ function renderMap(mode){
   $('preset-swap').style.display=M.family==='switch'?'':'none';
   $('preset-reset').textContent=M.family==='switch'?'Reset to labels':'Reset to defaults';
   $('map-sel').value=MAP_MODE;
+  $('map-ctrl').value=MAP_CTRL;
+  $('map-ctrl-note').textContent=MAP_CTRL===1?'GameCube controller buttons are shown at their Switch places: Z = ZR, Start = +, analog L / R = L / R (fully pressed past the trigger threshold), C-stick = right stick.':'';
 }
 // Grid values -> S.modes (unsaved edits survive switching between modes).
 let MAP_DIRTY=new Set();
@@ -393,9 +400,16 @@ function stashMap(){
   if(!S||!$('map').querySelector('[data-map]'))return;
   const M=mapMode();let changed=false;
   IN.forEach((n,i)=>{const v=+$('map').querySelector(`[data-map="${n}"]`).value;if(M.map[i]!==v){M.map[i]=v;changed=true}});
-  if(changed)MAP_DIRTY.add(MAP_MODE);
+  if(changed)MAP_DIRTY.add(MAP_CTRL+':'+MAP_MODE);
 }
 function switchMapMode(m){stashMap();renderMap(m)}
+function switchMapCtrl(c){stashMap();MAP_CTRL=+c;renderMap(MAP_MODE)}
+function stashSlots(){
+  if(!S||!$('slots').querySelector('[data-slot]'))return;
+  const v=S.profiles[SLOT_CTRL].mode_slots;
+  $('slots').querySelectorAll('[data-slot]').forEach(el=>v[el.dataset.slot]=+el.value);
+}
+function switchSlotCtrl(c){stashSlots();SLOT_CTRL=+c;renderSlots()}
 const SLOTS=['A','B','X','Y','Up','Down','Left','Right'];
 function renderSlots(){
   const sel=document.querySelector('[data-k="usb_mode"]');
@@ -403,7 +417,8 @@ function renderSlots(){
   const opts='<option value="0">–</option>'+names.map((n,i)=>`<option value="${i+1}">${n}</option>`).join('');
   const dia=(cells)=>'<div class="diamond">'+cells.map(([n,a])=>`<label style="--a:${a}">${n}<select data-slot="${n}">${opts}</select></label>`).join('')+'</div>';
   $('slots').innerHTML=dia([['Up','n'],['Left','w'],['Right','e'],['Down','s']])+dia([['X','n'],['Y','w'],['A','e'],['B','s']]);
-  const v=S.mode_slots||{};
+  const v=S.profiles[SLOT_CTRL].mode_slots||{};
+  $('slot-ctrl').value=SLOT_CTRL;
   SLOTS.forEach(n=>$('slots').querySelector(`[data-slot="${n}"]`).value=v[n]||0);
 }
 function render(){
@@ -423,16 +438,22 @@ function render(){
   $('map-sel').innerHTML=[...sel.options].map(o=>`<option value="${o.value}">${o.text}</option>`).join('');
   sel.onchange=()=>switchMapMode(sel.value);
   MAP_DIRTY=new Set();
+  const ctrlOpts=S.profiles.map((P,i)=>`<option value="${i}">${P.name}</option>`).join('');
+  $('map-ctrl').innerHTML=ctrlOpts;$('slot-ctrl').innerHTML=ctrlOpts;
+  MAP_CTRL=SLOT_CTRL=S.ctrl_type||0;
   renderMap(S.usb_mode);
   renderSlots();
 }
 async function loadSettings(){S=(await api('/api/settings')).json();render()}
 async function save(){
   const p=new URLSearchParams();
-  // Every mode whose map was edited (map_mode applies to the map_* keys after it).
-  stashMap();MAP_DIRTY.add(MAP_MODE);
-  for(const m of MAP_DIRTY){p.append('map_mode',m);IN.forEach((n,i)=>p.append('map_'+n,S.modes[m].map[i]))}
-  document.querySelectorAll('[data-slot]').forEach(el=>p.append('slot_'+el.dataset.slot,el.value));
+  // Every controller type / mode whose map was edited, and both controller
+  // types' mode shortcut buttons (ctrl / map_mode apply to the keys after them).
+  stashMap();MAP_DIRTY.add(MAP_CTRL+':'+MAP_MODE);
+  for(const k of MAP_DIRTY){const [c,m]=k.split(':').map(Number);
+    p.append('ctrl',c);p.append('map_mode',m);IN.forEach((n,i)=>p.append('map_'+n,S.profiles[c].maps[m][i]))}
+  stashSlots();
+  S.profiles.forEach((P,c)=>{p.append('ctrl',c);SLOTS.forEach(n=>p.append('slot_'+n,P.mode_slots[n]||0))});
   document.querySelectorAll('[data-k]').forEach(el=>p.append(el.dataset.k,el.type==='checkbox'?(el.checked?1:0):el.value));
   const pw=$('wifi_pass').value;if(pw)p.append('wifi_pass',pw);
   const modeEl=document.querySelector('[data-k="usb_mode"]');

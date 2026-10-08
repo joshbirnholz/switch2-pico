@@ -68,18 +68,11 @@ void settings_defaults(settings_t *s) {
     s->version = SETTINGS_VERSION;
     s->size = sizeof *s;
 
-    // Identity mapping for every button the Switch 1 Pro Controller also has.
-    for (int i = IN_A; i <= IN_RIGHT; i++) {
-        s->button_map[i] = (uint8_t)(OUT_A + (i - IN_A));
-    }
-    // The Switch 2 only buttons default to the stick clicks (like most back
-    // paddle setups) and C is unassigned.
-    s->button_map[IN_GL] = OUT_LSTICK;
-    s->button_map[IN_GR] = OUT_RSTICK;
-    s->button_map[IN_C] = OUT_NONE;
-
-    for (int m = 0; m < MODE_MAP_SLOTS; m++) settings_default_mode_map((usb_mode_t)m, s->mode_map[m]);
+    // Pro Controller maps (the original fields) and the GameCube controller's.
+    settings_default_button_map(CTRL_PRO, s->button_map);
+    for (int m = 0; m < MODE_MAP_SLOTS; m++) settings_default_mode_map(CTRL_PRO, (usb_mode_t)m, s->mode_map[m]);
     settings_default_mode_slots(s->mode_slot);
+    settings_default_profile(CTRL_GAMECUBE, &s->gc_profile);
     s->ext_rev = SETTINGS_EXT_REV;
 
     s->stick_deadzone_pct = 6;
@@ -125,19 +118,24 @@ static uint16_t clamp_u16(uint16_t v, uint16_t lo, uint16_t hi) {
 }
 
 void settings_sanitize(settings_t *s) {
-    for (int i = 0; i < IN_COUNT; i++) {
-        if (s->button_map[i] >= OUT_COUNT) s->button_map[i] = OUT_NONE;
+    for (int t = 0; t < CTRL_TYPE_COUNT; t++) {
+        uint8_t *bm = settings_button_map(s, (ctrl_type_t)t);
+        for (int i = 0; i < IN_COUNT; i++)
+            if (bm[i] >= OUT_COUNT) bm[i] = OUT_NONE;
+        for (int m = 0; m < MODE_MAP_SLOTS; m++) {
+            uint8_t *mm = settings_mode_map(s, (ctrl_type_t)t, (usb_mode_t)m);
+            for (int i = 0; i < IN_COUNT; i++)
+                if (mm[i] >= GP_COUNT) mm[i] = GP_NONE;
+        }
+        uint8_t *sl = settings_mode_slots(s, (ctrl_type_t)t);
+        for (int i = 0; i < MODE_SLOT_COUNT; i++)
+            if (sl[i] > USB_MODE_COUNT) sl[i] = MODE_SLOT_EMPTY;
     }
     if (s->usb_mode >= USB_MODE_COUNT) s->usb_mode = USB_MODE_SWITCH_PRO;
     if (s->ble_tx_power > 3) s->ble_tx_power = 0;
     s->idle_disconnect_off = s->idle_disconnect_off ? 1 : 0;
     s->idle_minutes = s->idle_minutes ? clamp_u8(s->idle_minutes, 1, 240) : 15;
     s->pair_button = s->pair_button && platform_has_sync_button() ? 1 : 0;
-    for (int m = 0; m < MODE_MAP_SLOTS; m++)
-        for (int i = 0; i < IN_COUNT; i++)
-            if (s->mode_map[m][i] >= GP_COUNT) s->mode_map[m][i] = GP_NONE;
-    for (int i = 0; i < MODE_SLOT_COUNT; i++)
-        if (s->mode_slot[i] > USB_MODE_COUNT) s->mode_slot[i] = MODE_SLOT_EMPTY;
     s->stick_deadzone_pct = clamp_u8(s->stick_deadzone_pct, 0, 40);
     s->stick_outer_pct = clamp_u8(s->stick_outer_pct, 50, 100);
     s->swap_sticks = s->swap_sticks ? 1 : 0;
@@ -178,7 +176,7 @@ void settings_init(void) {
         uint8_t rev = g_settings.ext_rev;
         if (rev > SETTINGS_EXT_REV) rev = 0;
         if (rev < 1) {
-            for (int m = 0; m < MODE_MAP_SLOTS; m++) settings_default_mode_map((usb_mode_t)m, g_settings.mode_map[m]);
+            for (int m = 0; m < MODE_MAP_SLOTS; m++) settings_default_mode_map(CTRL_PRO, (usb_mode_t)m, g_settings.mode_map[m]);
         }
         if (rev < 2) settings_default_mode_slots(g_settings.mode_slot);
         if (rev < 3) g_settings.ble_tx_power = 0;
@@ -187,6 +185,12 @@ void settings_init(void) {
             g_settings.idle_minutes = 15;
         }
         if (rev < 5) g_settings.pair_button = platform_has_sync_button() ? 1 : 0;
+        if (rev < 6) {
+            // The GameCube controller gets its own maps; the Pro's GameCube
+            // adapter map (new, GameCube-controller defaults) gets the Pro's.
+            settings_default_profile(CTRL_GAMECUBE, &g_settings.gc_profile);
+            settings_default_mode_map(CTRL_PRO, USB_MODE_GC_ADAPTER, g_settings.mode_map[USB_MODE_GC_ADAPTER]);
+        }
         g_settings.ext_rev = SETTINGS_EXT_REV;
         settings_sanitize(&g_settings);
         LOG("settings: loaded from flash (bonded=%d%s)", g_settings.bonded,

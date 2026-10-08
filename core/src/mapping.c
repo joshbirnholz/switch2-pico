@@ -24,8 +24,18 @@ static const uint32_t IN_BITS[IN_COUNT] = {
     [IN_GL] = S2_BTN_GL, [IN_GR] = S2_BTN_GR, [IN_C] = S2_BTN_C,
 };
 
-// Declared in settings.h (settings_defaults() uses it).
-void settings_default_mode_map(usb_mode_t mode, uint8_t map[IN_COUNT]) {
+// Declared in settings.h (settings_defaults() uses them).
+void settings_default_button_map(ctrl_type_t type, uint8_t map[IN_COUNT]) {
+    (void)type;   // the GameCube controller's buttons arrive as their Switch equivalents
+    // Identity for every button the Switch 1 Pro Controller also has; GL / GR
+    // default to the stick clicks (like most back paddle setups), C unassigned.
+    for (int i = IN_A; i <= IN_RIGHT; i++) map[i] = (uint8_t)(OUT_A + (i - IN_A));
+    map[IN_GL] = OUT_LSTICK;
+    map[IN_GR] = OUT_RSTICK;
+    map[IN_C] = OUT_NONE;
+}
+
+void settings_default_mode_map(ctrl_type_t type, usb_mode_t mode, uint8_t map[IN_COUNT]) {
     static const uint8_t base[IN_COUNT] = {
         // Nintendo letters by position: A right, B bottom, X top, Y left.
         [IN_A] = GP_EAST, [IN_B] = GP_SOUTH, [IN_X] = GP_NORTH, [IN_Y] = GP_WEST,
@@ -36,6 +46,15 @@ void settings_default_mode_map(usb_mode_t mode, uint8_t map[IN_COUNT]) {
         [IN_GL] = GP_NONE, [IN_GR] = GP_NONE, [IN_C] = GP_NONE,
     };
     memcpy(map, base, IN_COUNT);
+    bool gc = type == CTRL_GAMECUBE;
+    if (gc) {
+        // GameCube controller: its analog L / R are the triggers, Z (its ZR)
+        // and its ZL the bumpers.
+        map[IN_L] = GP_L2;
+        map[IN_R] = GP_R2;
+        map[IN_ZL] = GP_L1;
+        map[IN_ZR] = GP_R1;
+    }
     switch (mode) {
     case USB_MODE_DUALSENSE_EDGE:
         map[IN_CAPTURE] = GP_TOUCHPAD;
@@ -46,22 +65,38 @@ void settings_default_mode_map(usb_mode_t mode, uint8_t map[IN_COUNT]) {
     case USB_MODE_DUALSENSE:
         map[IN_CAPTURE] = GP_TOUCHPAD;
         break;
-    case USB_MODE_GC_ADAPTER: {
-        // By label, as on the NSO GameCube controller (Z is its ZR, the
-        // analog triggers its L / R, Start its Plus). Buttons a GameCube
-        // controller lacks are unassigned (remappable).
-        static const uint8_t gc[IN_COUNT] = {
-            [IN_A] = GP_SOUTH, [IN_B] = GP_WEST, [IN_X] = GP_EAST, [IN_Y] = GP_NORTH,
-            [IN_L] = GP_L2, [IN_R] = GP_R2, [IN_ZL] = GP_NONE, [IN_ZR] = GP_R1,
-            [IN_PLUS] = GP_START,
-            [IN_UP] = GP_UP, [IN_DOWN] = GP_DOWN, [IN_LEFT] = GP_LEFT, [IN_RIGHT] = GP_RIGHT,
-        };
-        memcpy(map, gc, IN_COUNT);
+    case USB_MODE_GC_ADAPTER:
+        // By label; buttons a GameCube controller lacks are unassigned.
+        memset(map, GP_NONE, IN_COUNT);
+        map[IN_A] = GP_SOUTH;
+        map[IN_B] = GP_WEST;
+        map[IN_X] = GP_EAST;
+        map[IN_Y] = GP_NORTH;
+        map[IN_PLUS] = GP_START;
+        map[IN_UP] = GP_UP;
+        map[IN_DOWN] = GP_DOWN;
+        map[IN_LEFT] = GP_LEFT;
+        map[IN_RIGHT] = GP_RIGHT;
+        if (gc) {
+            map[IN_L] = GP_L2;    // analog L / R
+            map[IN_R] = GP_R2;
+            map[IN_ZR] = GP_R1;   // Z
+        } else {
+            // Pro Controller: triggers as L / R, R as Z.
+            map[IN_ZL] = GP_L2;
+            map[IN_ZR] = GP_R2;
+            map[IN_R] = GP_R1;
+        }
         break;
-    }
     default:
         break;
     }
+}
+
+void settings_default_profile(ctrl_type_t type, ctrl_profile_t *p) {
+    settings_default_button_map(type, p->button_map);
+    for (int m = 0; m < MODE_MAP_SLOTS; m++) settings_default_mode_map(type, (usb_mode_t)m, p->mode_map[m]);
+    settings_default_mode_slots(p->mode_slot);
 }
 
 uint32_t mapping_out_button_bit(out_button_t b) {
@@ -88,7 +123,7 @@ uint32_t mapping_buttons_except(const settings_t *s, const mapping_ctx_t *ctx, c
     uint32_t out = 0;
     for (int i = 0; i < IN_COUNT; i++) {
         if (raw & IN_BITS[i]) {
-            out |= mapping_out_button_bit((out_button_t)s->button_map[i]);
+            out |= mapping_out_button_bit((out_button_t)settings_button_map(s, mapping_ctrl_type(ctx))[i]);
         }
     }
     return out;
@@ -197,8 +232,8 @@ bool mapping_quick_remap_held(uint32_t raw) {
     return (raw & S2_BTN_C) && (raw & (S2_BTN_GL | S2_BTN_GR));
 }
 
-bool mapping_quick_remap(settings_t *s, uint32_t prev, uint32_t raw, in_button_t *changed) {
-    return mapping_quick_remap_map(s->button_map, prev, raw, changed);
+bool mapping_quick_remap(settings_t *s, ctrl_type_t type, uint32_t prev, uint32_t raw, in_button_t *changed) {
+    return mapping_quick_remap_map(settings_button_map(s, type), prev, raw, changed);
 }
 
 bool mapping_quick_remap_map(uint8_t map[IN_COUNT], uint32_t prev, uint32_t raw, in_button_t *changed) {
@@ -223,8 +258,9 @@ bool mapping_macro_busy(const mapping_macro_t *m) {
     return m->running || m->held;
 }
 
-uint32_t mapping_macro_step(mapping_macro_t *m, const settings_t *s, uint32_t prev, uint32_t raw, uint32_t now_ms) {
-    switch (mapping_macro_run(m, s->button_map, OUT_HOME_A, prev, raw, now_ms)) {
+uint32_t mapping_macro_step(mapping_macro_t *m, const settings_t *s, ctrl_type_t type, uint32_t prev, uint32_t raw,
+                            uint32_t now_ms) {
+    switch (mapping_macro_run(m, settings_button_map(s, type), OUT_HOME_A, prev, raw, now_ms)) {
     case MACRO_GUIDE: return S1_BTN_HOME;
     case MACRO_GUIDE_SOUTH: return S1_BTN_HOME | S1_BTN_A;
     default: return 0;

@@ -166,28 +166,14 @@ static void api_settings_get(http_response_t *r) {
     jbuf_t j;
     if (!jb_init(&j, 8192)) return respond_text(r, 500, "oom");
     const settings_t *s = &g_settings;
-    // Every mode's button map and output names, so the page can switch the
-    // mapping grid as soon as the mode selector changes. Switch Pro uses
-    // button_map (out_button_t); the other modes their mode_map (gp_out_t,
-    // outputs a mode lacks are null).
+    // Every mode's output names (null: the mode lacks it), then per
+    // controller type every mode's map, its defaults and the mode shortcut
+    // buttons, so the page can switch between them before saving. Switch
+    // Pro maps are out_button_t, the others gp_out_t.
     jb_printf(&j, "{\"modes\":[");
     for (int m = 0; m < USB_MODE_COUNT; m++) {
         bool sw = m == USB_MODE_SWITCH_PRO;
-        const uint8_t *map = sw ? s->button_map : s->mode_map[m];
-        uint8_t defaults[IN_COUNT];
-        if (sw) {
-            // Same as settings_defaults(): labels, GL/GR -> stick clicks, C unassigned.
-            for (int i = 0; i < IN_COUNT; i++) defaults[i] = i <= IN_RIGHT ? (uint8_t)(OUT_A + i) : OUT_NONE;
-            defaults[IN_GL] = OUT_LSTICK;
-            defaults[IN_GR] = OUT_RSTICK;
-        } else {
-            settings_default_mode_map((usb_mode_t)m, defaults);
-        }
-        jb_printf(&j, "%s{\"family\":\"%s\",\"map\":[", m ? "," : "", sw ? "switch" : "gp");
-        for (int i = 0; i < IN_COUNT; i++) jb_printf(&j, "%s%u", i ? "," : "", map[i]);
-        jb_printf(&j, "],\"default_map\":[");
-        for (int i = 0; i < IN_COUNT; i++) jb_printf(&j, "%s%u", i ? "," : "", defaults[i]);
-        jb_printf(&j, "],\"outputs\":[");
+        jb_printf(&j, "%s{\"family\":\"%s\",\"outputs\":[", m ? "," : "", sw ? "switch" : "gp");
         int n_out = sw ? OUT_COUNT : GP_COUNT;
         for (int i = 0; i < n_out; i++) {
             jb_printf(&j, "%s", i ? "," : "");
@@ -197,13 +183,38 @@ static void api_settings_get(http_response_t *r) {
         }
         jb_printf(&j, "]}");
     }
-    jb_printf(&j, "],\"mode_slots\":{");
-    for (int i = 0; i < MODE_SLOT_COUNT; i++) {
-        jb_printf(&j, "%s", i ? "," : "");
-        jb_str(&j, mode_select_slot_name((mode_slot_t)i));
-        jb_printf(&j, ":%u", s->mode_slot[i]);
+    static const char *const CTRL_NAMES[CTRL_TYPE_COUNT] = {"Pro Controller", "GameCube controller"};
+    jb_printf(&j, "],\"ctrl_type\":%u,\"profiles\":[", mapping_ctrl_type(s2_link_mapping_ctx()));
+    for (int t = 0; t < CTRL_TYPE_COUNT; t++) {
+        jb_printf(&j, "%s{\"name\":", t ? "," : "");
+        jb_str(&j, CTRL_NAMES[t]);
+        jb_printf(&j, ",\"maps\":[");
+        for (int m = 0; m < USB_MODE_COUNT; m++) {
+            const uint8_t *map = settings_map_for(s, (ctrl_type_t)t, (usb_mode_t)m);
+            jb_printf(&j, "%s[", m ? "," : "");
+            for (int i = 0; i < IN_COUNT; i++) jb_printf(&j, "%s%u", i ? "," : "", map[i]);
+            jb_printf(&j, "]");
+        }
+        jb_printf(&j, "],\"defaults\":[");
+        for (int m = 0; m < USB_MODE_COUNT; m++) {
+            uint8_t d[IN_COUNT];
+            if (m == USB_MODE_SWITCH_PRO) settings_default_button_map((ctrl_type_t)t, d);
+            else settings_default_mode_map((ctrl_type_t)t, (usb_mode_t)m, d);
+            jb_printf(&j, "%s[", m ? "," : "");
+            for (int i = 0; i < IN_COUNT; i++) jb_printf(&j, "%s%u", i ? "," : "", d[i]);
+            jb_printf(&j, "]");
+        }
+        jb_printf(&j, "],\"mode_slots\":{");
+        const uint8_t *sl = settings_mode_slots(s, (ctrl_type_t)t);
+        for (int i = 0; i < MODE_SLOT_COUNT; i++) {
+            jb_printf(&j, "%s", i ? "," : "");
+            jb_str(&j, mode_select_slot_name((mode_slot_t)i));
+            jb_printf(&j, ":%u", sl[i]);
+        }
+        jb_printf(&j, "}}");
     }
-    jb_printf(&j, "},\"inputs\":[");
+    jb_printf(&j, "]");
+    jb_printf(&j, ",\"inputs\":[");
     for (int i = 0; i < IN_COUNT; i++) {
         jb_printf(&j, "%s", i ? "," : "");
         jb_str(&j, in_button_name((in_button_t)i));
@@ -256,11 +267,17 @@ typedef struct {
     bool usb;         // changing it requires USB re-enumeration
 } num_field_t;
 
-// Which mode's button map the map_* keys of a POST edit (map_mode=<n>,
-// defaulting to the active mode).
+// Which controller type and mode the map_* / slot_* keys of a POST edit
+// (ctrl=<t>, map_mode=<n>; default: the connected controller, active mode).
 static usb_mode_t s_post_map_mode;
+static ctrl_type_t s_post_ctrl;
 
 static bool apply_kv(settings_t *s, const char *k, const char *v, bool *usb_reconnect) {
+    if (strcmp(k, "ctrl") == 0) {
+        int t = atoi(v);
+        if (t >= 0 && t < CTRL_TYPE_COUNT) s_post_ctrl = (ctrl_type_t)t;
+        return true;
+    }
     if (strcmp(k, "map_mode") == 0) {
         int m = atoi(v);
         if (m >= 0 && m < USB_MODE_COUNT) s_post_map_mode = (usb_mode_t)m;
@@ -268,7 +285,7 @@ static bool apply_kv(settings_t *s, const char *k, const char *v, bool *usb_reco
     }
     if (strncmp(k, "map_", 4) == 0) {
         usb_mode_t mode = s_post_map_mode;
-        uint8_t *map = mode == USB_MODE_SWITCH_PRO ? s->button_map : s->mode_map[mode];
+        uint8_t *map = settings_map_for(s, s_post_ctrl, mode);
         for (int i = 0; i < IN_COUNT; i++) {
             if (strcmp(k + 4, in_button_name((in_button_t)i)) == 0) {
                 map[i] = (uint8_t)atoi(v);
@@ -281,7 +298,7 @@ static bool apply_kv(settings_t *s, const char *k, const char *v, bool *usb_reco
         for (int i = 0; i < MODE_SLOT_COUNT; i++) {
             if (strcmp(k + 5, mode_select_slot_name((mode_slot_t)i)) == 0) {
                 int v2 = atoi(v);
-                s->mode_slot[i] = (uint8_t)(v2 >= 0 && v2 <= USB_MODE_COUNT ? v2 : MODE_SLOT_EMPTY);
+                settings_mode_slots(s, s_post_ctrl)[i] = (uint8_t)(v2 >= 0 && v2 <= USB_MODE_COUNT ? v2 : MODE_SLOT_EMPTY);
                 return true;
             }
         }
@@ -353,9 +370,11 @@ static void api_settings_post(const http_request_t *req, http_response_t *r) {
     memcpy(body, req->body, req->body_len);
     body[req->body_len] = 0;
 
-    settings_t s = g_settings;
+    static settings_t s;   // not on the loop task's 4 KB stack
+    s = g_settings;
     bool usb = false;
     s_post_map_mode = usb_mode_active();
+    s_post_ctrl = mapping_ctrl_type(s2_link_mapping_ctx());
     char *save = NULL;
     for (char *pair = strtok_r(body, "&", &save); pair; pair = strtok_r(NULL, "&", &save)) {
         char *eq = strchr(pair, '=');

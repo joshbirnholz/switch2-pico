@@ -121,7 +121,8 @@ void app_mode_select_cancel(void) {
 static void mode_select_step(uint32_t raw) {
     usb_mode_t chosen;
     uint32_t now = platform_millis();
-    switch (mode_select_update(&s_msel, g_settings.mode_slot, raw, now, &chosen)) {
+    const uint8_t *slots = settings_mode_slots(&g_settings, mapping_ctrl_type(s2_link_mapping_ctx()));
+    switch (mode_select_update(&s_msel, slots, raw, now, &chosen)) {
     case MODE_SELECT_ENTER:
         LOG("mode select: press a button with a mode (C + Home again to leave)");
         s2_link_haptic(S2_HAPTIC_BA_THUMP);
@@ -185,7 +186,8 @@ static uint32_t host_buttons(uint32_t raw) {
     // C + Home is a shortcut (mode selection; on Wi-Fi boards also the access
     // point): keep Home from the host while C is held, so holding it doesn't
     // open the host's home menu first.
-    bool shortcut = mode_select_enabled(g_settings.mode_slot) || (g_settings.hotkey_enabled && platform_has_wifi());
+    const uint8_t *slots = settings_mode_slots(&g_settings, mapping_ctrl_type(s2_link_mapping_ctx()));
+    bool shortcut = mode_select_enabled(slots) || (g_settings.hotkey_enabled && platform_has_wifi());
     if (shortcut && (raw & S2_BTN_C)) raw &= ~S2_BTN_HOME;
     return raw;
 }
@@ -270,8 +272,9 @@ static void update_input(void) {
         usb_mode_t mode = usb_mode_active();
         if (mode != USB_MODE_SWITCH_PRO) {
             // Generic modes: the mode's own map (gp_out_t), same shortcuts.
-            uint8_t *map = g_settings.mode_map[mode];
             const mapping_ctx_t *ctx = s2_link_mapping_ctx();
+            // This controller type's map for the mode (see settings.h).
+            uint8_t *map = settings_mode_map(&g_settings, mapping_ctrl_type(ctx), mode);
             // Not in DualSense Edge mode: GL/GR/C are its paddles and Fn
             // buttons, which the host's software remaps itself.
             bool quick = !g_settings.quick_remap_off && mode != USB_MODE_DUALSENSE_EDGE;
@@ -308,15 +311,16 @@ static void update_input(void) {
         }
         procon_input_t out;
         // Home+A shortcut playing: only its buttons, sticks centered.
-        uint32_t macro_buttons = mapping_macro_step(&macro, &g_settings, prev, in.buttons, platform_millis());
+        ctrl_type_t ct = mapping_ctrl_type(s2_link_mapping_ctx());
+        uint32_t macro_buttons = mapping_macro_step(&macro, &g_settings, ct, prev, in.buttons, platform_millis());
         if (macro_buttons) neutral_input(&in);
         mapping_apply(&g_settings, s2_link_mapping_ctx(), &in, &out);
         if (macro_buttons) {
             out.buttons = macro_buttons;
         } else if (!g_settings.quick_remap_off) {
             in_button_t back;
-            if (mapping_quick_remap(&g_settings, prev, in.buttons, &back)) {
-                uint8_t o = g_settings.button_map[back];
+            if (mapping_quick_remap(&g_settings, ct, prev, in.buttons, &back)) {
+                uint8_t o = settings_button_map(&g_settings, ct)[back];
                 LOG("remap: %s -> %s", in_button_name(back), o ? out_button_name((out_button_t)o) : "nothing");
                 settings_save_later();
                 s2_link_haptic(S2_HAPTIC_TICK);   // feedback on the controller

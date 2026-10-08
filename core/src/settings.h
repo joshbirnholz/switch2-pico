@@ -81,7 +81,20 @@ typedef enum {
     MODE_SLOT_COUNT
 } mode_slot_t;
 #define MODE_SLOT_EMPTY 0
-#define SETTINGS_EXT_REV 5   // 1: mode_map; 2: mode_slot; 3: ble_tx_power; 4: idle_*; 5: pair_button
+#define SETTINGS_EXT_REV 6   // 1: mode_map; 2: mode_slot; 3: ble_tx_power; 4: idle_*; 5: pair_button; 6: gc_profile
+
+// Controller types with their own button maps and mode shortcut buttons.
+typedef enum {
+    CTRL_PRO = 0,        // Pro Controller 2 (and Joy-Con 2): button_map / mode_map / mode_slot
+    CTRL_GAMECUBE = 1,   // NSO GameCube controller: gc_profile
+    CTRL_TYPE_COUNT
+} ctrl_type_t;
+
+typedef struct {
+    uint8_t button_map[IN_COUNT];                  // Switch Pro mode: out_button_t
+    uint8_t mode_map[MODE_MAP_SLOTS][IN_COUNT];    // other modes: gp_out_t
+    uint8_t mode_slot[MODE_SLOT_COUNT];            // mode shortcut buttons
+} ctrl_profile_t;
 
 #define SETTINGS_MAGIC   0x53325043u   // "S2PC"
 #define SETTINGS_VERSION 1
@@ -153,6 +166,7 @@ typedef struct {
     uint8_t idle_minutes;               // ... after this many minutes without input (1..240)
     uint8_t pair_button;                // pair only during a window opened by Sync / the page
                                         // (default on for boards with a button: Pico BOOTSEL)
+    ctrl_profile_t gc_profile;          // NSO GameCube controller (the Pro uses the fields above)
 
     uint32_t crc;
 } settings_t;
@@ -169,10 +183,26 @@ void settings_save_now(void);
 void settings_task(void);
 void settings_factory_reset(void);
 
-// Default button map of a non-Switch mode.
-void settings_default_mode_map(usb_mode_t mode, uint8_t map[IN_COUNT]);
-// Default mode shortcut buttons.
+// Default maps and mode shortcut buttons, per controller type.
+void settings_default_button_map(ctrl_type_t type, uint8_t map[IN_COUNT]);              // Switch Pro mode
+void settings_default_mode_map(ctrl_type_t type, usb_mode_t mode, uint8_t map[IN_COUNT]);  // other modes
 void settings_default_mode_slots(uint8_t slots[MODE_SLOT_COUNT]);
+void settings_default_profile(ctrl_type_t type, ctrl_profile_t *p);
+
+// The maps of one controller type (the Pro's are the original fields).
+static inline uint8_t *settings_button_map(const settings_t *s, ctrl_type_t t) {
+    return (uint8_t *)(t == CTRL_GAMECUBE ? s->gc_profile.button_map : s->button_map);
+}
+static inline uint8_t *settings_mode_map(const settings_t *s, ctrl_type_t t, usb_mode_t m) {
+    return (uint8_t *)(t == CTRL_GAMECUBE ? s->gc_profile.mode_map[m] : s->mode_map[m]);
+}
+static inline uint8_t *settings_mode_slots(const settings_t *s, ctrl_type_t t) {
+    return (uint8_t *)(t == CTRL_GAMECUBE ? s->gc_profile.mode_slot : s->mode_slot);
+}
+// Map of the given USB mode (Switch Pro: out_button_t, others: gp_out_t).
+static inline uint8_t *settings_map_for(const settings_t *s, ctrl_type_t t, usb_mode_t m) {
+    return m == USB_MODE_SWITCH_PRO ? settings_button_map(s, t) : settings_mode_map(s, t, m);
+}
 
 const char *in_button_name(in_button_t b);
 const char *out_button_name(out_button_t b);

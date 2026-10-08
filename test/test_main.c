@@ -51,6 +51,7 @@ usb_mode_t usb_mode_active(void) { return USB_MODE_DUALSENSE_EDGE; }
 static void test_defaults(settings_t *s) {
     memset(s, 0, sizeof *s);
     for (int i = IN_A; i <= IN_RIGHT; i++) s->button_map[i] = (uint8_t)(OUT_A + i);
+    memcpy(s->gc_profile.button_map, s->button_map, IN_COUNT);   // GameCube controller: same
     s->stick_deadzone_pct = 0;
     s->stick_outer_pct = 100;
     s->gyro_enabled = 1;
@@ -254,29 +255,29 @@ static void test_quick_remap(void) {
     uint32_t chord = S2_BTN_C | S2_BTN_GL;
 
     // C alone, or C + GL without another press: nothing.
-    CHECK(!mapping_quick_remap(&s, 0, S2_BTN_C, &changed));
-    CHECK(!mapping_quick_remap(&s, S2_BTN_C, chord, &changed));
+    CHECK(!mapping_quick_remap(&s, CTRL_PRO, 0, S2_BTN_C, &changed));
+    CHECK(!mapping_quick_remap(&s, CTRL_PRO, S2_BTN_C, chord, &changed));
     CHECK(mapping_quick_remap_held(chord) && !mapping_quick_remap_held(S2_BTN_GL));
 
     // C + GL + A: GL now sends A.
-    CHECK(mapping_quick_remap(&s, chord, chord | S2_BTN_A, &changed));
+    CHECK(mapping_quick_remap(&s, CTRL_PRO, chord, chord | S2_BTN_A, &changed));
     CHECK(changed == IN_GL && s.button_map[IN_GL] == OUT_A);
     // Holding A doesn't repeat.
-    CHECK(!mapping_quick_remap(&s, chord | S2_BTN_A, chord | S2_BTN_A, &changed));
+    CHECK(!mapping_quick_remap(&s, CTRL_PRO, chord | S2_BTN_A, chord | S2_BTN_A, &changed));
     // Same again clears it.
-    CHECK(mapping_quick_remap(&s, chord, chord | S2_BTN_A, &changed));
+    CHECK(mapping_quick_remap(&s, CTRL_PRO, chord, chord | S2_BTN_A, &changed));
     CHECK(s.button_map[IN_GL] == OUT_NONE);
     // GL follows what the pressed button currently sends.
     s.button_map[IN_B] = OUT_X;
-    CHECK(mapping_quick_remap(&s, chord, chord | S2_BTN_B, &changed));
+    CHECK(mapping_quick_remap(&s, CTRL_PRO, chord, chord | S2_BTN_B, &changed));
     CHECK(s.button_map[IN_GL] == OUT_X);
 
     // GR works the same and leaves GL alone; both held is ambiguous; Home is skipped.
     uint32_t chord_r = S2_BTN_C | S2_BTN_GR;
-    CHECK(mapping_quick_remap(&s, chord_r, chord_r | S2_BTN_UP, &changed));
+    CHECK(mapping_quick_remap(&s, CTRL_PRO, chord_r, chord_r | S2_BTN_UP, &changed));
     CHECK(changed == IN_GR && s.button_map[IN_GR] == OUT_UP && s.button_map[IN_GL] == OUT_X);
-    CHECK(!mapping_quick_remap(&s, chord | S2_BTN_GR, chord | S2_BTN_GR | S2_BTN_Y, &changed));
-    CHECK(!mapping_quick_remap(&s, chord, chord | S2_BTN_HOME, &changed));
+    CHECK(!mapping_quick_remap(&s, CTRL_PRO, chord | S2_BTN_GR, chord | S2_BTN_GR | S2_BTN_Y, &changed));
+    CHECK(!mapping_quick_remap(&s, CTRL_PRO, chord, chord | S2_BTN_HOME, &changed));
 }
 
 static void test_macro(void) {
@@ -288,26 +289,26 @@ static void test_macro(void) {
     uint32_t C = S2_BTN_C;
 
     // Tap C: nothing while held, then Home, Home + A, release.
-    CHECK(mapping_macro_step(&m, &s, 0, C, 1000) == 0);
+    CHECK(mapping_macro_step(&m, &s, CTRL_PRO, 0, C, 1000) == 0);
     CHECK(mapping_macro_busy(&m));
-    CHECK(mapping_macro_step(&m, &s, C, C, 1100) == 0);
-    CHECK(mapping_macro_step(&m, &s, C, 0, 1150) == S1_BTN_HOME);
-    CHECK(mapping_macro_step(&m, &s, 0, 0, 1150 + MACRO_HOME_MS) == (S1_BTN_HOME | S1_BTN_A));
-    CHECK(mapping_macro_step(&m, &s, 0, 0, 1150 + MACRO_HOME_MS + MACRO_HOME_A_MS) == 0);
+    CHECK(mapping_macro_step(&m, &s, CTRL_PRO, C, C, 1100) == 0);
+    CHECK(mapping_macro_step(&m, &s, CTRL_PRO, C, 0, 1150) == S1_BTN_HOME);
+    CHECK(mapping_macro_step(&m, &s, CTRL_PRO, 0, 0, 1150 + MACRO_HOME_MS) == (S1_BTN_HOME | S1_BTN_A));
+    CHECK(mapping_macro_step(&m, &s, CTRL_PRO, 0, 0, 1150 + MACRO_HOME_MS + MACRO_HOME_A_MS) == 0);
     CHECK(!mapping_macro_busy(&m));
 
     // C used as a chord modifier (C + GL ...): no macro.
-    CHECK(mapping_macro_step(&m, &s, 0, C, 2000) == 0);
-    CHECK(mapping_macro_step(&m, &s, C, C | S2_BTN_GL, 2010) == 0);
-    CHECK(mapping_macro_step(&m, &s, C | S2_BTN_GL, S2_BTN_GL, 2020) == 0);
+    CHECK(mapping_macro_step(&m, &s, CTRL_PRO, 0, C, 2000) == 0);
+    CHECK(mapping_macro_step(&m, &s, CTRL_PRO, C, C | S2_BTN_GL, 2010) == 0);
+    CHECK(mapping_macro_step(&m, &s, CTRL_PRO, C | S2_BTN_GL, S2_BTN_GL, 2020) == 0);
     CHECK(!mapping_macro_busy(&m));
     // Pressed while another button is already held: no macro either.
-    CHECK(mapping_macro_step(&m, &s, S2_BTN_A, S2_BTN_A | C, 3000) == 0);
-    CHECK(mapping_macro_step(&m, &s, S2_BTN_A | C, S2_BTN_A, 3010) == 0);
+    CHECK(mapping_macro_step(&m, &s, CTRL_PRO, S2_BTN_A, S2_BTN_A | C, 3000) == 0);
+    CHECK(mapping_macro_step(&m, &s, CTRL_PRO, S2_BTN_A | C, S2_BTN_A, 3010) == 0);
     CHECK(!mapping_macro_busy(&m));
     // Not mapped: nothing.
     s.button_map[IN_C] = OUT_NONE;
-    CHECK(mapping_macro_step(&m, &s, 0, C, 4000) == 0 && !mapping_macro_busy(&m));
+    CHECK(mapping_macro_step(&m, &s, CTRL_PRO, 0, C, 4000) == 0 && !mapping_macro_busy(&m));
     // The macro output itself sets no button through the normal mapping.
     CHECK(mapping_out_button_bit(OUT_HOME_A) == 0);
 }
@@ -447,9 +448,9 @@ static void test_gp_map(void) {
     settings_t s;
     test_defaults(&s);
     uint8_t map[IN_COUNT];
-    settings_default_mode_map(USB_MODE_DUALSENSE_EDGE, map);
+    settings_default_mode_map(CTRL_PRO, USB_MODE_DUALSENSE_EDGE, map);
     CHECK(map[IN_A] == GP_EAST && map[IN_B] == GP_SOUTH && map[IN_GL] == GP_PADDLE_L && map[IN_C] == GP_FN_R);
-    settings_default_mode_map(USB_MODE_XBOX360, map);
+    settings_default_mode_map(CTRL_PRO, USB_MODE_XBOX360, map);
     CHECK(map[IN_GL] == GP_NONE && map[IN_CAPTURE] == GP_NONE && map[IN_HOME] == GP_GUIDE);
     s2_input_t in;
     memset(&in, 0, sizeof in);
@@ -638,9 +639,29 @@ static void test_gc_adapter(void) {
     CHECK(len == 214);
     // Default map: by label.
     uint8_t map[IN_COUNT];
-    settings_default_mode_map(USB_MODE_GC_ADAPTER, map);
+    settings_default_mode_map(CTRL_GAMECUBE, USB_MODE_GC_ADAPTER, map);
     CHECK(map[IN_A] == GP_SOUTH && map[IN_B] == GP_WEST && map[IN_ZR] == GP_R1 && map[IN_PLUS] == GP_START);
     CHECK(map[IN_L] == GP_L2 && map[IN_R] == GP_R2 && map[IN_HOME] == GP_NONE);
+    // Pro Controller in GameCube adapter mode: triggers are L / R, R is Z.
+    settings_default_mode_map(CTRL_PRO, USB_MODE_GC_ADAPTER, map);
+    CHECK(map[IN_ZL] == GP_L2 && map[IN_ZR] == GP_R2 && map[IN_R] == GP_R1 && map[IN_L] == GP_NONE);
+    // GameCube controller in a gamepad mode: analog L / R are the triggers, Z / ZL the bumpers.
+    settings_default_mode_map(CTRL_GAMECUBE, USB_MODE_XBOX360, map);
+    CHECK(map[IN_L] == GP_L2 && map[IN_R] == GP_R2 && map[IN_ZR] == GP_R1 && map[IN_ZL] == GP_L1);
+    settings_default_mode_map(CTRL_PRO, USB_MODE_XBOX360, map);
+    CHECK(map[IN_L] == GP_L1 && map[IN_ZR] == GP_R2);
+    // Profiles are separate; the map lookup follows the controller type.
+    static settings_t st;
+    memset(&st, 0, sizeof st);
+    settings_default_profile(CTRL_GAMECUBE, &st.gc_profile);
+    settings_default_button_map(CTRL_PRO, st.button_map);
+    st.button_map[IN_A] = OUT_B;
+    CHECK(settings_button_map(&st, CTRL_PRO)[IN_A] == OUT_B && settings_button_map(&st, CTRL_GAMECUBE)[IN_A] == OUT_A);
+    CHECK(settings_map_for(&st, CTRL_GAMECUBE, USB_MODE_XBOX360) == st.gc_profile.mode_map[USB_MODE_XBOX360]);
+    mapping_ctx_t gcx;
+    memset(&gcx, 0, sizeof gcx);
+    gcx.is_gamecube = true;
+    CHECK(mapping_ctrl_type(&gcx) == CTRL_GAMECUBE && mapping_ctrl_type(NULL) == CTRL_PRO);
 }
 
 int main(void) {

@@ -61,6 +61,11 @@ typedef struct {
     float gyro_lsb_per_dps;     // native scale of the connected controller
 } mapping_ctx_t;
 
+// Which controller's maps apply (GameCube controller or the rest).
+static inline ctrl_type_t mapping_ctrl_type(const mapping_ctx_t *ctx) {
+    return ctx && ctx->is_gamecube ? CTRL_GAMECUBE : CTRL_PRO;
+}
+
 typedef struct {
     uint32_t buttons;           // S1_BTN_* (24 bits used)
     uint16_t stick_l[2];        // 12-bit, x/y
@@ -95,7 +100,7 @@ void mapping_imu_sdl(const settings_t *s, const mapping_ctx_t *ctx, const s2_inp
 // button to make GL (GR) send whatever that button sends; doing it again with
 // the same button clears GL (GR). `prev`/`raw` are consecutive raw Switch 2
 // button states. Returns true and sets *changed when a mapping changed.
-bool mapping_quick_remap(settings_t *s, uint32_t prev, uint32_t raw, in_button_t *changed);
+bool mapping_quick_remap(settings_t *s, ctrl_type_t type, uint32_t prev, uint32_t raw, in_button_t *changed);
 // Same on any button map (0 = unassigned), e.g. a non-Switch mode's map.
 bool mapping_quick_remap_map(uint8_t map[IN_COUNT], uint32_t prev, uint32_t raw, in_button_t *changed);
 // True while a quick-remap chord is held (its buttons shouldn't reach the host).
@@ -116,7 +121,8 @@ typedef struct {
 #define MACRO_HOME_A_MS  100   // Home + A, then release
 
 // Switch mode: returns the S1 buttons to add (Home, then Home + A).
-uint32_t mapping_macro_step(mapping_macro_t *m, const settings_t *s, uint32_t prev, uint32_t raw, uint32_t now_ms);
+uint32_t mapping_macro_step(mapping_macro_t *m, const settings_t *s, ctrl_type_t type, uint32_t prev, uint32_t raw,
+                            uint32_t now_ms);
 
 typedef enum { MACRO_IDLE, MACRO_GUIDE, MACRO_GUIDE_SOUTH } macro_phase_t;
 // Any map: buttons mapped to `macro_value` run the macro; returns its phase.

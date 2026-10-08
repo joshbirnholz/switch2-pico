@@ -196,6 +196,15 @@ the real adapter. Notes:
 * Reports go out at the *Report interval* (default 8 ms = 125 Hz, like the
   real adapter; 4 ms for 250 Hz).
 
+**Per controller.** The Pro Controller and the NSO GameCube controller each
+have their own button maps (every mode) and their own mode shortcut buttons;
+the dongle uses the set of whichever controller is connected. The
+configuration page shows that controller's set and has a **Controller**
+selector to edit the other. Defaults differ where it helps: a GameCube
+controller's analog L / R are the triggers (LT / RT, L2 / R2) and Z the right
+bumper in the gamepad modes; a Pro Controller in GameCube adapter mode uses
+ZL / ZR as L / R and R as Z.
+
 **Switching from the controller:** hold **C + Home** for 1.5 seconds. The
 controller gives a "ba-thump" and all four of its lights blink. Then press the
 button for the mode you want; the controller thumps and the dongle restarts in
