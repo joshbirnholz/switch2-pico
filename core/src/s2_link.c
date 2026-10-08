@@ -337,7 +337,7 @@ static float host_rumble_magnitude(uint32_t now) {
     float mag = 0.0f;
     for (int i = 0; i < s_rum_nl; i++) mag = fmaxf(mag, fmaxf(s_rum_l[i].hi_amp, s_rum_l[i].lo_amp));
     for (int i = 0; i < s_rum_nr; i++) mag = fmaxf(mag, fmaxf(s_rum_r[i].hi_amp, s_rum_r[i].lo_amp));
-    mag *= (float)g_settings.rumble_strength_pct / 100.0f;
+    mag *= (float)settings_tuning(&g_settings, mapping_ctrl_type(&s_map)).rumble_strength / 100.0f;
     if (now - s_rum_last_host_ms > RUMBLE_IDLE_STOP_MS) mag = 0.0f;
     return mag;
 }
@@ -347,7 +347,7 @@ static void gc_rumble_task(uint32_t now) {
     float mag = 0.0f;
     for (int i = 0; i < s_rum_nl; i++) mag = fmaxf(mag, fmaxf(s_rum_l[i].hi_amp, s_rum_l[i].lo_amp));
     for (int i = 0; i < s_rum_nr; i++) mag = fmaxf(mag, fmaxf(s_rum_r[i].hi_amp, s_rum_r[i].lo_amp));
-    mag *= (float)g_settings.rumble_strength_pct / 100.0f;
+    mag *= (float)settings_tuning(&g_settings, mapping_ctrl_type(&s_map)).rumble_strength / 100.0f;
     if (now - s_rum_last_host_ms > RUMBLE_IDLE_STOP_MS) mag = 0.0f;
     bool rising = s_gc_last_mag < 0.06f && mag >= 0.06f;
     s_gc_last_mag = mag;
@@ -498,7 +498,7 @@ static void rumble_task(void) {
         return;
     }
     uint32_t now = now_ms();
-    if (haptic_task(now) || !g_settings.rumble_enabled) return;
+    if (haptic_task(now) || !settings_tuning(&g_settings, mapping_ctrl_type(&s_map)).rumble_enabled) return;
     if (s_map.is_gamecube) {
         if (s2t_has_char(S2T_CHAR_VIBRATION)) gc_motor_task(now, host_rumble_magnitude(now));
         else gc_rumble_task(now);

@@ -97,6 +97,11 @@ void settings_default_profile(ctrl_type_t type, ctrl_profile_t *p) {
     settings_default_button_map(type, p->button_map);
     for (int m = 0; m < MODE_MAP_SLOTS; m++) settings_default_mode_map(type, (usb_mode_t)m, p->mode_map[m]);
     settings_default_mode_slots(p->mode_slot);
+    p->stick_deadzone_pct = 6;
+    p->stick_outer_pct = 95;
+    p->swap_sticks = 0;
+    p->rumble_enabled = 1;
+    p->rumble_strength_pct = 100;
 }
 
 uint32_t mapping_out_button_bit(out_button_t b) {
@@ -129,12 +134,20 @@ uint32_t mapping_buttons_except(const settings_t *s, const mapping_ctx_t *ctx, c
     return out;
 }
 
+static void stick_scaled(uint8_t deadzone_pct, uint8_t outer_pct, const s2_stick_cal_t *cal, const uint16_t raw[2],
+                         uint16_t out[2]);
+
 void mapping_stick(const settings_t *s, const s2_stick_cal_t *cal, const uint16_t raw[2], uint16_t out[2]) {
+    stick_scaled(s->stick_deadzone_pct, s->stick_outer_pct, cal, raw, out);
+}
+
+static void stick_scaled(uint8_t deadzone_pct, uint8_t outer_pct, const s2_stick_cal_t *cal, const uint16_t raw[2],
+                         uint16_t out[2]) {
     float x = s2_stick_axis(cal, 0, raw[0]);
     float y = s2_stick_axis(cal, 1, raw[1]);
     float mag = sqrtf(x * x + y * y);
-    float dz = (float)s->stick_deadzone_pct / 100.0f;
-    float outer = (float)s->stick_outer_pct / 100.0f;
+    float dz = (float)deadzone_pct / 100.0f;
+    float outer = (float)outer_pct / 100.0f;
     if (outer <= dz + 0.01f) outer = dz + 0.01f;
     float scaled;
     if (mag <= dz) {
@@ -213,12 +226,14 @@ void mapping_imu_sdl(const settings_t *s, const mapping_ctx_t *ctx, const s2_inp
 
 void mapping_apply(const settings_t *s, const mapping_ctx_t *ctx, const s2_input_t *in, procon_input_t *out) {
     out->buttons = mapping_buttons(s, ctx, in);
-    const uint16_t *lraw = s->swap_sticks ? in->stick_r : in->stick_l;
-    const uint16_t *rraw = s->swap_sticks ? in->stick_l : in->stick_r;
-    const s2_stick_cal_t *lcal = s->swap_sticks ? &ctx->cal_r : &ctx->cal_l;
-    const s2_stick_cal_t *rcal = s->swap_sticks ? &ctx->cal_l : &ctx->cal_r;
-    mapping_stick(s, lcal, lraw, out->stick_l);
-    mapping_stick(s, rcal, rraw, out->stick_r);
+    // The connected controller type's deadzone / range / swap.
+    ctrl_tuning_t t = settings_tuning(s, mapping_ctrl_type(ctx));
+    const uint16_t *lraw = t.swap ? in->stick_r : in->stick_l;
+    const uint16_t *rraw = t.swap ? in->stick_l : in->stick_r;
+    const s2_stick_cal_t *lcal = t.swap ? &ctx->cal_r : &ctx->cal_l;
+    const s2_stick_cal_t *rcal = t.swap ? &ctx->cal_l : &ctx->cal_r;
+    stick_scaled(t.deadzone, t.outer, lcal, lraw, out->stick_l);
+    stick_scaled(t.deadzone, t.outer, rcal, rraw, out->stick_r);
     mapping_imu(s, ctx, in, out->accel, out->gyro);
 }
 

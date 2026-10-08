@@ -662,6 +662,13 @@ static void test_gc_adapter(void) {
     memset(&gcx, 0, sizeof gcx);
     gcx.is_gamecube = true;
     CHECK(mapping_ctrl_type(&gcx) == CTRL_GAMECUBE && mapping_ctrl_type(NULL) == CTRL_PRO);
+    // Stick and rumble settings are per controller too.
+    st.stick_deadzone_pct = 6;
+    st.rumble_strength_pct = 100;
+    st.gc_profile.stick_deadzone_pct = 12;
+    st.gc_profile.rumble_strength_pct = 40;
+    CHECK(settings_tuning(&st, CTRL_PRO).deadzone == 6 && settings_tuning(&st, CTRL_PRO).rumble_strength == 100);
+    CHECK(settings_tuning(&st, CTRL_GAMECUBE).deadzone == 12 && settings_tuning(&st, CTRL_GAMECUBE).rumble_strength == 40);
 }
 
 int main(void) {

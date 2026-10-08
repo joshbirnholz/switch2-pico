@@ -235,9 +235,12 @@ static void api_settings_get(http_response_t *r) {
               s->wifi_autostart, s->wifi_channel);
     jb_str(&j, s->wifi_ssid);
     jb_printf(&j, ",\"wifi_has_pass\":%s,\"ble_tx_power\":%u,\"idle_disconnect\":%u,\"idle_minutes\":%u,"
-                  "\"pair_button\":%u,\"sync_button\":%s}",
+                  "\"pair_button\":%u,\"sync_button\":%s,"
+                  "\"gc_deadzone\":%u,\"gc_outer\":%u,\"gc_swap_sticks\":%u,\"gc_rumble_enabled\":%u,\"gc_rumble_strength\":%u}",
               s->wifi_pass[0] ? "true" : "false", s->ble_tx_power, !s->idle_disconnect_off, s->idle_minutes,
-              s->pair_button, platform_has_sync_button() ? "true" : "false");
+              s->pair_button, platform_has_sync_button() ? "true" : "false", s->gc_profile.stick_deadzone_pct,
+              s->gc_profile.stick_outer_pct, s->gc_profile.swap_sticks, s->gc_profile.rumble_enabled,
+              s->gc_profile.rumble_strength_pct);
     respond_json(r, &j);
 }
 
@@ -343,6 +346,11 @@ static bool apply_kv(settings_t *s, const char *k, const char *v, bool *usb_reco
         {"ble_tx_power", &s->ble_tx_power, 1, false},
         {"idle_minutes", &s->idle_minutes, 1, false},
         {"pair_button", &s->pair_button, 1, false},
+        {"gc_deadzone", &s->gc_profile.stick_deadzone_pct, 1, false},
+        {"gc_outer", &s->gc_profile.stick_outer_pct, 1, false},
+        {"gc_swap_sticks", &s->gc_profile.swap_sticks, 1, false},
+        {"gc_rumble_enabled", &s->gc_profile.rumble_enabled, 1, false},
+        {"gc_rumble_strength", &s->gc_profile.rumble_strength_pct, 1, false},
         {"wifi_autostart", &s->wifi_autostart, 1, false},
         {"wifi_channel", &s->wifi_channel, 1, false},
     };

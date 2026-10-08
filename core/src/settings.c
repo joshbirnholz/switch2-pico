@@ -138,6 +138,11 @@ void settings_sanitize(settings_t *s) {
     s->pair_button = s->pair_button && platform_has_sync_button() ? 1 : 0;
     s->stick_deadzone_pct = clamp_u8(s->stick_deadzone_pct, 0, 40);
     s->stick_outer_pct = clamp_u8(s->stick_outer_pct, 50, 100);
+    s->gc_profile.stick_deadzone_pct = clamp_u8(s->gc_profile.stick_deadzone_pct, 0, 40);
+    s->gc_profile.stick_outer_pct = clamp_u8(s->gc_profile.stick_outer_pct, 50, 100);
+    s->gc_profile.swap_sticks = s->gc_profile.swap_sticks ? 1 : 0;
+    s->gc_profile.rumble_enabled = s->gc_profile.rumble_enabled ? 1 : 0;
+    s->gc_profile.rumble_strength_pct = clamp_u8(s->gc_profile.rumble_strength_pct, 0, 200);
     s->swap_sticks = s->swap_sticks ? 1 : 0;
     if (s->gyro_range > GYRO_RANGE_14_3) s->gyro_range = GYRO_RANGE_AUTO;
     s->gyro_scale_pct = clamp_u16(s->gyro_scale_pct, 10, 400);
@@ -190,6 +195,14 @@ void settings_init(void) {
             // adapter map (new, GameCube-controller defaults) gets the Pro's.
             settings_default_profile(CTRL_GAMECUBE, &g_settings.gc_profile);
             settings_default_mode_map(CTRL_PRO, USB_MODE_GC_ADAPTER, g_settings.mode_map[USB_MODE_GC_ADAPTER]);
+        }
+        if (rev < 7) {
+            // GameCube controller sticks / rumble: start from the shared values.
+            g_settings.gc_profile.stick_deadzone_pct = g_settings.stick_deadzone_pct;
+            g_settings.gc_profile.stick_outer_pct = g_settings.stick_outer_pct;
+            g_settings.gc_profile.swap_sticks = g_settings.swap_sticks;
+            g_settings.gc_profile.rumble_enabled = g_settings.rumble_enabled;
+            g_settings.gc_profile.rumble_strength_pct = g_settings.rumble_strength_pct;
         }
         g_settings.ext_rev = SETTINGS_EXT_REV;
         settings_sanitize(&g_settings);

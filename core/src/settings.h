@@ -81,7 +81,8 @@ typedef enum {
     MODE_SLOT_COUNT
 } mode_slot_t;
 #define MODE_SLOT_EMPTY 0
-#define SETTINGS_EXT_REV 6   // 1: mode_map; 2: mode_slot; 3: ble_tx_power; 4: idle_*; 5: pair_button; 6: gc_profile
+#define SETTINGS_EXT_REV 7   // 1: mode_map; 2: mode_slot; 3: ble_tx_power; 4: idle_*; 5: pair_button;
+                             // 6: gc_profile; 7: gc_profile sticks / rumble
 
 // Controller types with their own button maps and mode shortcut buttons.
 typedef enum {
@@ -94,6 +95,12 @@ typedef struct {
     uint8_t button_map[IN_COUNT];                  // Switch Pro mode: out_button_t
     uint8_t mode_map[MODE_MAP_SLOTS][IN_COUNT];    // other modes: gp_out_t
     uint8_t mode_slot[MODE_SLOT_COUNT];            // mode shortcut buttons
+    // Sticks and rumble (the Pro's are the top-level fields of the same names).
+    uint8_t stick_deadzone_pct;
+    uint8_t stick_outer_pct;
+    uint8_t swap_sticks;
+    uint8_t rumble_enabled;
+    uint8_t rumble_strength_pct;
 } ctrl_profile_t;
 
 #define SETTINGS_MAGIC   0x53325043u   // "S2PC"
@@ -199,6 +206,28 @@ static inline uint8_t *settings_mode_map(const settings_t *s, ctrl_type_t t, usb
 static inline uint8_t *settings_mode_slots(const settings_t *s, ctrl_type_t t) {
     return (uint8_t *)(t == CTRL_GAMECUBE ? s->gc_profile.mode_slot : s->mode_slot);
 }
+// Sticks and rumble of one controller type.
+typedef struct {
+    uint8_t deadzone, outer, swap, rumble_enabled, rumble_strength;
+} ctrl_tuning_t;
+static inline ctrl_tuning_t settings_tuning(const settings_t *s, ctrl_type_t t) {
+    ctrl_tuning_t r;
+    if (t == CTRL_GAMECUBE) {
+        r.deadzone = s->gc_profile.stick_deadzone_pct;
+        r.outer = s->gc_profile.stick_outer_pct;
+        r.swap = s->gc_profile.swap_sticks;
+        r.rumble_enabled = s->gc_profile.rumble_enabled;
+        r.rumble_strength = s->gc_profile.rumble_strength_pct;
+    } else {
+        r.deadzone = s->stick_deadzone_pct;
+        r.outer = s->stick_outer_pct;
+        r.swap = s->swap_sticks;
+        r.rumble_enabled = s->rumble_enabled;
+        r.rumble_strength = s->rumble_strength_pct;
+    }
+    return r;
+}
+
 // Map of the given USB mode (Switch Pro: out_button_t, others: gp_out_t).
 static inline uint8_t *settings_map_for(const settings_t *s, ctrl_type_t t, usb_mode_t m) {
     return m == USB_MODE_SWITCH_PRO ? settings_button_map(s, t) : settings_mode_map(s, t, m);

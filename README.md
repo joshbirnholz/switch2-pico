@@ -197,10 +197,14 @@ the real adapter. Notes:
   real adapter; 4 ms for 250 Hz).
 
 **Per controller.** The Pro Controller and the NSO GameCube controller each
-have their own button maps (every mode) and their own mode shortcut buttons;
-the dongle uses the set of whichever controller is connected. The
-configuration page shows that controller's set and has a **Controller**
-selector to edit the other. Defaults differ where it helps: a GameCube
+have their own button maps (every mode), mode shortcut buttons, stick
+settings (deadzone, full deflection, swap) and rumble settings; the dongle uses
+the set of whichever controller is connected. The configuration page has a
+**Pro Controller** tab and a **GameCube controller** tab for these (it opens on
+the connected controller's tab, marked with a green dot); settings shared by
+both — USB mode, report interval, pairing, Wi-Fi, firmware — sit outside the
+tabs. Motion and HD rumble options are on the Pro Controller tab only; the
+trigger threshold is on the GameCube tab. Defaults differ where it helps: a GameCube
 controller's analog L / R are the triggers (LT / RT, L2 / R2) and Z the right
 bumper in the gamepad modes; a Pro Controller in GameCube adapter mode uses
 ZL / ZR as L / R and R as Z.
