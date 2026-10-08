@@ -9,6 +9,7 @@
 #include "usb_mode.h"
 #include "x360.h"
 #include "mode_select.h"
+#include "battery.h"
 #include "hd_rumble.h"
 #include "mapping.h"
 #include "s2_proto.h"
@@ -577,6 +578,32 @@ static void test_classic_rumble(void) {
     CHECK(!s2_rumble_block_active(bl));
 }
 
+static void test_battery(void) {
+    CHECK(battery_mv_to_percent(3300) == 0 && battery_mv_to_percent(4200) == 100);
+    CHECK(battery_mv_to_percent(3700) == 30 && battery_mv_to_percent(3725) == 36);
+    CHECK(battery_mv_to_percent(3900) > battery_mv_to_percent(3800));
+    battery_t b;
+    battery_reset(&b);
+    battery_update(&b, 3900, false, 0);
+    CHECK(b.pct == 72);
+    // A rumble dip of 150 mV for 200 ms barely moves it.
+    for (uint32_t t = 8; t <= 200; t += 8) battery_update(&b, 3750, false, t);
+    CHECK(b.pct >= 70);
+    // Back up: discharging never rises by a small amount.
+    for (uint32_t t = 208; t <= 20000; t += 8) battery_update(&b, 3900, false, t);
+    CHECK(b.pct <= 72 && b.pct >= 70);
+    // A sustained drop goes through.
+    for (uint32_t t = 20008; t <= 80000; t += 8) battery_update(&b, 3700, false, t);
+    CHECK(b.pct >= 29 && b.pct <= 31);
+    // Charger connected: the reading is corrected for the charging voltage.
+    battery_update(&b, 3900, true, 80008);
+    CHECK(b.charging && b.pct == battery_mv_to_percent(3780));
+    // No reading (0 mV) is ignored.
+    uint8_t p = b.pct;
+    battery_update(&b, 0, true, 80016);
+    CHECK(b.pct == p);
+}
+
 int main(void) {
     test_s1_rumble_classic();
     test_s1_rumble_packed();
@@ -593,6 +620,7 @@ int main(void) {
     test_imu_sdl();
     test_mode_select();
     test_classic_rumble();
+    test_battery();
     printf("%d passed, %d failed\n", g_pass, g_fail);
     return g_fail ? 1 : 0;
 }

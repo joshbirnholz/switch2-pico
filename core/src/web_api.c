@@ -17,6 +17,7 @@
 #include <string.h>
 
 #include "app.h"
+#include "battery.h"
 #include "log.h"
 #include "mapping.h"
 #include "procon.h"
@@ -115,10 +116,10 @@ static void api_status(http_response_t *r) {
     jb_printf(&j, ",\"addr\":\"%s\",\"pid\":%u,\"serial\":", a, li.pid);
     jb_str(&j, li.serial);
     jb_printf(&j,
-              ",\"battery_mv\":%u,\"charge_state\":%u,\"report_hz\":%.0f,\"conn_interval_ms\":%.2f,"
+              ",\"battery_mv\":%u,\"battery_pct\":%u,\"charging\":%s,\"charge_state\":%u,\"report_hz\":%.0f,\"conn_interval_ms\":%.2f,"
               "\"mtu\":%u,\"paired_now\":%s,\"pairing_ok\":%s,\"gyro_range\":%u,\"rssi\":%d,"
               "\"reports\":%lu,\"rumble_packets\":%lu,\"gyro_cal_busy\":%s}",
-              li.battery_mv, li.charge_state, (double)li.report_rate_hz, li.conn_interval * 1.25, li.mtu,
+              li.battery_mv, battery_percent(), battery_charging() ? "true" : "false", li.charge_state, (double)li.report_rate_hz, li.conn_interval * 1.25, li.mtu,
               li.paired_this_session ? "true" : "false", li.pairing_ok ? "true" : "false",
               li.gyro_range_detected, li.last_rssi, (unsigned long)li.reports,
               (unsigned long)li.rumble_packets, li.gyro_cal_busy ? "true" : "false");

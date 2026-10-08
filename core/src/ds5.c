@@ -1,5 +1,7 @@
 #include "ds5.h"
 
+#include "battery.h"
+
 #include <math.h>
 #include <string.h>
 
@@ -231,11 +233,6 @@ void ds5_init(void) {
     for (int i = 0; i < 5; i++) s_mac[i] = id[i] ^ id[i + 3];
 }
 
-static uint8_t battery_pct(uint16_t mv) {
-    if (!mv) return 100;
-    int p = ((int)mv - 3500) * 100 / (4150 - 3500);
-    return (uint8_t)(p < 0 ? 0 : p > 100 ? 100 : p);
-}
 
 void ds5_set_input(const s2_input_t *in, const mapping_ctx_t *ctx, uint32_t gp, bool connected) {
     ds5_state_t st;
@@ -260,8 +257,8 @@ void ds5_set_input(const s2_input_t *in, const mapping_ctx_t *ctx, uint32_t gp, 
         if (gp & GP_BIT(GP_L2)) st.trigger_l = 255;
         if (gp & GP_BIT(GP_R2)) st.trigger_r = 255;
         mapping_imu_sdl(&g_settings, ctx, in, st.accel_g, st.gyro_dps);
-        st.battery_pct = battery_pct(in->battery_mv);
-        st.charging = in->charge_state != 0 && in->charge_state != 0x20;
+        st.battery_pct = battery_percent();   // smoothed, see battery.c
+        st.charging = battery_charging();
     }
     // A new touch gets a new tracking id.
     const uint32_t touch = GP_BIT(GP_TOUCHPAD) | GP_BIT(GP_TP_LEFT) | GP_BIT(GP_TP_RIGHT);

@@ -10,6 +10,7 @@
 #include "tusb.h"
 
 #include "app.h"
+#include "battery.h"
 #include "ds5.h"
 #include "x360.h"
 #include "log.h"
@@ -253,6 +254,8 @@ static void update_input(void) {
         last_seq = seq;
         uint32_t raw_prev = s_raw_buttons;
         idle_check(&in, raw_prev, first);
+        // Charge state byte is non-zero while external power is connected.
+        battery_update(&g_battery, in.battery_mv, in.charge_state != 0 && in.charge_state != 0x20, platform_millis());
         s_raw_buttons = in.buttons;
         // A button press while the host sleeps (controller still connected,
         // i.e. within SUSPEND_DISCONNECT_MS) wakes it.
@@ -325,6 +328,7 @@ static void update_input(void) {
         if (!was_connected) return;
         was_connected = false;
         memset(&macro, 0, sizeof macro);
+        battery_reset(&g_battery);
         s_raw_buttons = 0;
         host_prev = 0;
         s_swallow = 0;
@@ -392,6 +396,7 @@ static void maintenance_task(void) {
 void app_core_init(void) {
     LOG("usb: mode %s", usb_mode_name(usb_mode_active()));
     mode_select_init(&s_msel);
+    battery_reset(&g_battery);
     procon_init();
     ds5_init();
     x360_init();

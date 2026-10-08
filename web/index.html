@@ -216,6 +216,8 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
   <div class="row" style="margin-top:12px" id="fw-step1">
     <button class="primary" id="fw-go" onclick="fwStart()" disabled>Update</button>
     <button onclick="fwCheck()">Check again</button>
+    <button onclick="$('fw-file').click()">Install a .uf2 file…</button>
+    <input type="file" id="fw-file" accept=".uf2" style="display:none" onchange="fwFile(this)">
   </div>
   <div id="fw-step2" style="display:none;margin-top:12px">
     <p class="note" style="margin-top:0">The dongle restarted as a USB drive (<b>NICENANO</b>, <b>FTHR840BOOT</b> or <b>RP2350</b>). Choose that drive and the firmware is written to it; the dongle installs it and restarts by itself.</p>
@@ -449,7 +451,7 @@ async function poll(){
     kv($('ctrl'),[
       ['Type',PIDS[L.pid]||(L.pid?('0x'+L.pid.toString(16)):'—')],['Serial',L.serial||'—'],['Address',ready?L.addr:'—'],
       ['Paired controller',s.bond.bonded?s.bond.addr:'none'],
-      ['Battery',L.battery_mv?(L.battery_mv/1000).toFixed(2)+' V':'—'],
+      ['Battery',L.battery_mv?`${L.battery_pct}%${L.charging?' (charging)':''} · ${(L.battery_mv/1000).toFixed(2)} V · charge state 0x${(L.charge_state||0).toString(16).padStart(2,'0')}`:'—'],
       ['Report rate',ready?L.report_hz+' Hz ('+L.conn_interval_ms+' ms interval)':'—'],
       ['Gyro scale',['not detected','16.4','14.3'][L.gyro_range]||'—'],
       ['Dongle power',s.supply?`USB ${(s.supply.vbus/1000).toFixed(2)} V (lowest ${(s.supply.vbus_min/1000).toFixed(2)}), chip ${(s.supply.vdd/1000).toFixed(2)} V (lowest ${(s.supply.vdd_min/1000).toFixed(2)})`:'—'],
@@ -520,7 +522,7 @@ function crc32(b){
 }
 // Send the image over the configuration channel; the dongle checks it, installs it
 // at the next start and restarts. Returns false if this firmware can't do that.
-async function fwDirect(uf2){
+async function fwDirect(uf2,label){
   let info;
   try{const r=await api('/api/fw/info');if(!r.ok)return false;info=r.json()}catch(e){return false}
   const img=uf2Image(uf2,info.family,info.base,info.max),crc=crc32(img);
@@ -534,8 +536,30 @@ async function fwDirect(uf2){
   $('fw-note').textContent='Checking…';
   await post('/api/fw/end');
   try{await api('/api/action?do=reboot',{method:'POST'})}catch(e){}
-  $('fw-note').textContent='Installed. The dongle is restarting with v'+FW.version+'; it reconnects by itself in a few seconds (click Connect if it doesn\'t).';
+  $('fw-note').textContent='Installed. The dongle is restarting with '+label+'; it reconnects by itself in a few seconds (click Connect if it doesn\'t).';
   return true;
+}
+// A .uf2 picked from disk (e.g. a local build or an older release).
+async function fwFile(input){
+  const f=input.files&&input.files[0];input.value='';
+  if(!f)return;
+  if(!USE_HTTP&&!usbDev){toast('Connect the dongle first');return}
+  const buf=new Uint8Array(await f.arrayBuffer());
+  if(!confirm('Install '+f.name+' on the dongle?'))return;
+  fwBlob=new Blob([buf]);fwName=f.name;
+  try{
+    if(await fwDirect(buf,f.name))return;
+    // Older firmware without direct update: through the UF2 drive.
+    if(!confirm('This firmware can\'t take an update directly. Restart the dongle into its USB drive mode and install it from there?'))return;
+  }catch(e){
+    // Wrong board or not a firmware image: the drive wouldn't take it either.
+    if(/for this board|fit this board/.test(e.message)){$('fw-note').textContent=f.name+': '+e.message+'.';return}
+    if(!confirm('Direct install failed ('+e.message+'). Restart the dongle into its USB drive mode and install it from there instead?')){$('fw-note').textContent='Install failed: '+e.message;return}
+  }
+  try{await api('/api/action?do=bootloader',{method:'POST'})}catch(e){}
+  $('fw-step1').style.display='none';$('fw-step2').style.display='';
+  $('fw-write').style.display=window.showDirectoryPicker?'':'none';
+  $('fw-note').textContent=window.showDirectoryPicker?'':'This browser can\'t write to the drive directly: save the file and drag it onto the drive.';
 }
 async function fwStart(){
   const file=FW.files[ST.platform];
@@ -547,7 +571,7 @@ async function fwStart(){
     fwBlob=await r.blob();fwName=file;
   }catch(e){$('fw-note').textContent='Download failed: '+e.message;return}
   const go=$('fw-go');go.disabled=true;
-  try{if(await fwDirect(new Uint8Array(await fwBlob.arrayBuffer()))){go.disabled=false;return}}
+  try{if(await fwDirect(new Uint8Array(await fwBlob.arrayBuffer()),'v'+FW.version)){go.disabled=false;return}}
   catch(e){
     go.disabled=false;
     if(!confirm('Direct update failed ('+e.message+'). Restart the dongle into its USB drive mode and install it from there instead?')){$('fw-note').textContent='Update failed: '+e.message;return}

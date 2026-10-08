@@ -1,5 +1,7 @@
 #include "procon.h"
 
+#include "battery.h"
+
 #include <string.h>
 
 #include "platform.h"
@@ -128,19 +130,11 @@ static void spi_erase(uint32_t addr) {
 // Report building
 // ---------------------------------------------------------------------------
 static uint8_t battery_byte(void) {
-    uint8_t level;
-    if (!s_connected || s_battery_mv == 0) {
-        level = 4;
-    } else if (s_battery_mv >= 3950) {
-        level = 4;
-    } else if (s_battery_mv >= 3750) {
-        level = 3;
-    } else if (s_battery_mv >= 3600) {
-        level = 2;
-    } else if (s_battery_mv >= 3450) {
-        level = 1;
-    } else {
-        level = 0;
+    // Level from the smoothed percentage (battery.c): full / medium / low / critical / empty.
+    uint8_t level = 4;
+    if (s_connected && s_battery_mv) {
+        uint8_t p = battery_percent();
+        level = p >= 75 ? 4 : p >= 50 ? 3 : p >= 25 ? 2 : p >= 8 ? 1 : 0;
     }
     // bits 7..5 capacity (0..4), bit 4 charging, bits 2..1 connection type
     // (0 = Pro Controller / grip), bit 0 powered by host.

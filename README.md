@@ -86,6 +86,11 @@ browsers use *Save the .uf2 instead* and drag the file onto the drive.
 **Firmware update mode** only restarts into the drive, for installing a file
 by hand.
 
+**Install a .uf2 file…** in the same section installs a file from your
+computer (a local build, or an older release to go back to) the same way:
+directly when the firmware supports it, otherwise through the drive. A file
+for a different board is refused.
+
 ## Pairing and everyday use
 
 1. Plug in the dongle. Its LED blinks fast because no controller is paired yet.
@@ -197,6 +202,11 @@ DualSense modes add these outputs to the map:
   Edge defaults are GL → left paddle, GR → right paddle, C → right Fn).
 * **PS + Cross (Steam quick access)**, the macro equivalent of Home+A (Xbox:
   Guide + A).
+
+The battery level (DualSense percentage, Switch Pro full / medium / low /
+critical) comes from the controller's battery voltage through a typical
+lithium-cell curve, smoothed over several seconds so rumble doesn't make it
+jump, and it only moves down while discharging (up while charging).
 
 Rumble is the two-motor kind these controllers have, played on the Switch 2's
 HD rumble actuators like the motors of a real pad: the strong, heavy motor in
