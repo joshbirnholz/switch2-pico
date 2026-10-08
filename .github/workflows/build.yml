@@ -4,11 +4,6 @@ on:
   push:
   pull_request:
   workflow_dispatch:
-    inputs:
-      pico:
-        description: Also build the Pico 2 W firmware
-        type: boolean
-        default: false
 
 jobs:
   test:
@@ -19,18 +14,18 @@ jobs:
       - name: Host unit tests
         run: make -C test
 
-  # The Pico 2 W isn't a focus right now: built only on request (Run workflow
-  # -> "Also build the Pico 2 W firmware"), and nothing waits for it.
   firmware-pico2w:
-    if: github.event_name == 'workflow_dispatch' && inputs.pico
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: Install toolchain
         run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib cmake ninja-build
+          # Bounded network waits and retries: a stalled mirror once hung
+          # this step until the job timed out.
+          apt="sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
+          timeout 600 $apt update
+          timeout 900 $apt install -y gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib cmake ninja-build
       - name: Fetch Pico SDK
         run: |
           git clone --depth 1 -b 2.2.0 https://github.com/raspberrypi/pico-sdk "$RUNNER_TEMP/pico-sdk"
@@ -74,8 +69,12 @@ jobs:
   # "latest", so the UF2 files can be downloaded directly (artifacts need a
   # GitHub login and come zipped).
   release:
-    if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
-    needs: [test, firmware-nrf52840]
+    # Runs when the tests and the nRF52840 build pass; the Pico file is
+    # included when its build succeeded (a hung Pico job doesn't hold this up).
+    if: >-
+      always() && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch &&
+      needs.test.result == 'success' && needs.firmware-nrf52840.result == 'success'
+    needs: [test, firmware-pico2w, firmware-nrf52840]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -92,7 +91,10 @@ jobs:
           ver=$(head -n1 VERSION)
           short=${GITHUB_SHA::7}
           cp dist/switch2-nrf52840-firmware/switch2_nrf52840.uf2 "switch2-pico-v$ver-nrf52840.uf2"
-          notes="Built from $short on ${{ github.ref_name }}. Flash the .uf2 by double-tapping reset on the nRF52840 board and copying it to the drive that appears, or use Update on the configuration page."
+          if [ -f dist/switch2-pico2w-firmware/switch2_pico.uf2 ]; then
+            cp dist/switch2-pico2w-firmware/switch2_pico.uf2 "switch2-pico-v$ver-pico2w.uf2"
+          fi
+          notes="Built from $short on ${{ github.ref_name }}. Flash the .uf2 for your board (double-tap reset on nRF52840 boards, hold BOOTSEL on a Pico) or use Update on the configuration page."
           # The "latest" tag stays where it was created: moving it to a commit
           # that touches a workflow file needs a token with workflows
           # permission. The files and notes are what change.
@@ -115,8 +117,10 @@ jobs:
   # web page: they send no CORS headers). Enable once under Settings ->
   # Pages -> Source: GitHub Actions.
   pages:
-    if: (github.event_name == 'push' && github.ref_name == github.event.repository.default_branch) || github.event_name == 'workflow_dispatch'
-    needs: [test, firmware-nrf52840]
+    if: >-
+      always() && needs.test.result == 'success' && needs.firmware-nrf52840.result == 'success' &&
+      ((github.event_name == 'push' && github.ref_name == github.event.repository.default_branch) || github.event_name == 'workflow_dispatch')
+    needs: [test, firmware-pico2w, firmware-nrf52840]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -140,9 +144,14 @@ jobs:
           mkdir -p site/fw
           cp -r web/. site/
           cp dist/switch2-nrf52840-firmware/switch2_nrf52840.uf2 site/fw/switch2-pico-nrf52840.uf2
+          files='"nrf52840": "switch2-pico-nrf52840.uf2"'
+          if [ -f dist/switch2-pico2w-firmware/switch2_pico.uf2 ]; then
+            cp dist/switch2-pico2w-firmware/switch2_pico.uf2 site/fw/switch2-pico-pico2w.uf2
+            files="$files, \"pico2w\": \"switch2-pico-pico2w.uf2\""
+          fi
           cat > site/fw/latest.json <<JSON
           {"version": "$ver", "sha": "${GITHUB_SHA::7}",
-           "files": {"nrf52840": "switch2-pico-nrf52840.uf2"}}
+           "files": {$files}}
           JSON
           cat site/fw/latest.json
       - uses: actions/configure-pages@v5
