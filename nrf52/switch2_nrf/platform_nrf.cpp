@@ -222,6 +222,14 @@ void platform_log_reset_reason(void) {
     LOG("boot: last reset: %s (RESETREAS 0x%08lx, retained 0x%02x)", why, (unsigned long)r, mark);
     LOG("boot: supply %lu mV, USB %lu mV", (unsigned long)(analogReadVDD() * 3600UL / 1023),
         (unsigned long)(analogReadVDDHDIV5() * 3600UL * 5 / 1023));
+    // How the chip is powered: from VDDH (USB 5 V through the on-chip REG0,
+    // rated ~25 mA) or VDD directly; and whether the DC/DC converters are on
+    // (without them the radio draws about twice the current at +8 dBm).
+    uint32_t regout0 = NRF_UICR->REGOUT0 & UICR_REGOUT0_VOUT_Msk;
+    static const char *const VOUT[] = {"1.8", "2.1", "2.4", "2.7", "3.0", "3.3"};
+    LOG("boot: power %s, REG0 out %s V, DC/DC REG1 %s, REG0 %s",
+        NRF_POWER->MAINREGSTATUS ? "high-voltage mode (USB 5 V -> on-chip REG0)" : "normal mode (3.3 V supplied externally)",
+        regout0 < 6 ? VOUT[regout0] : "default 1.8", NRF_POWER->DCDCEN ? "on" : "off", NRF_POWER->DCDCEN0 ? "on" : "off");
     if ((r & POWER_RESETREAS_DOG_Msk) && g_s2p_hang.magic == HANG_MAGIC) {
         LOG("boot: stuck at pc=0x%08lx lr=0x%08lx", (unsigned long)g_s2p_hang.pc, (unsigned long)g_s2p_hang.lr);
     }
