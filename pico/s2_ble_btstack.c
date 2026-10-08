@@ -61,6 +61,18 @@ static void reset_gatt(void) {
     s_have_service = s_have_input = s_have_cmd = s_have_cmd_rsp = s_have_vib = false;
 }
 
+// Enable notifications by writing the CCCD with a Write Request at
+// value_handle + 1, where these controllers put it (as the nRF52840 build
+// does). BTstack's gatt_client_write_client_characteristic_configuration()
+// first looks the CCCD up with a Read By Type request, which the controller
+// never answers, so the write never happened.
+static uint8_t s_cccd_value[2] = {0x01, 0x00};   // notifications on
+
+static uint8_t write_cccd(gatt_client_characteristic_t *c) {
+    return gatt_client_write_value_of_characteristic(gatt_handler, s_con, (uint16_t)(c->value_handle + 1),
+                                                     sizeof s_cccd_value, s_cccd_value);
+}
+
 static void gatt_fail(const char *why) {
     s_phase = GP_IDLE;
     s2c_on_gatt_ready(false, why);
@@ -129,8 +141,7 @@ static void gatt_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet,
             LOG("s2: commands use %s", s_cmd_use_req ? "write requests" : "write commands");
             s_phase = GP_CMD_CCCD;
             gatt_client_listen_for_characteristic_value_updates(&s_notif_cmd, gatt_handler, s_con, &s_ch_cmd_rsp);
-            gatt_client_write_client_characteristic_configuration(gatt_handler, s_con, &s_ch_cmd_rsp,
-                GATT_CLIENT_CHARACTERISTICS_CONFIGURATION_NOTIFICATION);
+            if (write_cccd(&s_ch_cmd_rsp) != ERROR_CODE_SUCCESS) gatt_fail("could not enable command responses");
             break;
         case GP_CMD_CCCD:
             if (status != ATT_ERROR_SUCCESS) {
@@ -301,8 +312,7 @@ s2t_write_result_t s2t_write(s2t_char_t ch, const uint8_t *data, uint16_t len) {
 static void start_input_cccd(void) {
     s_phase = GP_INPUT_CCCD;
     gatt_client_listen_for_characteristic_value_updates(&s_notif_input, gatt_handler, s_con, &s_ch_input);
-    if (gatt_client_write_client_characteristic_configuration(gatt_handler, s_con, &s_ch_input,
-            GATT_CLIENT_CHARACTERISTICS_CONFIGURATION_NOTIFICATION) != ERROR_CODE_SUCCESS) {
+    if (write_cccd(&s_ch_input) != ERROR_CODE_SUCCESS) {
         s_phase = GP_IDLE;
         s2c_on_input_enabled(false);
     }
