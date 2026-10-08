@@ -95,6 +95,7 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
   <h2>Controller</h2>
   <dl class="kv" id="ctrl"></dl>
   <div class="row" style="margin-top:12px">
+    <button id="pair-btn" onclick="act('pair')" disabled>Pair a controller</button>
     <button onclick="act('disconnect')">Disconnect</button>
     <button class="danger" onclick="if(confirm('Forget the paired controller? Hold Sync on a controller to pair again.'))act('forget')">Forget pairing</button>
   </div>
@@ -104,6 +105,8 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
     <span>minutes without use</span>
   </div>
   <p class="note" style="margin-top:4px">The controller then sleeps to save its battery; press any button to reconnect.</p>
+  <label class="check" style="margin-top:12px" id="pair-button-row"><input type="checkbox" data-k="pair_button">Pair only after pressing Sync (on by default on the Pico): a short press of the Pico's BOOTSEL button, or <i>Pair a controller</i> above, opens a 60 s pairing window (the LED blinks fast). Controllers in pairing mode are ignored otherwise.</label>
+  <p class="note" id="pair-button-note" style="margin-top:4px"></p>
   <p class="note">To pair: hold the small Sync button on the Switch 2 controller until the lights sweep. The dongle pairs automatically and remembers it; afterwards any button press wakes and reconnects it.</p>
 </section>
 
@@ -411,6 +414,11 @@ function render(){
     el.oninput=()=>{const l=$('v-'+k);if(l)l.textContent=el.value};
   });
   $('bias').textContent='bias: '+S.gyro_bias.join(', ');
+  // Pairing window: boards with a Sync button only (the Pico's BOOTSEL).
+  const pb=document.querySelector('[data-k="pair_button"]');
+  pb.disabled=!S.sync_button;
+  $('pair-button-row').style.opacity=S.sync_button?'':'0.5';
+  $('pair-button-note').textContent=S.sync_button?'With BOOTSEL as Sync, a 1–5 s hold toggles the configuration Wi-Fi.':'Not available on this board (no Sync button): any controller in pairing mode pairs.';
   const sel=document.querySelector('[data-k="usb_mode"]');
   $('map-sel').innerHTML=[...sel.options].map(o=>`<option value="${o.value}">${o.text}</option>`).join('');
   sel.onchange=()=>switchMapMode(sel.value);
@@ -444,6 +452,10 @@ async function poll(){
     const s=(await api('/api/status')).json();
     if(!ST||ST.version!==s.version||ST.platform!==s.platform){ST=s;fwRender()}else ST=s;
     $('st-ver').textContent='v'+s.version;
+    const P=s.pairing||{},pbtn=$('pair-btn');
+    pbtn.disabled=!P.required;
+    pbtn.title=P.required?'':(S&&S.sync_button?'Turn on "Pair only after pressing Sync" first':'Not available on this board');
+    pbtn.textContent=P.open?'Stop pairing ('+Math.ceil(P.left_ms/1000)+' s)':'Pair a controller';
     const L=s.link,ready=L.state==='ready';
     const sl=$('st-link');sl.textContent=ready?'Controller connected':L.state==='scanning'?(s.bond.bonded?'Waiting for controller':'Waiting for pairing'):L.state;
     sl.className='pill '+(ready?'ok':'warn');

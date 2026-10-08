@@ -23,6 +23,10 @@ __attribute__((weak)) bool platform_supply(platform_supply_t *out) {
     return false;
 }
 
+__attribute__((weak)) bool platform_has_sync_button(void) {
+    return false;
+}
+
 __attribute__((weak)) int platform_usb_power(void) {
     return -1;
 }

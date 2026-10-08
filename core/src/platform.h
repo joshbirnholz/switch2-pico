@@ -21,6 +21,8 @@ void platform_unique_id(uint8_t out[PLATFORM_UNIQUE_ID_LEN]);
 const char *platform_name(void);
 // True if this board has the Wi-Fi configuration access point.
 bool platform_has_wifi(void);
+// A button on the board that can act as a Sync button (Pico: BOOTSEL).
+bool platform_has_sync_button(void);
 
 // Settings persistence: one opaque blob of at most `cap` bytes.
 // Returns the number of bytes read (0 if nothing stored).

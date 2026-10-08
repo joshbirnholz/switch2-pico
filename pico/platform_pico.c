@@ -44,6 +44,10 @@ bool platform_has_wifi(void) {
     return true;
 }
 
+bool platform_has_sync_button(void) {
+    return true;   // BOOTSEL
+}
+
 size_t platform_settings_read(void *dst, size_t cap) {
     if (cap > SETTINGS_MAX) cap = SETTINGS_MAX;
     memcpy(dst, (const void *)(XIP_BASE + SETTINGS_FLASH_OFFSET), cap);

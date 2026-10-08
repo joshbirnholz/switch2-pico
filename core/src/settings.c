@@ -104,6 +104,7 @@ void settings_defaults(settings_t *s) {
     s->webusb_enabled = 1;
     s->idle_disconnect_off = 0;
     s->idle_minutes = 15;   // like an Xbox controller
+    s->pair_button = platform_has_sync_button() ? 1 : 0;
 
     s->hotkey_enabled = 1;
     s->wifi_autostart = 1;
@@ -131,6 +132,7 @@ void settings_sanitize(settings_t *s) {
     if (s->ble_tx_power > 3) s->ble_tx_power = 0;
     s->idle_disconnect_off = s->idle_disconnect_off ? 1 : 0;
     s->idle_minutes = s->idle_minutes ? clamp_u8(s->idle_minutes, 1, 240) : 15;
+    s->pair_button = s->pair_button && platform_has_sync_button() ? 1 : 0;
     for (int m = 0; m < MODE_MAP_SLOTS; m++)
         for (int i = 0; i < IN_COUNT; i++)
             if (s->mode_map[m][i] >= GP_COUNT) s->mode_map[m][i] = GP_NONE;
@@ -184,6 +186,7 @@ void settings_init(void) {
             g_settings.idle_disconnect_off = 0;
             g_settings.idle_minutes = 15;
         }
+        if (rev < 5) g_settings.pair_button = platform_has_sync_button() ? 1 : 0;
         g_settings.ext_rev = SETTINGS_EXT_REV;
         settings_sanitize(&g_settings);
         LOG("settings: loaded from flash (bonded=%d%s)", g_settings.bonded,

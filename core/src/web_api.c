@@ -111,6 +111,9 @@ static void api_status(http_response_t *r) {
         jb_printf(&j, ",\"supply\":{\"vdd\":%u,\"vbus\":%u,\"vdd_min\":%u,\"vbus_min\":%u}", sup.vdd, sup.vbus,
                   sup.vdd_min, sup.vbus_min);
     }
+    jb_printf(&j, ",\"pairing\":{\"required\":%s,\"open\":%s,\"left_ms\":%lu}",
+              g_settings.pair_button ? "true" : "false", s2_link_pairing_open() ? "true" : "false",
+              (unsigned long)s2_link_pairing_left_ms());
     jb_printf(&j, ",\"link\":{\"state\":\"%s\"", s2_link_state_name(li.state));
     addr_str(a, li.addr);
     jb_printf(&j, ",\"addr\":\"%s\",\"pid\":%u,\"serial\":", a, li.pid);
@@ -220,8 +223,10 @@ static void api_settings_get(http_response_t *r) {
               s->led_follow_host, !s->quick_remap_off, s->usb_mode, s->usb_detach_when_idle, s->usb_remote_wakeup, s->webusb_enabled, s->hotkey_enabled,
               s->wifi_autostart, s->wifi_channel);
     jb_str(&j, s->wifi_ssid);
-    jb_printf(&j, ",\"wifi_has_pass\":%s,\"ble_tx_power\":%u,\"idle_disconnect\":%u,\"idle_minutes\":%u}",
-              s->wifi_pass[0] ? "true" : "false", s->ble_tx_power, !s->idle_disconnect_off, s->idle_minutes);
+    jb_printf(&j, ",\"wifi_has_pass\":%s,\"ble_tx_power\":%u,\"idle_disconnect\":%u,\"idle_minutes\":%u,"
+                  "\"pair_button\":%u,\"sync_button\":%s}",
+              s->wifi_pass[0] ? "true" : "false", s->ble_tx_power, !s->idle_disconnect_off, s->idle_minutes,
+              s->pair_button, platform_has_sync_button() ? "true" : "false");
     respond_json(r, &j);
 }
 
@@ -320,6 +325,7 @@ static bool apply_kv(settings_t *s, const char *k, const char *v, bool *usb_reco
         {"hotkey", &s->hotkey_enabled, 1, false},
         {"ble_tx_power", &s->ble_tx_power, 1, false},
         {"idle_minutes", &s->idle_minutes, 1, false},
+        {"pair_button", &s->pair_button, 1, false},
         {"wifi_autostart", &s->wifi_autostart, 1, false},
         {"wifi_channel", &s->wifi_channel, 1, false},
     };
@@ -403,6 +409,12 @@ static void api_action(const http_request_t *req, http_response_t *r) {
     if (!strcmp(what, "forget")) s2_link_forget();
     else if (!strcmp(what, "disconnect")) s2_link_disconnect();
     else if (!strcmp(what, "rumble")) s2_link_test_rumble();
+    else if (!strcmp(what, "pair")) {
+        // Open (or close) the pairing window; only with "pair only after Sync" on.
+        if (!g_settings.pair_button) return respond_text(r, 400, "pairing is always open on this dongle");
+        if (s2_link_pairing_open()) s2_link_stop_pairing();
+        else s2_link_start_pairing(60000);
+    }
     else if (!strcmp(what, "motors")) {
         // Classic rumble test: l / r = 0..255, for 600 ms.
         char v[8];

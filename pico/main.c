@@ -60,7 +60,13 @@ static void hotkey_task(void) {
     }
 }
 
-// BOOTSEL: short press toggles the access point, a 5 s hold forgets the paired controller.
+// BOOTSEL: a 5 s hold forgets the paired controller. A short press toggles
+// the access point, or, with "pair only after Sync" on, acts as the Sync
+// button (opens / closes the pairing window); the access point is then a
+// 1-5 s hold.
+#define PAIR_WINDOW_MS   60000
+#define BOOTSEL_SHORT_MS 1000
+
 static void bootsel_task(void) {
     static absolute_time_t next_sample;
     static bool down;
@@ -79,7 +85,13 @@ static void bootsel_task(void) {
         s2_link_forget();
     }
     if (!now && down && !long_done) {
-        wifi_ap_toggle();
+        bool short_press = absolute_time_diff_us(since, get_absolute_time()) < BOOTSEL_SHORT_MS * 1000;
+        if (g_settings.pair_button && short_press) {
+            if (s2_link_pairing_open()) s2_link_stop_pairing();
+            else s2_link_start_pairing(PAIR_WINDOW_MS);
+        } else {
+            wifi_ap_toggle();
+        }
     }
     down = now;
 }

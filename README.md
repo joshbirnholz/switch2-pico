@@ -45,7 +45,7 @@ Two boards are supported; they share all of the controller logic.
 | --- | --- | --- |
 | Bluetooth | CYW43439 (BTstack), shares its radio with Wi-Fi | Nordic SoftDevice S140, Bluetooth only |
 | Configuration | WebUSB or Wi-Fi page | WebUSB |
-| Buttons on the board | BOOTSEL: tap = Wi-Fi page, hold 5 s = forget controller | none (use the configuration page) |
+| Buttons on the board | BOOTSEL: tap = Sync (pairing window), hold 1–5 s = Wi-Fi page, hold 5 s = forget controller | none (use the configuration page) |
 | Firmware file | `switch2_pico.uf2` | `switch2_nrf52840.uf2` |
 
 A Pico W (RP2040) build also works: configure with `-DPICO_BOARD=pico_w`.
@@ -93,19 +93,31 @@ for a different board is refused.
 
 ## Pairing and everyday use
 
-1. Plug in the dongle. Its LED blinks fast because no controller is paired yet.
+1. Plug in the dongle. Its LED blinks because no controller is paired yet.
+   **Pico:** also press **BOOTSEL** once (the dongle's own Sync button): the
+   LED blinks faster while it accepts a new controller (60 s). The
+   configuration page's **Pair a controller** does the same.
 2. Hold the small **Sync** button on the controller until the player lights sweep.
 3. The dongle connects, pairs, and the controller gives a short "click"
    rumble. The LED stays on.
 4. Next time, just press any button on the controller.
 
-To pair a different controller, hold Sync on the new one. It replaces the old
-pairing. To forget the paired controller, hold the Pico's BOOTSEL button for
-5 seconds, or use the configuration page.
+To pair a different controller, hold Sync on the new one (on the Pico, press
+BOOTSEL first). It replaces the old pairing. To forget the paired controller,
+hold the Pico's BOOTSEL button for 5 seconds, or use the configuration page.
+
+**Pairing only on request (Pico, on by default).** The Pico ignores
+controllers in pairing mode unless its pairing window is open: a short
+BOOTSEL press or **Controller → Pair a controller** opens it for 60 seconds
+(press again to close it); a connected controller is let go meanwhile. So
+pairing your controller with a Switch 2 or a PC nearby doesn't get it grabbed
+by the dongle. Turn it off under **Controller** to pair any time (the nRF52840
+has no button and always works that way).
 
 | Pico LED | Meaning |
 | --- | --- |
-| fast blink | waiting for a controller in pairing mode |
+| very fast blink (5 Hz) | pairing window open: hold Sync on the controller |
+| fast blink | no controller paired yet |
 | short flash every 2 s | waiting for the paired controller to wake up |
 | flicker | connecting |
 | solid | connected |
@@ -254,7 +266,8 @@ enable it once under **Settings → Pages → Source: GitHub Actions**.
 
 Turn the configuration Wi-Fi on in one of three ways:
 
-* press the Pico's **BOOTSEL** button briefly
+* press the Pico's **BOOTSEL** button briefly (with *Pair only after
+  pressing Sync* on, the default, hold it 1–5 seconds instead)
 * hold **C + Home** on the controller for 3 seconds (it enters USB mode
   selection after 1.5 s; keep holding, and the Wi-Fi toggle leaves it again)
 * plug in the dongle while no controller is paired (it starts automatically)

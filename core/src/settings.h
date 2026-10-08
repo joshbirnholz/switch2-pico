@@ -80,7 +80,7 @@ typedef enum {
     MODE_SLOT_COUNT
 } mode_slot_t;
 #define MODE_SLOT_EMPTY 0
-#define SETTINGS_EXT_REV 4   // 1: mode_map valid; 2: mode_slot valid; 3: ble_tx_power valid; 4: idle_*
+#define SETTINGS_EXT_REV 5   // 1: mode_map; 2: mode_slot; 3: ble_tx_power; 4: idle_*; 5: pair_button
 
 #define SETTINGS_MAGIC   0x53325043u   // "S2PC"
 #define SETTINGS_VERSION 1
@@ -150,6 +150,8 @@ typedef struct {
     uint8_t ble_tx_power;               // radio power: 0 +8 dBm, 1 +4, 2 0, 3 -4 (nRF52840)
     uint8_t idle_disconnect_off;        // don't disconnect an unused controller (inverted: 0 = on)
     uint8_t idle_minutes;               // ... after this many minutes without input (1..240)
+    uint8_t pair_button;                // pair only during a window opened by Sync / the page
+                                        // (default on for boards with a button: Pico BOOTSEL)
 
     uint32_t crc;
 } settings_t;

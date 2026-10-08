@@ -12,7 +12,9 @@ static int s_last = -1;
 void status_led_task(void) {
     uint32_t t = to_ms_since_boot(get_absolute_time());
     bool on;
-    if (wifi_ap_active()) {
+    if (s2_link_pairing_open()) {
+        on = (t / 100) & 1;   // pairing window: fast blink (5 Hz)
+    } else if (wifi_ap_active()) {
         uint32_t ph = t % 1200;
         on = ph < 100 || (ph >= 200 && ph < 300);
     } else {

@@ -84,6 +84,16 @@ void s2_link_disconnect(void);
 // own reconnection attempts right afterwards are ignored; a button press
 // later on reconnects as usual.
 void s2_link_let_controller_sleep(void);
+
+// Pairing window (settings.pair_button): while it is open, a controller in
+// pairing mode is accepted (and only that: a connected controller is dropped
+// so a new one can be found). Outside it such controllers are ignored.
+// With pair_button off, pairing is always open (s2_link_pairing_open()
+// returns false: there is no window to show).
+void s2_link_start_pairing(uint32_t ms);
+void s2_link_stop_pairing(void);
+bool s2_link_pairing_open(void);
+uint32_t s2_link_pairing_left_ms(void);
 void s2_link_forget(void);
 // Pause/resume scanning and connecting (e.g. while the USB host is asleep).
 void s2_link_set_paused(bool paused);

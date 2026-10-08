@@ -42,6 +42,9 @@ static uint16_t s_peer_pid;
 static bool s_paused;              // host asleep: scan for wake-ups but don't connect
 static uint32_t s_pause_quiet_until;
 static uint32_t s_sleep_quiet_until;   // after s2_link_let_controller_sleep()
+static bool s_pair_open;               // pairing window (settings.pair_button)
+static uint32_t s_pair_until;
+static uint32_t s_pair_ignored_log;
 static bool s_sleep_quiet;
 static uint32_t s_seen_hook_next;
 static uint32_t s_phase_deadline;
@@ -193,6 +196,10 @@ static void set_state(s2_link_state_t st) {
     bool was_ready = s_state == S2_LINK_READY;
     s_state = st;
     LOG("s2: state -> %s", s2_link_state_name(st));
+    if (st == S2_LINK_READY && s_pair_open) {
+        s_pair_open = false;
+        LOG("s2: pairing window closed (controller connected)");
+    }
     if (st == S2_LINK_READY) s2_link_hook_connection_changed(true);
     else if (was_ready) s2_link_hook_connection_changed(false);
 }
@@ -881,6 +888,23 @@ void s2c_on_advertisement(const uint8_t addr[6], uint8_t addr_type, int8_t rssi,
         return;
     }
 
+    // Pairing only on request (Sync button / page): pairing-mode adverts are
+    // ignored outside the window, and inside it nothing else is accepted.
+    if (s_pair_open && platform_time_reached(s_pair_until)) {
+        s_pair_open = false;
+        LOG("s2: pairing window closed (timed out)");
+    }
+    if (g_settings.pair_button) {
+        if (s_pair_open && !adv.pairing_mode) return;
+        if (!s_pair_open && adv.pairing_mode) {
+            if (platform_time_reached(s_pair_ignored_log)) {
+                s_pair_ignored_log = platform_deadline_ms(10000);
+                LOG("s2: controller %s in pairing mode ignored: press Sync on the dongle to pair", addr_str(addr));
+            }
+            return;
+        }
+    }
+
     // Right after we let the controller sleep it keeps advertising on its own
     // for a while; reconnect only once it advertises again later (a button
     // press). Pairing mode always counts.
@@ -1074,6 +1098,40 @@ const mapping_ctx_t *s2_link_mapping_ctx(void) {
 
 void s2_link_disconnect(void) {
     if (s_connected) s2t_disconnect();
+}
+
+void s2_link_start_pairing(uint32_t ms) {
+    s_pair_open = true;
+    s_pair_until = platform_deadline_ms(ms);
+    s_sleep_quiet = false;
+    LOG("s2: pairing window open for %lu s: hold Sync on the controller", (unsigned long)(ms / 1000));
+    // A connected controller would keep the radio busy: let the new one in.
+    if (s_state == S2_LINK_CONNECTING) {
+        s2t_cancel_connect();
+        start_scanning();
+    } else if (s_connected) {
+        s2t_disconnect();
+    }
+}
+
+void s2_link_stop_pairing(void) {
+    if (!s_pair_open) return;
+    s_pair_open = false;
+    LOG("s2: pairing window closed");
+}
+
+bool s2_link_pairing_open(void) {
+    if (s_pair_open && platform_time_reached(s_pair_until)) {
+        s_pair_open = false;
+        LOG("s2: pairing window closed (timed out)");
+    }
+    return s_pair_open;
+}
+
+uint32_t s2_link_pairing_left_ms(void) {
+    if (!s2_link_pairing_open()) return 0;
+    int32_t left = (int32_t)(s_pair_until - platform_millis());
+    return left > 0 ? (uint32_t)left : 0;
 }
 
 void s2_link_let_controller_sleep(void) {
