@@ -226,6 +226,15 @@ static void idle_check(const s2_input_t *in, uint32_t prev_buttons, bool first) 
     }
 }
 
+// Sticks centered and analog triggers released (buttons are left as they are).
+static void neutral_input(s2_input_t *in) {
+    const mapping_ctx_t *c = s2_link_mapping_ctx();
+    memcpy(in->stick_l, c->cal_l.center, sizeof in->stick_l);
+    memcpy(in->stick_r, c->cal_r.center, sizeof in->stick_r);
+    in->trigger_l = c->gc_trigger_neutral[0];
+    in->trigger_r = c->gc_trigger_neutral[1];
+}
+
 // ---------------------------------------------------------------------------
 // Input path: latest Switch 2 report -> Pro Controller report fields
 // ---------------------------------------------------------------------------
@@ -252,14 +261,8 @@ static void update_input(void) {
         // From here on, `in` holds what the host may see.
         uint32_t prev = host_prev;
         in.buttons = host_prev = host_buttons(in.buttons);
-        if (s_msel.active || s_mode_switch >= 0) {
-            // Selecting a mode: sticks centered, triggers released.
-            const mapping_ctx_t *c = s2_link_mapping_ctx();
-            memcpy(in.stick_l, c->cal_l.center, sizeof in.stick_l);
-            memcpy(in.stick_r, c->cal_r.center, sizeof in.stick_r);
-            in.trigger_l = c->gc_trigger_neutral[0];
-            in.trigger_r = c->gc_trigger_neutral[1];
-        }
+        // Selecting a mode: sticks centered, triggers released.
+        if (s_msel.active || s_mode_switch >= 0) neutral_input(&in);
         usb_mode_t mode = usb_mode_active();
         if (mode != USB_MODE_SWITCH_PRO) {
             // Generic modes: the mode's own map (gp_out_t), same shortcuts.
@@ -277,20 +280,35 @@ static void update_input(void) {
                     s2_link_haptic(S2_HAPTIC_TICK);
                 }
             }
-            uint32_t gp = mapping_gp_buttons(&g_settings, map, ctx, &in);
-            if (quick && mapping_quick_remap_held(in.buttons)) gp = 0;
+            uint32_t gp;
             switch (mapping_macro_run(&macro, map, GP_MACRO_QAM, prev, in.buttons, platform_millis())) {
-            case MACRO_GUIDE: gp |= GP_BIT(GP_GUIDE); break;
-            case MACRO_GUIDE_SOUTH: gp |= GP_BIT(GP_GUIDE) | GP_BIT(GP_SOUTH); break;
-            default: break;
+            // While the quick access shortcut plays, the host sees only its
+            // buttons: nothing else pressed, sticks centered.
+            case MACRO_GUIDE:
+                gp = GP_BIT(GP_GUIDE);
+                neutral_input(&in);
+                break;
+            case MACRO_GUIDE_SOUTH:
+                gp = GP_BIT(GP_GUIDE) | GP_BIT(GP_SOUTH);
+                neutral_input(&in);
+                break;
+            default:
+                gp = mapping_gp_buttons(&g_settings, map, ctx, &in);
+                if (quick && mapping_quick_remap_held(in.buttons)) gp = 0;
+                break;
             }
             if (mode == USB_MODE_XBOX360) x360_set_input(&in, ctx, gp, true);
             else ds5_set_input(&in, ctx, gp, true);
             return;
         }
         procon_input_t out;
+        // Home+A shortcut playing: only its buttons, sticks centered.
+        uint32_t macro_buttons = mapping_macro_step(&macro, &g_settings, prev, in.buttons, platform_millis());
+        if (macro_buttons) neutral_input(&in);
         mapping_apply(&g_settings, s2_link_mapping_ctx(), &in, &out);
-        if (!g_settings.quick_remap_off) {
+        if (macro_buttons) {
+            out.buttons = macro_buttons;
+        } else if (!g_settings.quick_remap_off) {
             in_button_t back;
             if (mapping_quick_remap(&g_settings, prev, in.buttons, &back)) {
                 uint8_t o = g_settings.button_map[back];
@@ -301,7 +319,6 @@ static void update_input(void) {
             // Keep the chord's buttons away from the host.
             if (mapping_quick_remap_held(in.buttons)) out.buttons = 0;
         }
-        out.buttons |= mapping_macro_step(&macro, &g_settings, prev, in.buttons, platform_millis());
         // Charge state byte is non-zero while external power is connected.
         procon_set_input(&out, true, in.battery_mv, in.charge_state != 0 && in.charge_state != 0x20);
     } else {

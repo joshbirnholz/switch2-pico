@@ -143,7 +143,8 @@ the paddles and Fn button that the host's software (e.g. Steam Input) remaps.
 button) to *Home+A (Steam quick access)*. A tap then sends Home, then Home + A,
 which opens Steam's quick access menu. It fires when the button is released
 without another button pressed meanwhile, so C still works as the remap
-modifier above. Don't use it on a Switch, where Home + A launches the selected
+modifier above. While the shortcut plays (about 0.16 s) the host sees only
+those buttons: everything else released, sticks centered. Don't use it on a Switch, where Home + A launches the selected
 game.
 
 ### USB modes (DualSense Edge, DualSense, Xbox 360)
