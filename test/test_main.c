@@ -934,9 +934,9 @@ static void test_joycon(void) {
     joycon_mouse_scroll(true, 0.2f, 0.9f, false, &wv, &pv);
     CHECK(wv == 0.9f && pv == 0.0f);
     joycon_mouse_scroll(true, 0.8f, 0.1f, false, &wv, &pv);
-    CHECK(wv == 0.0f && pv == 0.8f);
-    joycon_mouse_scroll(false, 0.8f, 0.1f, false, &wv, &pv);
     CHECK(wv == 0.0f && pv == -0.8f);
+    joycon_mouse_scroll(false, 0.8f, 0.1f, false, &wv, &pv);
+    CHECK(wv == 0.0f && pv == 0.8f);
     joycon_mouse_scroll(true, -0.8f, 0.1f, true, &wv, &pv);   // (L) left: up
     CHECK(wv == 0.8f && pv == 0.0f);
     joycon_mouse_scroll(false, 0.8f, 0.1f, true, &wv, &pv);   // (R) left: up
