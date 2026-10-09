@@ -142,6 +142,8 @@ void settings_sanitize(settings_t *s) {
     for (int i = n; i < BOND_MAX; i++) memset(&s->bonds[i], 0, sizeof s->bonds[i]);
     settings_bond_sync(s);
     if (s->last_ctrl >= CTRL_TYPE_COUNT) s->last_ctrl = CTRL_PRO;
+    s->joycon_single = s->joycon_single ? 1 : 0;
+    s->last_ctrl = (uint8_t)settings_boot_ctrl(s);
     if (s->ble_tx_power > 3) s->ble_tx_power = 0;
     s->idle_disconnect_off = s->idle_disconnect_off ? 1 : 0;
     s->idle_minutes = s->idle_minutes ? clamp_u8(s->idle_minutes, 1, 240) : 15;

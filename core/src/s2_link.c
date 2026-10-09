@@ -1159,6 +1159,14 @@ static void set_type(ctrl_type_t t) {
 // A pair that has run with only one Joy-Con 2 for a while, its partner
 // never having connected: that one is used on its own (sideways).
 static void half_pair_task(void) {
+    // Single Joy-Con 2 turned off (on the page) while one is used alone: it
+    // becomes its half of the pair.
+    if (!g_settings.joycon_single && (s_type == CTRL_JOYCON_L || s_type == CTRL_JOYCON_R)) {
+        set_type(CTRL_JOYCON_PAIR);
+        app_controller_type(CTRL_JOYCON_PAIR);
+        return;
+    }
+    if (!g_settings.joycon_single) return;
     if (s_type != CTRL_JOYCON_PAIR || s_pair_complete || links_used() != 1) return;
     link_t *k = first_ready();
     if (!k || !pid_is_joycon(k->pid) || s_connecting >= 0) return;
@@ -1308,8 +1316,10 @@ void s2c_on_advertisement(const uint8_t addr[6], uint8_t addr_type, int8_t rssi,
     // Which controller this makes: the second Joy-Con 2 completes a pair; a
     // first one is half of a pair when that is how it was used last and its
     // partner is paired too (the partner usually follows), else sideways.
+    // (Single Joy-Con 2 not allowed: always the pair, even a half one.)
     ctrl_type_t t;
     if (used == 1) t = CTRL_JOYCON_PAIR;
+    else if (pid_is_joycon(adv.pid) && !g_settings.joycon_single) t = CTRL_JOYCON_PAIR;
     else if (pid_is_joycon(adv.pid))
         t = g_settings.last_ctrl == CTRL_JOYCON_PAIR && partner_bonded(adv.pid) ? CTRL_JOYCON_PAIR
                                                                                : type_of_pid(adv.pid);

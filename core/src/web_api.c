@@ -140,9 +140,11 @@ static void api_status(http_response_t *r) {
         s2_link_info_t k;
         if (!s2_link_get_link_info(i, &k)) continue;
         addr_str(a, k.addr);
-        jb_printf(&j, "%s{\"state\":\"%s\",\"addr\":\"%s\",\"pid\":%u,\"battery_mv\":%u,\"power_level\":%d,"
+        // Its own battery: the controller's level when it gave one, else from the voltage.
+        unsigned pct = k.power_level >= 0 ? (unsigned)k.power_level * 100u / 9u : battery_mv_to_percent(k.battery_mv);
+        jb_printf(&j, "%s{\"state\":\"%s\",\"addr\":\"%s\",\"pid\":%u,\"battery_mv\":%u,\"battery_pct\":%u,\"power_level\":%d,"
                       "\"charging\":%s,\"report_hz\":%.0f,\"rumble_packets\":%lu}",
-                  first ? "" : ",", s2_link_state_name(k.state), a, k.pid, k.battery_mv, k.power_level,
+                  first ? "" : ",", s2_link_state_name(k.state), a, k.pid, k.battery_mv, pct, k.power_level,
                   (k.power_info & 2) ? "true" : "false", (double)k.report_rate_hz, (unsigned long)k.rumble_packets);
         first = false;
     }
@@ -270,9 +272,9 @@ static void api_settings_get(http_response_t *r) {
               s->wifi_autostart, s->wifi_channel);
     jb_str(&j, s->wifi_ssid);
     jb_printf(&j, ",\"wifi_has_pass\":%s,\"ble_tx_power\":%u,\"idle_disconnect\":%u,\"idle_minutes\":%u,"
-                  "\"pair_button\":%u,\"sync_button\":%s}",
+                  "\"pair_button\":%u,\"joycon_single\":%u,\"sync_button\":%s}",
               s->wifi_pass[0] ? "true" : "false", s->ble_tx_power, !s->idle_disconnect_off, s->idle_minutes,
-              s->pair_button, platform_has_sync_button() ? "true" : "false");
+              s->pair_button, s->joycon_single, platform_has_sync_button() ? "true" : "false");
     respond_json(r, &j);
 }
 
@@ -411,6 +413,7 @@ static bool apply_kv(settings_t *s, const char *k, const char *v, bool *usb_reco
         {"ble_tx_power", &s->ble_tx_power, 1, false},
         {"idle_minutes", &s->idle_minutes, 1, false},
         {"pair_button", &s->pair_button, 1, false},
+        {"joycon_single", &s->joycon_single, 1, false},
         {"wifi_autostart", &s->wifi_autostart, 1, false},
         {"wifi_channel", &s->wifi_channel, 1, false},
     };

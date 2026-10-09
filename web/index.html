@@ -23,6 +23,7 @@ header.top{position:sticky;top:0;z-index:20;background:var(--card);border-bottom
 .chip.ok{background:var(--ok-bg);color:var(--ok-ink);font-weight:600}
 .chip.ok::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--ok)}
 .chip.warn{color:var(--warn);font-weight:600}
+.chip .sep{width:1px;height:12px;background:var(--line);margin:0 4px}
 .savebox{display:flex;align-items:center;gap:12px}
 .warn-note{color:var(--warn);font-weight:500}
 #dirty-note{font-size:13px;color:var(--muted)}
@@ -206,7 +207,7 @@ body.offline #usb-help{display:flex}
     <div class="brand"><b>Switch2-Pico</b><span id="st-ver" class="sub"></span></div>
     <div class="status">
       <span id="st-link" class="chip">…</span>
-      <span id="st-batt" class="chip" hidden><svg width="18" height="10" viewBox="0 0 18 10" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="0.7" y="0.7" width="14.6" height="8.6" rx="2"/><rect x="15.8" y="3" width="1.6" height="4" rx="0.6" fill="currentColor"/><rect id="batt-fill" x="2.4" y="2.4" width="9" height="5.2" rx="1" fill="currentColor" stroke="none"/></svg><span id="batt-text"></span></span>
+      <span id="st-batt" class="chip" hidden></span>
       <span id="st-usb" class="chip">USB …</span>
     </div>
     <div class="savebox">
@@ -276,8 +277,8 @@ body.offline #usb-help{display:flex}
           <button id="preset-reset" onclick="presetIdentity()">Reset to labels</button>
           <button id="preset-swap" onclick="presetSwapFace()">Swap A/B and X/Y</button>
           <div class="row" id="remap-row" style="margin-left:auto;gap:6px">
-            <label class="check"><input type="checkbox" data-k="quick_remap">Remap GL/GR from the controller</label>
-            <span class="help"><button type="button" aria-label="About remapping GL/GR from the controller">?</button><span class="tipbox" role="tooltip">Hold <b>C</b> and either <b>GL</b> or <b>GR</b>, and then press another button to map it to the back buttons. Do it again to clear the mapping.</span></span>
+            <label class="check"><input type="checkbox" data-k="quick_remap"><span id="remap-label">Remap GL/GR from the controller</span></label>
+            <span class="help"><button type="button" aria-label="About remapping GL/GR from the controller">?</button><span class="tipbox" role="tooltip">Hold <b>C</b> and either <b>GL</b> or <b>GR</b>, and then press another button to map it to the <span id="remap-what">back buttons</span>. Do it again to clear the mapping.</span></span>
           </div>
         </div>
       </div>
@@ -301,7 +302,7 @@ body.offline #usb-help{display:flex}
         <label class="check"><input type="checkbox" id="pf-mouse" onchange="mouseFields()"><span>Mouse Mode</span></label>
         <label>Speed
           <span class="slider"><input type="range" min="10" max="250" id="pf-mouse-speed"><b><span id="v-pf-mouse-speed"></span>%</b></span></label>
-        <p class="note" style="grid-column:1/-1">Lay a Joy-Con 2 on its side on a surface and move it: it's the mouse while it lies there, one Joy-Con at a time. Its shoulder button clicks, its trigger right-clicks, its stick click middle-clicks and its stick scrolls; picked up, they're the controller's again. The dongle adds a USB mouse next to the controller, so turning Mouse Mode on or off restarts it.</p>
+        <p class="note" style="grid-column:1/-1">Lay a Joy-Con 2 on its side on a surface and move it: it's a mouse while it lies there, and each Joy-Con is its own mouse. Its shoulder button clicks, its trigger right-clicks, its stick click middle-clicks and its stick scrolls (up or left: up; down or right: down); picked up, they're the controller's again. The dongle adds two USB mice next to the controller, so turning Mouse Mode on or off restarts it.</p>
       </div>
     </section>
 
@@ -332,6 +333,7 @@ body.offline #usb-help{display:flex}
         <button id="disc-btn" onclick="act('disconnect')" hidden>Disconnect</button>
         <button class="danger" style="margin-left:auto" onclick="if(confirm('Forget all paired controllers? Hold Sync on a controller to pair it again.'))act('forget')">Forget all</button>
       </div>
+      <label class="check top"><input type="checkbox" data-k="joycon_single" id="jc-single" onchange="jcSingleChanged()"><span>Allow a single Joy-Con 2 on its own<span class="hint" style="display:block">Off: a Joy-Con 2 connected alone works as its half of the Joy-Con 2 (L/R). On: it's its own controller, held sideways, with its own profiles.</span></span></label>
       <label class="check top" id="pair-button-row"><input type="checkbox" data-k="pair_button"><span>Pair only after pressing Sync <span class="hint" style="display:block" id="pair-button-note"></span></span></label>
     </section>
 
@@ -790,7 +792,13 @@ function renderProfile(){
   $('prof-settings').classList.toggle('off',!P);
   // GL / GR remap from the controller: only where GL / GR exist and the host
   // doesn't remap them itself (DualSense Edge paddles).
-  $('remap-row').hidden=!(MAP_CTRL===0&&P&&P.mode!==1);
+  // The Pro Controller's GL / GR, or a Joy-Con 2 pair's SL / SR (the same
+  // inputs; SL / SR of either Joy-Con): one setting for both.
+  $('remap-row').hidden=!((MAP_CTRL===0||MAP_CTRL===2)&&P&&P.mode!==1);
+  const sl=MAP_CTRL===2,ab=sl?['SL','SR']:['GL','GR'];
+  $('remap-label').textContent=`Remap ${ab[0]}/${ab[1]} from the controller`;
+  $('remap-what').textContent=sl?'SL / SR buttons':'back buttons';
+  document.querySelectorAll('#remap-row .tipbox b').forEach((b,k)=>{if(k===1)b.textContent=ab[0];if(k===2)b.textContent=ab[1]});
   // Mouse: Joy-Con 2 types only (a single one can only be its own mouse).
   document.querySelector('[data-sub="mouse"]').hidden=!isJC();
   if(!isJC()&&SUB==='mouse')showSub('buttons');
@@ -877,10 +885,16 @@ function showTab(t){
   document.querySelectorAll('[data-tab]').forEach(e=>e.classList.toggle('tab-hidden',!e.dataset.tab.split(',').map(Number).includes(t)));
   document.querySelectorAll('[data-tabbtn]').forEach(b=>{
     const i=+b.dataset.tabbtn;b.setAttribute('aria-selected',i===t?'true':'false');
-    b.hidden=!(S&&S.types&&i<S.types.length);
+    // Single Joy-Con 2 tabs only when that's allowed (Device section).
+    b.hidden=!(S&&S.types&&i<S.types.length)||((i===3||i===4)&&!jcSingle());
     const conn=ST&&ST.link&&ST.link.state==='ready'&&connType(ST)===i;
     b.innerHTML=esc(S&&S.types?S.types[i].name:b.textContent)+(conn?'<span class="dot" title="connected"></span>':'');
   });
+}
+const jcSingle=()=>!!$('jc-single').checked;
+function jcSingleChanged(){
+  if(!jcSingle()&&(MAP_CTRL===3||MAP_CTRL===4))setTab(2);
+  else showTab(MAP_CTRL);
 }
 function setTab(t){
   if(!S)return;
@@ -906,6 +920,7 @@ function render(){
   S.saved_active=S.types.map(T=>T.active);
   S.boot_mode=bootOf(S).mode;S.boot_mouse=bootOf(S).mouse;
   MAP_CTRL=S.last_ctrl??S.ctrl_type??0;
+  if(!S.joycon_single&&(MAP_CTRL===3||MAP_CTRL===4))MAP_CTRL=2;
   S.types.forEach((T,t)=>CUR[t]=T.active);
   showTab(MAP_CTRL);
   renderProfile();
@@ -959,6 +974,11 @@ function gcTriggers(tr,raw){
 function kv(el,rows){el.innerHTML=rows.map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join('')}
 // Stick head in the drawing, moved by the stick output (12-bit, y up).
 function stick(el,x,y){if(el)el.setAttribute('transform',`translate(${((x-2048)/2048*50).toFixed(1)} ${(-(y-2048)/2048*50).toFixed(1)})`)}
+// Battery icon filled to `pct`, then its text.
+function battHTML(pct,text){
+  const w=(11.2*Math.max(0,Math.min(100,pct||0))/100).toFixed(1);
+  return `<svg width="18" height="10" viewBox="0 0 18 10" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="0.7" y="0.7" width="14.6" height="8.6" rx="2"/><rect x="15.8" y="3" width="1.6" height="4" rx="0.6" fill="currentColor"/><rect x="2.4" y="2.4" width="${w}" height="5.2" rx="1" fill="currentColor" stroke="none"/></svg><span>${esc(text)}</span>`;
+}
 const PIDS={8297:'Nintendo Switch 2 Pro Controller',8307:'Nintendo GameCube Controller',8295:'Joy-Con 2 (L)',8294:'Joy-Con 2 (R)'};
 // The connected controller's type (older firmware: from its product ID).
 function connType(s){return s.ctrl_type??(s.link.pid===8307?1:0)}
@@ -980,7 +1000,13 @@ async function poll(){
     const sl=$('st-link');sl.textContent=ready?cname+half+' connected':L.state==='scanning'?(s.bond.bonded?'Waiting for controller':'Waiting for pairing'):L.state;
     sl.className='chip '+(ready?'ok':'warn');
     const sb=$('st-batt');sb.hidden=!(ready&&L.battery_mv);
-    if(!sb.hidden){$('batt-text').textContent=`${L.battery_pct}%`+(L.charging?' · charging':'');$('batt-fill').setAttribute('width',(11.2*Math.max(0,Math.min(100,L.battery_pct))/100).toFixed(1));sb.title='Controller battery'}
+    if(!sb.hidden){
+      // A Joy-Con 2 pair: each one's battery.
+      const two=links.length===2?links.slice().sort((a,b)=>b.pid-a.pid):null;
+      sb.innerHTML=two?two.map(k=>battHTML(k.battery_pct,(k.pid===8295?'L ':'R ')+k.battery_pct+'%'+(k.charging?' · charging':''))).join('<span class="sep"></span>')
+        :battHTML(L.battery_pct,`${L.battery_pct}%`+(L.charging?' · charging':''));
+      sb.title=two?'Joy-Con 2 batteries':'Controller battery';
+    }
     const su=$('st-usb');su.textContent=s.usb.mounted?'USB: '+(s.profile||MODES[s.usb_mode]||s.usb_mode):'USB not connected';su.title=s.usb.mounted?'Emulating: '+(MODES[s.usb_mode]||s.usb_mode):'';su.className='chip'+(s.usb.mounted?'':' warn');
     kv($('ctrl'),[
       ['Type',ready?cname+half:(PIDS[L.pid]||(L.pid?('0x'+L.pid.toString(16)):'—'))],['Serial',L.serial||'—'],['Address',ready?L.addr:'—'],

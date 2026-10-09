@@ -70,8 +70,8 @@ uint8_t const *tud_descriptor_bos_cb(void) {
 #define EP_OUT 0x01
 #define EP_VENDOR_IN  0x82
 #define EP_VENDOR_OUT 0x02
-#define EP_MOUSE_IN   0x83
-#define CONFIG_MAX (TUD_CONFIG_DESC_LEN + 64 + TUD_VENDOR_DESC_LEN + USB_MOUSE_ITF_DESC_LEN)
+#define EP_MOUSE_IN   0x83   // .. 0x84 (one per Joy-Con 2)
+#define CONFIG_MAX (TUD_CONFIG_DESC_LEN + 64 + TUD_VENDOR_DESC_LEN + USB_MOUSE_COUNT * USB_MOUSE_ITF_DESC_LEN)
 
 static uint8_t s_config[CONFIG_MAX];
 
@@ -90,9 +90,11 @@ uint8_t const *tud_descriptor_configuration_cb(uint8_t index) {
         itfs++;
     }
     if (usb_mode_has_mouse()) {
-        // Last: the Joy-Con 2 mouse (the WebUSB interface keeps its number).
-        n += usb_mouse_interface_desc(s_config + n, (uint16_t)(sizeof s_config - n), itfs, EP_MOUSE_IN);
-        itfs++;
+        // Last: the Joy-Con 2 mice, (L) then (R) (the WebUSB interface keeps its number).
+        for (uint8_t i = 0; i < USB_MOUSE_COUNT; i++) {
+            n += usb_mouse_interface_desc(s_config + n, (uint16_t)(sizeof s_config - n), itfs, (uint8_t)(EP_MOUSE_IN + i));
+            itfs++;
+        }
     }
     // Configuration: bus powered, remote wakeup, 500 mA
     const uint8_t head[] = {9, TUSB_DESC_CONFIGURATION, U16_TO_U8S_LE(n), itfs, 1, 0, 0xA0, 0xFA};

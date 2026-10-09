@@ -249,6 +249,11 @@ typedef struct {
     // maps, mode_slot, usb_mode / gc_usb_mode and the stick / trigger /
     // rumble fields above, which only remain for migrating older saves.
     ctrl_profiles_t prof[CTRL_TYPE_COUNT];
+    // A Joy-Con 2 connected on its own is its own controller (sideways, with
+    // the Joy-Con 2 (L) / (R) profiles); off (default, and zero in older
+    // saves): it is its half of the Joy-Con 2 (L/R).
+    uint8_t joycon_single;
+    uint8_t reserved_end[3];
 
     uint32_t crc;
 } settings_t;
@@ -317,7 +322,10 @@ static inline void settings_profile_slots(const settings_t *s, ctrl_type_t t, ui
 // The USB mode the dongle starts in: the active profile of the controller
 // type that connected last.
 static inline ctrl_type_t settings_boot_ctrl(const settings_t *s) {
-    return s->last_ctrl < CTRL_TYPE_COUNT ? (ctrl_type_t)s->last_ctrl : CTRL_PRO;
+    if (s->last_ctrl >= CTRL_TYPE_COUNT) return CTRL_PRO;
+    // Single Joy-Con 2 not allowed: it was (and is) half of the pair.
+    if (!s->joycon_single && (s->last_ctrl == CTRL_JOYCON_L || s->last_ctrl == CTRL_JOYCON_R)) return CTRL_JOYCON_PAIR;
+    return (ctrl_type_t)s->last_ctrl;
 }
 static inline uint8_t settings_boot_usb_mode(const settings_t *s) {
     return settings_active(s, settings_boot_ctrl(s))->usb_mode;

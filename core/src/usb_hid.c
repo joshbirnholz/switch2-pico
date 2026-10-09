@@ -220,8 +220,9 @@ typedef struct {
     uint8_t protocol;
 } mouse_hid_t;
 
-static mouse_hid_t s_mouse;
-CFG_TUSB_MEM_SECTION CFG_TUSB_MEM_ALIGN static uint8_t s_mouse_buf[USB_MOUSE_EP_SIZE];
+// In interface order: the first mouse opened is the (L)'s.
+static mouse_hid_t s_mouse[USB_MOUSE_COUNT];
+CFG_TUSB_MEM_SECTION CFG_TUSB_MEM_ALIGN static uint8_t s_mouse_buf[USB_MOUSE_COUNT][USB_MOUSE_EP_SIZE];
 CFG_TUSB_MEM_SECTION CFG_TUSB_MEM_ALIGN static uint8_t s_mouse_ctrl[USB_MOUSE_EP_SIZE];
 
 uint16_t usb_mouse_interface_desc(uint8_t *buf, uint16_t cap, uint8_t itf, uint8_t ep_in) {
@@ -236,26 +237,29 @@ uint16_t usb_mouse_interface_desc(uint8_t *buf, uint16_t cap, uint8_t itf, uint8
     return sizeof desc;
 }
 
-bool usb_mouse_ready(void) {
-    return tud_mounted() && !tud_suspended() && s_mouse.ep_in != 0 && usbd_edpt_ready(0, s_mouse.ep_in);
+bool usb_mouse_ready(uint8_t i) {
+    return i < USB_MOUSE_COUNT && tud_mounted() && !tud_suspended() && s_mouse[i].ep_in != 0 &&
+           usbd_edpt_ready(0, s_mouse[i].ep_in);
 }
 
-bool usb_mouse_send(uint8_t buttons, int8_t dx, int8_t dy, int8_t wheel) {
-    if (!usb_mouse_ready()) return false;
-    if (!usbd_edpt_claim(0, s_mouse.ep_in)) return false;
-    s_mouse_buf[0] = buttons;
-    s_mouse_buf[1] = (uint8_t)dx;
-    s_mouse_buf[2] = (uint8_t)dy;
-    s_mouse_buf[3] = (uint8_t)wheel;
+bool usb_mouse_send(uint8_t i, uint8_t buttons, int8_t dx, int8_t dy, int8_t wheel) {
+    if (!usb_mouse_ready(i)) return false;
+    mouse_hid_t *m = &s_mouse[i];
+    if (!usbd_edpt_claim(0, m->ep_in)) return false;
+    uint8_t *b = s_mouse_buf[i];
+    b[0] = buttons;
+    b[1] = (uint8_t)dx;
+    b[2] = (uint8_t)dy;
+    b[3] = (uint8_t)wheel;
     // Boot protocol: buttons, x, y only.
-    uint16_t n = s_mouse.protocol == HID_PROTOCOL_BOOT ? 3 : 4;
-    bool ok = usbd_edpt_xfer(0, s_mouse.ep_in, s_mouse_buf, n);
-    if (!ok) usbd_edpt_release(0, s_mouse.ep_in);
+    uint16_t n = m->protocol == HID_PROTOCOL_BOOT ? 3 : 4;
+    bool ok = usbd_edpt_xfer(0, m->ep_in, b, n);
+    if (!ok) usbd_edpt_release(0, m->ep_in);
     return ok;
 }
 
 static void mouse_init(void) {
-    memset(&s_mouse, 0, sizeof s_mouse);
+    memset(s_mouse, 0, sizeof s_mouse);
 }
 
 static bool mouse_deinit(void) {
@@ -264,11 +268,16 @@ static bool mouse_deinit(void) {
 
 static void mouse_reset(uint8_t rhport) {
     (void)rhport;
-    memset(&s_mouse, 0, sizeof s_mouse);
+    memset(s_mouse, 0, sizeof s_mouse);
 }
 
 static uint16_t mouse_open(uint8_t rhport, tusb_desc_interface_t const *desc_itf, uint16_t max_len) {
     TU_VERIFY(desc_itf->bInterfaceClass == TUSB_CLASS_HID && desc_itf->bInterfaceProtocol == HID_ITF_PROTOCOL_MOUSE, 0);
+    mouse_hid_t *m = NULL;
+    for (int i = 0; i < USB_MOUSE_COUNT && !m; i++) {
+        if (!s_mouse[i].ep_in) m = &s_mouse[i];
+    }
+    TU_VERIFY(m, 0);
     uint8_t const *p_desc = tu_desc_next(desc_itf);
     TU_ASSERT(tu_desc_type(p_desc) == HID_DESC_TYPE_HID, 0);
     uint16_t const drv_len = (uint16_t)(sizeof(tusb_desc_interface_t) + tu_desc_len(p_desc) +
@@ -276,16 +285,23 @@ static uint16_t mouse_open(uint8_t rhport, tusb_desc_interface_t const *desc_itf
     TU_ASSERT(max_len >= drv_len, 0);
     p_desc = tu_desc_next(p_desc);
     uint8_t ep_out = 0;
-    TU_ASSERT(usbd_open_edpt_pair(rhport, p_desc, desc_itf->bNumEndpoints, TUSB_XFER_INTERRUPT, &ep_out,
-                                  &s_mouse.ep_in), 0);
-    s_mouse.itf_num = desc_itf->bInterfaceNumber;
-    s_mouse.protocol = HID_PROTOCOL_REPORT;
+    TU_ASSERT(usbd_open_edpt_pair(rhport, p_desc, desc_itf->bNumEndpoints, TUSB_XFER_INTERRUPT, &ep_out, &m->ep_in), 0);
+    m->itf_num = desc_itf->bInterfaceNumber;
+    m->protocol = HID_PROTOCOL_REPORT;
     return drv_len;
+}
+
+static mouse_hid_t *mouse_of_itf(uint8_t itf) {
+    for (int i = 0; i < USB_MOUSE_COUNT; i++) {
+        if (s_mouse[i].ep_in && s_mouse[i].itf_num == itf) return &s_mouse[i];
+    }
+    return NULL;
 }
 
 static bool mouse_control_xfer_cb(uint8_t rhport, uint8_t stage, tusb_control_request_t const *request) {
     TU_VERIFY(request->bmRequestType_bit.recipient == TUSB_REQ_RCPT_INTERFACE);
-    TU_VERIFY(tu_u16_low(request->wIndex) == s_mouse.itf_num);
+    mouse_hid_t *m = mouse_of_itf(tu_u16_low(request->wIndex));
+    TU_VERIFY(m);
     if (request->bmRequestType_bit.type == TUSB_REQ_TYPE_STANDARD) {
         if (stage != CONTROL_STAGE_SETUP) return true;
         uint8_t const desc_type = tu_u16_high(request->wValue);
@@ -304,19 +320,19 @@ static bool mouse_control_xfer_cb(uint8_t rhport, uint8_t stage, tusb_control_re
         return true;
     case HID_REQ_CONTROL_SET_IDLE:
         if (stage == CONTROL_STAGE_SETUP) {
-            s_mouse.idle_rate = tu_u16_high(request->wValue);
+            m->idle_rate = tu_u16_high(request->wValue);
             return tud_control_status(rhport, request);
         }
         return true;
     case HID_REQ_CONTROL_GET_IDLE:
-        if (stage == CONTROL_STAGE_SETUP) return tud_control_xfer(rhport, request, &s_mouse.idle_rate, 1);
+        if (stage == CONTROL_STAGE_SETUP) return tud_control_xfer(rhport, request, &m->idle_rate, 1);
         return true;
     case HID_REQ_CONTROL_GET_PROTOCOL:
-        if (stage == CONTROL_STAGE_SETUP) return tud_control_xfer(rhport, request, &s_mouse.protocol, 1);
+        if (stage == CONTROL_STAGE_SETUP) return tud_control_xfer(rhport, request, &m->protocol, 1);
         return true;
     case HID_REQ_CONTROL_SET_PROTOCOL:
         if (stage == CONTROL_STAGE_SETUP) return tud_control_status(rhport, request);
-        if (stage == CONTROL_STAGE_ACK) s_mouse.protocol = (uint8_t)request->wValue;
+        if (stage == CONTROL_STAGE_ACK) m->protocol = (uint8_t)request->wValue;
         return true;
     default:
         return false;

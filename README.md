@@ -131,29 +131,36 @@ GameCube Controller).
   stick and buttons and the (R)'s; motion comes from the (R). The battery
   shown is the lower one. Rumble goes to each side's own motor. SL / SR (of
   either side) can be mapped as SL and SR.
-* **One on its own: Joy-Con 2 (L) or (R)**, held sideways with the rail on
-  top. Its stick is the left stick, turned to match; the four buttons under
-  the thumb act as A / B / X / Y by where they end up (an (L): Down = A,
-  Left = B, Right = X, Up = Y; an (R): X = A, A = B, Y = X, B = Y); SL / SR
-  are L / R. Motion isn't turned (the axes are as the Joy-Con reports them).
-* When a Joy-Con 2 connects and the dongle last ran a pair whose other half
-  is paired too, it starts as the pair and waits for the other side. If that
-  doesn't connect within 30 seconds, the one that did is used on its own.
-  When the other side connects to a single one, they become the pair.
-  A pair stays a pair if one side drops; the dongle reconnects it when it
-  wakes up.
+* **One on its own.** By default it is its half of the Joy-Con 2 (L/R)
+  (the other half's buttons and stick just aren't there until it connects).
+  With **Device → Paired controllers → Allow a single Joy-Con 2 on its own**
+  on, it is its own controller instead, **Joy-Con 2 (L)** or **(R)**, held
+  sideways with the rail on top, with its own profiles (their tabs show only
+  then): its stick is the left stick, turned to match; the four buttons
+  under the thumb act as A / B / X / Y by where they end up (an (L): Down =
+  A, Left = B, Right = X, Up = Y; an (R): X = A, A = B, Y = X, B = Y); SL /
+  SR are L / R. Motion isn't turned (the axes are as the Joy-Con reports
+  them). Then, when a Joy-Con 2 connects and the dongle last ran a pair whose
+  other half is paired too, it starts as the pair and waits for the other
+  side; if that doesn't connect within 30 seconds, the one that did is used
+  on its own. A pair stays a pair if one side drops; the dongle reconnects
+  it when it wakes up.
+* **SL / SR** of a pair can be remapped from the controller like the Pro
+  Controller's GL / GR (**Remap SL/SR from the controller** on its Buttons
+  tab): hold C and SL or SR, then press another button. SL of either
+  Joy-Con is one input, SR the other.
 * Profiles: a pair's are on buttons and switch with **C + Home**, like the
   Pro Controller's. A single Joy-Con 2 has no shortcut: its profiles are
   numbered 1–8, and the one in use is chosen on the configuration page.
 
 **Mouse Mode.** On the Joy-Con 2 tabs, a profile's **Mouse** tab has one
-switch, Mouse Mode, and the pointer speed. With it on, a Joy-Con 2 laid on
-its side on a surface is a USB mouse: either one, one at a time (the first
-put down stays the mouse until it is lifted; the sensor reports how far the
-surface is). Its shoulder button clicks, its trigger right-clicks, its stick
-click middle-clicks and its stick scrolls; picked up, they are the
-controller's again. The mouse is a second USB device next to the
-controller, so turning Mouse Mode on or off restarts the dongle.
+switch, Mouse Mode, and the pointer speed. With it on, each Joy-Con 2 laid on
+its side on a surface is its own USB mouse, as on a Switch 2 (the dongle adds
+two mice, the (L)'s and the (R)'s; the sensor reports how far the surface
+is). Its shoulder button clicks, its trigger right-clicks, its stick click
+middle-clicks and its stick scrolls (up or left: up; down or right: down);
+picked up, they are the controller's again. Turning Mouse Mode on or off
+restarts the dongle.
 
 **Xbox 360 mode only.** Mouse Mode works only in profiles that emulate an
 Xbox 360 controller; elsewhere the setting is kept but does nothing (and the

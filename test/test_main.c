@@ -985,6 +985,18 @@ static void test_joycon_profiles(void) {
     CHECK(c.p[MODE_SLOT_Y].mouse_src == MOUSE_OFF);
     CHECK(!settings_profile_mouse(&c.p[MODE_SLOT_Y], CTRL_PRO));
 
+    // Single Joy-Con 2 off (default): a single one is its half of the pair,
+    // also for the type the dongle starts as.
+    settings_t st;
+    memset(&st, 0, sizeof st);
+    st.last_ctrl = CTRL_JOYCON_R;
+    CHECK(settings_boot_ctrl(&st) == CTRL_JOYCON_PAIR);
+    st.joycon_single = 1;
+    CHECK(settings_boot_ctrl(&st) == CTRL_JOYCON_R);
+    st.last_ctrl = CTRL_GAMECUBE;
+    st.joycon_single = 0;
+    CHECK(settings_boot_ctrl(&st) == CTRL_GAMECUBE);
+
     // Mapping follows the context's type.
     mapping_ctx_t ctx;
     memset(&ctx, 0, sizeof ctx);

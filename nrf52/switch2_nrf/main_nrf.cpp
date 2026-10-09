@@ -104,7 +104,7 @@ public:
 };
 
 static ProControllerInterface s_pro_itf;
-static MouseInterface s_mouse_itf;
+static MouseInterface s_mouse_itf[USB_MOUSE_COUNT];   // (L), (R)
 static Adafruit_USBD_WebUSB s_webusb;
 WEBUSB_URL_DEF(s_landing_page, 1 /* https */, "joshbirnholz.github.io/switch2-pico/");
 
@@ -134,7 +134,9 @@ static void usb_setup(void) {
         TinyUSBDevice.setDeviceVersion(id->bcd_device);
     }
     // Last, so the WebUSB interface keeps its number.
-    if (usb_mode_has_mouse()) TinyUSBDevice.addInterface(s_mouse_itf);
+    if (usb_mode_has_mouse()) {
+        for (int i = 0; i < USB_MOUSE_COUNT; i++) TinyUSBDevice.addInterface(s_mouse_itf[i]);
+    }
     if (!g_settings.usb_detach_when_idle) TinyUSBDevice.attach();
 }
 
