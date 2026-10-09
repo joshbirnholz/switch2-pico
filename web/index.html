@@ -5,40 +5,85 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Switch2-Pico</title>
 <style>
-:root{--bg:#f4f5f7;--card:#fff;--fg:#1d1f23;--muted:#677;--line:#dde0e5;--acc:#e60012;--ok:#1a8f3c;--warn:#b26b00;--on:#e60012;--off:#c9cdd3}
-@media (prefers-color-scheme:dark){:root{--bg:#15171a;--card:#1f2227;--fg:#e8eaed;--muted:#9aa0a6;--line:#30343a;--off:#3a3f46}}
+:root{--bg:#f3f4f6;--card:#fff;--fg:#16191d;--muted:#59616b;--line:#dee1e6;--soft:#eceef1;--field:#fff;--fieldline:#cdd1d7;--acc:#c8102e;--acc-ink:#a50d25;--ok:#1f7a3a;--ok-bg:#e7f4ea;--ok-ink:#1f6b34;--warn:#9a5b00;--on:#c8102e;--off:#c9cdd3;--seg:#e6e8ec;--danger-bg:#fceef0;--danger-ink:#6b0a19;--logbg:#16191d;--logfg:#d9dde3}
+@media (prefers-color-scheme:dark){:root{--bg:#15171a;--card:#1f2227;--fg:#e8eaed;--muted:#a0a6ad;--line:#30343a;--soft:#2a2e34;--field:#16191d;--fieldline:#3a3f46;--acc:#e0233f;--acc-ink:#ff7a8c;--ok:#3fb766;--ok-bg:#1d3324;--ok-ink:#7fd99a;--warn:#e0a54a;--off:#3a3f46;--seg:#2a2e34;--danger-bg:#3a1d22;--danger-ink:#ffb3be;--logbg:#0d0f11}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-header{padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1px solid var(--line);margin-bottom:16px}
-header h1{font-size:20px;margin:0}
-.pill{padding:3px 10px;border-radius:99px;background:var(--off);font-size:13px}
-.pill.ok{background:var(--ok);color:#fff}.pill.warn{background:var(--warn);color:#fff}
-main{max-width:980px;margin:0 auto;padding:0 16px 40px;display:grid;gap:16px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
-.card h2{font-size:16px;margin:0 0 12px}
-.card.collapsible>h2{cursor:pointer;user-select:none}
-.card.collapsible>h2::before{content:"\25BE";display:inline-block;width:1.1em;color:var(--muted);transition:transform .15s}
-.card.collapsed>h2{margin:0}
-.card.collapsed>h2::before{transform:rotate(-90deg)}
-.card.collapsed>:not(h2){display:none!important}
-.tabbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:4px 2px}
-.tabbar-title{font-weight:600;margin-right:4px}
-.tabbar button{border-radius:999px;padding:6px 14px}
-.tabbar button[aria-selected="true"]{background:var(--acc);border-color:var(--acc);color:#fff}
-.tabbar button .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--ok);margin-left:6px;vertical-align:middle}
-.tabbar button[aria-selected="true"] .dot{background:#fff}
-.card.tabbed{border-left:3px solid var(--acc)}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+h2{font-size:16px;margin:0}
+.wrap{max-width:1240px;margin:0 auto;padding:0 20px}
+/* Header: status and Save stay in view; the three sections below it. */
+header.top{position:sticky;top:0;z-index:20;background:var(--card);border-bottom:1px solid var(--line)}
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:10px 20px;padding-top:12px;padding-bottom:6px}
+.brand{display:flex;align-items:baseline;gap:8px}
+.brand b{font-size:18px;letter-spacing:-.01em}
+.sub{font-size:12px;color:var(--muted)}
+.status{display:flex;flex-wrap:wrap;gap:8px;flex:1 1 380px}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:var(--bg);font-size:13px}
+.chip.ok{background:var(--ok-bg);color:var(--ok-ink);font-weight:600}
+.chip.ok::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--ok)}
+.chip.warn{color:var(--warn);font-weight:600}
+.savebox{display:flex;align-items:center;gap:12px}
+#dirty-note{font-size:13px;color:var(--muted)}
+#dirty-note.dirty{color:var(--warn);font-weight:500}
+nav.sections{display:flex;gap:4px}
+nav.sections button{border:0;border-radius:0;background:none;padding:10px 14px;color:var(--muted);border-bottom:3px solid transparent;min-height:44px}
+nav.sections button[aria-selected="true"]{color:var(--fg);font-weight:600;border-bottom-color:var(--acc)}
+main.wrap{padding-top:20px;padding-bottom:40px;display:flex;flex-direction:column;gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+.card>h2+*{margin-top:12px}
+.split{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start}
+.split>.wide{flex:999 1 620px;min-width:0;display:flex;flex-direction:column;gap:16px}
+.split>.narrow{flex:1 1 300px;min-width:0;display:flex;flex-direction:column;gap:16px}
+.stack{display:flex;flex-direction:column;gap:12px}
+.caps{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+/* Controller type tabs (segmented) */
+.seg{display:inline-flex;padding:4px;background:var(--seg);border-radius:10px;gap:4px;align-self:flex-start}
+.seg button{border:0;border-radius:7px;background:transparent;padding:8px 16px;min-height:40px;color:var(--muted)}
+.seg button[aria-selected="true"]{background:var(--card);color:var(--fg);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.seg .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-left:8px;vertical-align:middle}
+.seg.small button{padding:6px 12px;min-height:32px;font-size:13px}
 [data-tab].tab-hidden{display:none!important}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px 16px}
+/* Profiles: numbered chips, then the chosen profile's name and mode. */
+.chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.chips .lead{font-weight:600;margin-right:4px}
+.pchip{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;min-height:38px;border-radius:8px;border:1px solid var(--fieldline);background:var(--field)}
+.pchip.sel{border:2px solid var(--fg);font-weight:600;padding:5px 11px}
+.pchip.add{border-style:dashed;background:transparent;color:var(--muted)}
+.num{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;border-radius:5px;background:var(--seg);color:var(--fg);font:700 12px ui-monospace,Menlo,Consolas,monospace}
+.pchip.sel .num{background:var(--fg);color:var(--card)}
+.badge{font-size:11px;font-weight:700;padding:2px 6px;border-radius:4px;background:var(--acc);color:#fff;letter-spacing:.02em}
+.count{margin-left:auto;font-size:12px;color:var(--muted)}
+.profrow{display:flex;flex-wrap:wrap;gap:12px 16px;align-items:flex-end;padding-top:14px;margin-top:14px;border-top:1px solid var(--soft)}
+.profrow>label{flex:1 1 200px;max-width:280px}
+.profrow .acts{display:flex;flex-wrap:wrap;gap:8px;margin-left:auto}
+/* Sub-tabs of the profile */
+.card.flush{padding:0}
+.subtabs{display:flex;gap:4px;padding:0 12px;border-bottom:1px solid var(--soft);overflow-x:auto}
+.subtabs button{border:0;border-radius:0;background:none;padding:12px 14px;min-height:44px;color:var(--muted)}
+.subtabs button[aria-selected="true"]{color:var(--fg);font-weight:600;box-shadow:inset 0 -3px 0 var(--acc)}
+.panel{padding:16px 18px}
+.panel-foot{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;padding-top:12px;margin-top:14px;border-top:1px solid var(--soft)}
+.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px 28px}
+.slider{display:flex;align-items:center;gap:12px}
+.slider input{flex:1}
+.slider b{min-width:48px;text-align:right;color:var(--fg)}
+.hint{font-size:12px;color:var(--muted);font-weight:400}
+.kvrow{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-direction:row;color:var(--fg);font-size:14px}
+/* "?" help with a hover / focus bubble */
+.help{position:relative;display:inline-flex}
+.help>button{width:24px;height:24px;padding:0;border-radius:50%;font-weight:700;font-size:13px;line-height:1;cursor:help}
+.help>.tipbox{display:none;position:absolute;right:0;bottom:32px;width:290px;padding:10px 12px;border-radius:8px;background:var(--fg);color:var(--card);font-size:12px;line-height:1.45;box-shadow:0 6px 18px rgba(0,0,0,.25);z-index:5}
+.help:hover>.tipbox,.help>button:focus+.tipbox{display:block}
 /* Button mapping laid out like an emulator's input screen (Yuzu): stick and
    button groups around a picture of the controller; stacked on narrow screens. */
 .pad{display:grid;gap:12px;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
   grid-template-areas:"img img" "lsh rsh" "cen cen" "ls rs" "dpad dpad" "face face"}
-.grp{border:1px solid var(--line);border-radius:10px;padding:6px 10px 10px;min-width:0}
-.grp>h4{margin:0 0 4px;font-size:12px;font-weight:600;text-align:center;color:var(--fg)}
+.grp{border:1px solid var(--soft);border-radius:10px;padding:6px 10px 10px;min-width:0}
+.grp>h4{margin:0 0 4px;font-size:12px;font-weight:600;color:var(--fg)}
 .grp .diamond{max-width:none;gap:4px 6px}
 .pad select{padding:5px 4px;font-size:13px}
-.pad .col{display:flex;flex-direction:column;gap:6px}
+.pad .col{display:flex;flex-direction:column;gap:6px;border:1px solid var(--soft);border-radius:10px;padding:8px 10px}
 .pad .cen{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 10px;grid-template-areas:"minus plus" "cap home" "c c"}
 .pad .cen>label{grid-area:var(--a)}
 .pad .cen>label[style="--a:c"]{justify-self:center;width:calc(50% - 5px)}
@@ -53,6 +98,8 @@ main{max-width:980px;margin:0 auto;padding:0 16px 40px;display:grid;gap:16px}
 .pad svg text{font:600 20px system-ui,sans-serif;fill:var(--fg);pointer-events:none;text-anchor:middle;dominant-baseline:central}
 .pad .g-ls{grid-area:ls}.pad .g-rs{grid-area:rs}.pad .g-dpad{grid-area:dpad}.pad .g-face{grid-area:face}
 .pad .g-lsh{grid-area:lsh}.pad .g-rsh{grid-area:rsh}.pad .g-cen{grid-area:cen}.pad .g-img{grid-area:img}
+.live{display:flex;align-items:center;justify-content:center;gap:8px;font-size:12px;color:var(--muted)}
+.live::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--acc)}
 @media (min-width:760px){
   .pad{grid-template-columns:minmax(0,1fr) minmax(0,1.9fr) minmax(0,1fr);
     grid-template-areas:"lsh cen rsh" "ls img face" "dpad img rs"}
@@ -62,40 +109,82 @@ main{max-width:980px;margin:0 auto;padding:0 16px 40px;display:grid;gap:16px}
   .pad .g-cen{align-self:end}
 }
 /* D-pad and face buttons as diamonds. */
-.diamonds{display:flex;flex-wrap:wrap;gap:16px 40px}
-.diamond{flex:1 1 280px;max-width:440px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
-  grid-template-areas:". n ." "w . e" ". s .";gap:6px 10px}
+.diamonds{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
+.diamonds>.diamond{max-width:330px}
+.diamonds .diamond select{width:100%}
+.diamond{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-areas:". n ." "w . e" ". s .";gap:4px 6px;text-align:center}
 .diamond>label{grid-area:var(--a)}
-label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
-label.check{flex-direction:row;align-items:center;gap:8px;color:var(--fg)}
+.diamonds select{font-size:12px;padding:4px 3px}
+label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+label.check{flex-direction:row;align-items:center;gap:10px;color:var(--fg);font-size:14px}
+label.check.top{align-items:flex-start}
+label.check input{width:18px;height:18px;margin:0;flex:none;accent-color:var(--acc)}
+label.check.off{color:var(--muted)}
 input,select,button{font:inherit;color:inherit}
-input[type=text],input[type=password],input[type=number],select{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 9px;min-width:0}
-input[type=range]{width:100%}
-button{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 14px;cursor:pointer}
-button.primary{background:var(--acc);border-color:var(--acc);color:#fff}
-button.danger{color:var(--acc)}
+input[type=text],input[type=password],input[type=number],select{background:var(--field);border:1px solid var(--fieldline);border-radius:8px;padding:7px 9px;min-width:0;color:var(--fg);font-size:14px}
+input[type=range]{width:100%;accent-color:var(--acc)}
+button{background:var(--field);border:1px solid var(--fieldline);border-radius:8px;padding:8px 14px;min-height:38px;cursor:pointer}
+button:disabled{opacity:.55;cursor:default}
+button.primary{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+button.dark{background:var(--fg);border-color:var(--fg);color:var(--card);font-weight:600}
+button.danger{color:var(--acc-ink)}
+.danger-zone{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:12px;border-radius:10px;background:var(--danger-bg)}
+.danger-zone span{flex:1 1 220px;font-size:13px;color:var(--danger-ink)}
+.danger-zone button{border-color:var(--acc-ink);color:var(--acc-ink);font-weight:600;background:var(--card)}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.kv{display:grid;grid-template-columns:max-content 1fr;gap:4px 14px;font-size:14px}
-.bonds{display:grid;gap:6px;font-size:14px}
-.bonds .b{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:6px 10px;border:1px solid var(--line);border-radius:8px}
-.bonds .b code{color:var(--muted)}.bonds .b button{margin-left:auto}
-.kv dt{color:var(--muted)}.kv dd{margin:0;font-variant-numeric:tabular-nums}
+.samples{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.samples button{padding:8px 0}
+.kv{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:6px 14px;font-size:13px;margin:12px 0 0}
+.kv dt{color:var(--muted)}.kv dd{margin:0;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+details.card>summary{cursor:pointer;font-weight:600;font-size:15px}
+.bonds{display:flex;flex-direction:column;border:1px solid var(--soft);border-radius:10px}
+.bonds .b{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;padding:10px 12px}
+.bonds .b+.b{border-top:1px solid var(--soft)}
+.bonds .b code{font:12px ui-monospace,Menlo,Consolas,monospace;color:var(--muted)}
+.bonds .b .first{margin-left:auto}
+.bonds .tag{font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--ok-bg);color:var(--ok-ink)}
+.bonds .empty{padding:12px;color:var(--muted)}
 .mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
-pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radius:8px;margin:8px 0 0;white-space:pre-wrap;word-break:break-all}
-.note{color:var(--muted);font-size:13px;margin:6px 0 0}
-#toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:8px 16px;border-radius:8px;opacity:0;transition:opacity .2s;pointer-events:none}
+pre#log{margin:0;padding:12px 14px;background:var(--logbg);color:var(--logfg);border-radius:10px;font:12px/1.6 ui-monospace,Menlo,Consolas,monospace;height:640px;max-height:70vh;overflow:auto;white-space:pre-wrap;word-break:break-all}
+.note{color:var(--muted);font-size:13px;margin:0}
+#usb-help{margin-top:16px}
+@media (max-width:640px){
+  .bar{gap:8px 12px;padding-top:10px}
+  .brand{flex:1}
+  .savebox{order:2}
+  .status{order:3;flex:1 1 100%;flex-wrap:nowrap;overflow-x:auto}
+  .chip{white-space:nowrap}
+  #dirty-note{display:none}
+  .card{padding:14px}
+  .panel{padding:14px}
+}
+#toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:8px 16px;border-radius:8px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:30}
 #toast.show{opacity:1}
 </style>
 </head>
 <body>
-<header>
-  <h1>Switch2-Pico</h1>
-  <span id="st-link" class="pill">…</span>
-  <span id="st-usb" class="pill">USB …</span>
-  <span id="st-ver" class="note"></span>
-  <button id="usb-connect" class="primary" style="display:none" onclick="usbConnect()">Connect over USB</button>
+<header class="top">
+  <div class="wrap bar">
+    <div class="brand"><b>Switch2-Pico</b><span id="st-ver" class="sub"></span></div>
+    <div class="status">
+      <span id="st-link" class="chip">…</span>
+      <span id="st-batt" class="chip" hidden></span>
+      <span id="st-usb" class="chip">USB …</span>
+    </div>
+    <div class="savebox">
+      <span id="dirty-note"></span>
+      <button id="usb-connect" class="primary" style="display:none" onclick="usbConnect()">Connect over USB</button>
+      <button id="save-btn" class="primary" onclick="save()" disabled>Save</button>
+    </div>
+  </div>
+  <nav class="wrap sections" role="tablist" aria-label="Sections">
+    <button role="tab" data-sec="ctrl" onclick="showSection('ctrl')">Controller</button>
+    <button role="tab" data-sec="dev" onclick="showSection('dev')">Device</button>
+    <button role="tab" data-sec="tools" onclick="showSection('tools')">Tools</button>
+  </nav>
 </header>
-<div id="usb-help" class="card" style="display:none;max-width:948px;margin:0 auto 16px">
+<div class="wrap">
+<div id="usb-help" class="card" style="display:none">
   <b>Connect to your dongle over USB.</b> Plug in the Switch2-Pico, click <i>Connect over USB</i> and choose
   it. Its name follows the mode: "Pro Controller", "DualSense Edge Wireless Controller", "DualSense Wireless
   Controller", "Controller" (Xbox 360) or "WUP-028" (GameCube adapter). Each mode is a separate USB device to the
@@ -104,192 +193,214 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
   <span class="note">Linux: install the udev rule from the README first. If WebUSB is turned off on the dongle, use the
   Wi-Fi page instead (tap BOOTSEL, join Switch2-Pico-XXXX, open http://192.168.4.1).</span>
 </div>
-<main>
+</div>
+<main class="wrap">
 
-<section class="card">
-  <h2>Controller</h2>
-  <dl class="kv" id="ctrl"></dl>
-  <div class="row" style="margin-top:12px">
-    <button id="pair-btn" onclick="act('pair')" disabled>Pair a controller</button>
-    <button onclick="act('disconnect')">Disconnect</button>
-    <button class="danger" onclick="if(confirm('Forget all paired controllers? Hold Sync on a controller to pair it again.'))act('forget')">Forget all</button>
+<!-- ======================= Controller ======================= -->
+<div data-page="ctrl" class="stack" style="gap:16px">
+  <div class="seg" role="tablist" aria-label="Controller type">
+    <button role="tab" data-tabbtn="0" onclick="setTab(0)">Pro Controller</button>
+    <button role="tab" data-tabbtn="1" onclick="setTab(1)">GameCube controller</button>
   </div>
-  <h3 style="margin:16px 0 6px;font-size:14px">Paired controllers <span class="note" id="bond-count"></span></h3>
-  <div id="bonds" class="bonds"></div>
-  <div class="row" style="margin-top:12px;align-items:center;gap:8px">
-    <label class="check"><input type="checkbox" data-k="idle_disconnect">Disconnect the controller after</label>
-    <input type="number" min="1" max="240" data-k="idle_minutes" style="width:5em" aria-label="Minutes">
-    <span>minutes without use</span>
-  </div>
-  <p class="note" style="margin-top:4px">The controller then sleeps to save its battery; press any button to reconnect.</p>
-  <label class="check" style="margin-top:12px" id="pair-button-row"><input type="checkbox" data-k="pair_button"><span>Pair only after pressing Sync (on by default on the Pico): a short press of the Pico's BOOTSEL button, or <i>Pair a controller</i> above, opens a 60 s pairing window (the LED blinks fast). Controllers in pairing mode are ignored otherwise.</span></label>
-  <p class="note" id="pair-button-note" style="margin-top:4px"></p>
-  <p class="note">To pair: hold the small Sync button on the Switch 2 controller until the lights sweep. The dongle pairs automatically and remembers it; afterwards any button press wakes and reconnects it. Any of the paired controllers can connect, one at a time. Pairing one more when the list is full forgets the oldest pairing.</p>
-</section>
 
-<section class="card">
-  <h2>USB and system</h2>
-  <div class="grid">
-    <label>Report interval (ms)<input type="number" min="4" max="16" data-k="usb_interval"></label>
-    <label>Bluetooth transmit power (nRF52840; from the next connection)
-      <select data-k="ble_tx_power"><option value="0">+8 dBm (maximum)</option><option value="1">+4 dBm</option><option value="2">0 dBm</option><option value="3">−4 dBm (lowest current)</option></select></label>
-    <label class="check"><input type="checkbox" data-k="led_follow_host">Player LEDs follow the host</label>
-    <label class="check"><input type="checkbox" data-k="usb_detach">Only appear on USB while a controller is connected</label>
-    <label class="check"><input type="checkbox" data-k="usb_wakeup">Wake a sleeping PC from the controller</label>
-    <label class="check wifi-only"><input type="checkbox" data-k="hotkey">Hold C + Home 3 s to toggle the config Wi-Fi</label>
-    <label class="check"><input type="checkbox" data-k="webusb">WebUSB configuration interface (turn off if a console misbehaves)</label>
-  </div>
-</section>
+  <section class="card" aria-label="Profiles">
+    <div class="chips" id="prof-chips"></div>
+    <div class="profrow">
+      <label>Name<input type="text" id="pf-name" maxlength="19" oninput="profName(this.value)"></label>
+      <label>Emulated Controller<select id="pf-mode" onchange="profMode(+this.value)"><option value="0">Switch Pro Controller</option><option value="1">DualSense Edge</option><option value="2">DualSense</option><option value="3">Xbox 360 controller</option><option value="4">GameCube adapter</option></select></label>
+      <div class="acts">
+        <button id="prof-use" onclick="profUse()">Use this profile</button>
+        <button onclick="profDup()">Duplicate</button>
+        <button class="danger" onclick="profDel()">Delete</button>
+      </div>
+    </div>
+  </section>
 
-<div class="tabbar" role="tablist" aria-label="Controller settings">
-  <span class="tabbar-title">Settings for</span>
-  <button role="tab" data-tabbtn="0" onclick="setTab(0)">Pro Controller</button>
-  <button role="tab" data-tabbtn="1" onclick="setTab(1)">GameCube controller</button>
+  <div class="split">
+    <section class="card flush wide" aria-label="Profile settings">
+      <div class="subtabs" role="tablist" aria-label="Profile settings">
+        <button role="tab" data-sub="buttons" onclick="showSub('buttons')">Buttons</button>
+        <button role="tab" data-sub="sticks" onclick="showSub('sticks')">Sticks &amp; triggers</button>
+        <button role="tab" data-sub="rumble" onclick="showSub('rumble')">Rumble</button>
+      </div>
+      <div class="panel" data-panel="buttons">
+        <p class="note" id="map-ctrl-note" style="margin-bottom:10px"></p>
+        <div class="pad" id="map"></div>
+        <div class="panel-foot">
+          <button id="preset-reset" onclick="presetIdentity()">Reset to labels</button>
+          <button id="preset-swap" onclick="presetSwapFace()">Swap A/B and X/Y</button>
+          <div class="row" data-tab="0" style="margin-left:auto;gap:6px">
+            <label class="check"><input type="checkbox" data-k="quick_remap">Remap GL/GR from the controller</label>
+            <span class="help"><button type="button" aria-label="About remapping GL/GR from the controller">?</button><span class="tipbox" role="tooltip">Hold <b>C + GL</b> (or GR) and press another button: GL then sends what that button sends. Do it again to clear. It changes the profile in use. Not in DualSense Edge mode, where GL/GR are paddles the host remaps.</span></span>
+          </div>
+        </div>
+      </div>
+      <div class="panel fields" data-panel="sticks" hidden>
+        <label>Inner deadzone <span class="hint">Ignore small movements near the center</span>
+          <span class="slider"><input type="range" min="0" max="40" id="pf-deadzone"><b><span id="v-pf-deadzone"></span>%</b></span></label>
+        <label>Full deflection at <span class="hint">Reach 100% before the edge</span>
+          <span class="slider"><input type="range" min="50" max="100" id="pf-outer"><b><span id="v-pf-outer"></span>%</b></span></label>
+        <label class="check"><input type="checkbox" id="pf-swap"><span id="pf-swap-label">Swap left and right sticks</span></label>
+        <label data-tab="1">Trigger threshold <span class="hint">Analog L / R count as pressed past this (0–255). The analog values still go to modes with analog triggers.</span>
+          <input type="number" min="0" max="255" id="pf-threshold" style="max-width:120px"></label>
+      </div>
+      <div class="panel fields" data-panel="rumble" hidden>
+        <label class="check"><input type="checkbox" id="pf-rumble">Rumble on</label>
+        <label>Strength <span class="hint" data-tab="1">One classic motor: strength is how much of the time it runs</span>
+          <span class="slider"><input type="range" min="0" max="200" id="pf-strength"><b><span id="v-pf-strength"></span>%</b></span></label>
+        <p class="note" style="grid-column:1/-1">Try it under Tools → Haptics test.</p>
+      </div>
+    </section>
+
+    <aside class="narrow">
+      <section class="card stack" aria-label="Quick switch">
+        <h2>Quick switch</h2>
+        <p class="note">Hold <b style="color:var(--fg)">C + Home</b> until the lights blink, then press a button. A profile in the same mode switches at once; another mode restarts the dongle. Buttons set to – do nothing.</p>
+        <div class="diamonds" id="slots"></div>
+      </section>
+      <section class="card stack" data-tab="0" aria-label="Motion">
+        <div><h2>Motion</h2><p class="note" style="margin-top:2px">Shared by every Pro Controller profile.</p></div>
+        <label class="kvrow">Gyro scale<select data-k="gyro_range"><option value="0">Auto-detect</option><option value="1">16.4 LSB/°/s</option><option value="2">14.3 LSB/°/s</option></select></label>
+        <label class="kvrow">Gyro sensitivity<span class="slider" style="width:170px"><input type="range" min="10" max="400" data-k="gyro_scale"><b><span id="v-gyro_scale"></span>%</b></span></label>
+        <label class="kvrow">Accelerometer<span class="slider" style="width:170px"><input type="range" min="10" max="400" data-k="accel_scale"><b><span id="v-accel_scale"></span>%</b></span></label>
+        <div class="row">
+          <button onclick="act('gyrocal')">Calibrate gyro (keep still 2 s)</button>
+          <button onclick="act('gyroclear')">Clear</button>
+        </div>
+        <span class="note mono" id="bias"></span>
+      </section>
+    </aside>
+  </div>
 </div>
 
-<section class="card tabbed">
-  <h2>Profiles</h2>
-  <p class="note" style="margin-top:0">A profile is a USB mode with its button mapping, stick, trigger and rumble settings. Each controller type has its own (up to 8); the one <b>in use</b> applies whenever that controller connects.</p>
-  <div class="row" style="align-items:flex-end;gap:8px">
-    <label>Profile<select id="prof-sel" onchange="pickProfile(+this.value)"></select></label>
-    <button id="prof-use" onclick="profUse()">Use now</button>
-    <button onclick="profNew()">New</button>
-    <button onclick="profDup()">Duplicate</button>
-    <button onclick="profRename()">Rename</button>
-    <button class="danger" onclick="profDel()">Delete</button>
-  </div>
-  <div class="grid" style="margin-top:12px">
-    <label>Mode<select id="pf-mode" onchange="profMode(+this.value)"><option value="0">Switch Pro Controller</option><option value="1">DualSense Edge</option><option value="2">DualSense</option><option value="3">Xbox 360 controller</option><option value="4">GameCube adapter</option></select></label>
-  </div>
-  <p class="note" id="prof-note"></p>
-  <h3 style="margin:14px 0 4px;font-size:14px">Shortcut on the controller</h3>
-  <p class="note" style="margin-top:0">On the controller, hold <b>C + Home</b> until its lights blink, then press a button below to use that profile. Profiles in the same mode switch at once; a different mode restarts the dongle. C + Home again, or a few seconds without pressing anything, leaves without a change. Buttons set to – are ignored; with every button set to – the shortcut is off.</p>
-  <div class="diamonds" id="slots"></div>
-</section>
+<!-- ======================= Device ======================= -->
+<div data-page="dev" class="split" hidden>
+  <div class="wide">
+    <section class="card stack" aria-label="Paired controllers">
+      <div class="row" style="align-items:baseline"><h2>Paired controllers</h2><span class="note" id="bond-count"></span></div>
+      <div id="bonds" class="bonds"></div>
+      <div class="row">
+        <button id="pair-btn" onclick="act('pair')" disabled>Pair a controller</button>
+        <button class="danger" style="margin-left:auto" onclick="if(confirm('Forget all paired controllers? Hold Sync on a controller to pair it again.'))act('forget')">Forget all</button>
+      </div>
+      <label class="check top" id="pair-button-row"><input type="checkbox" data-k="pair_button"><span>Pair only after pressing Sync <span class="hint" style="display:block" id="pair-button-note"></span></span></label>
+    </section>
 
-<section class="card tabbed">
-  <h2>Button mapping <span class="note" id="map-prof-name"></span></h2>
-  <p class="note" style="margin-top:0">For the profile chosen above. The picture shows the controller live: pressed buttons light up and the sticks move.</p>
-  <p class="note" id="map-ctrl-note" style="margin:6px 0 0"></p>
-  <div class="pad" id="map"></div>
-  <div class="row" style="margin-top:12px">
-    <button id="preset-reset" onclick="presetIdentity()">Reset to labels</button>
-    <button id="preset-swap" onclick="presetSwapFace()">Swap A/B and X/Y (positional)</button>
-  </div>
-  <label class="check" style="margin-top:12px" data-tab="0"><input type="checkbox" data-k="quick_remap">Remap GL/GR from the controller (all modes except DualSense Edge, where they are paddles the host remaps): hold C + GL or GR and press a button. Do it again to clear. Changes the profile in use.</label>
-</section>
+    <section class="card stack" aria-label="Power and radio">
+      <h2>Power and radio</h2>
+      <div class="row">
+        <label class="check"><input type="checkbox" data-k="idle_disconnect">Let the controller sleep after</label>
+        <input type="number" min="1" max="240" data-k="idle_minutes" style="width:5em" aria-label="Minutes">
+        <span>minutes without use</span>
+      </div>
+      <label class="kvrow" style="max-width:460px">Bluetooth transmit power<select data-k="ble_tx_power"><option value="0">+8 dBm (strongest)</option><option value="1">+4 dBm</option><option value="2">0 dBm</option><option value="3">−4 dBm (lowest current)</option></select></label>
+      <p class="note">Lower power helps on a weak USB supply; it applies from the next connection.</p>
+    </section>
 
-<section class="card tabbed">
-  <h2>Sticks and triggers <span class="note" id="st-prof-name"></span></h2>
-  <div class="grid">
-    <label>Inner deadzone: <b id="v-pf-deadzone"></b>%<input type="range" min="0" max="40" id="pf-deadzone"></label>
-    <label>Full deflection at: <b id="v-pf-outer"></b>%<input type="range" min="50" max="100" id="pf-outer"></label>
-    <label class="check"><input type="checkbox" id="pf-swap"><span id="pf-swap-label">Swap left and right sticks</span></label>
-    <label data-tab="1">Trigger threshold (L / R count as pressed past this)<input type="number" min="0" max="255" id="pf-threshold"></label>
+    <section class="card stack wifi-only" aria-label="Configuration Wi-Fi" hidden>
+      <h2>Configuration Wi-Fi</h2>
+      <div class="fields">
+        <label>Network name<input type="text" maxlength="32" data-k="wifi_ssid"></label>
+        <label>Password <span class="hint">8+ characters; blank keeps it</span><input type="password" maxlength="63" id="wifi_pass" placeholder="unchanged"></label>
+        <label>Channel<input type="number" min="1" max="11" data-k="wifi_channel"></label>
+      </div>
+      <label class="check"><input type="checkbox" data-k="wifi_autostart">Start automatically while no controller is paired</label>
+      <label class="check"><input type="checkbox" data-k="hotkey">Hold C + Home 3 s to toggle the Wi-Fi</label>
+      <div class="row"><button onclick="act('wifi_off')">Turn Wi-Fi off now</button></div>
+    </section>
   </div>
-  <p class="note" data-tab="1">The analog L / R values themselves go to the modes that have analog triggers (Xbox, DualSense, GameCube adapter).</p>
-</section>
 
-<section class="card tabbed">
-  <h2>Rumble <span class="note" id="rb-prof-name"></span></h2>
-  <div class="grid">
-    <label class="check"><input type="checkbox" id="pf-rumble">Rumble</label>
-    <label>Strength: <b id="v-pf-strength"></b>%<input type="range" min="0" max="200" id="pf-strength"></label>
+  <div class="narrow">
+    <section class="card stack" aria-label="USB">
+      <h2>USB</h2>
+      <label class="kvrow">Report interval<select data-k="usb_interval" id="usb-interval"><option value="4">4 ms (250 Hz)</option><option value="8">8 ms (125 Hz)</option><option value="16">16 ms (62.5 Hz)</option></select></label>
+      <label class="check"><input type="checkbox" data-k="led_follow_host">Player lights follow the host</label>
+      <label class="check"><input type="checkbox" data-k="usb_wakeup">Wake a sleeping PC from the controller</label>
+      <label class="check"><input type="checkbox" data-k="usb_detach">Only appear on USB while a controller is connected</label>
+      <label class="check top"><input type="checkbox" data-k="webusb"><span>Configuration over USB (WebUSB)<span class="hint" style="display:block">Turn off if a console misbehaves.</span></span></label>
+    </section>
+    <details class="card" open>
+      <summary>Connection details</summary>
+      <dl class="kv" id="ctrl"></dl>
+    </details>
   </div>
-  <p class="note" data-tab="1">One classic motor: strength is how much of the time it runs.</p>
-</section>
+</div>
 
-<section class="card tabbed" data-tab="0">
-  <h2>Motion (gyro)</h2>
-  <div class="grid">
-    <label class="check"><input type="checkbox" data-k="gyro_enabled">Report motion</label>
-    <label>Gyro scale of this controller
-      <select data-k="gyro_range"><option value="0">Auto-detect</option><option value="1">16.4 LSB/°/s</option><option value="2">14.3 LSB/°/s</option></select></label>
-    <label>Gyro sensitivity: <b id="v-gyro_scale"></b>%<input type="range" min="10" max="400" data-k="gyro_scale"></label>
-    <label>Accelerometer scale: <b id="v-accel_scale"></b>%<input type="range" min="10" max="400" data-k="accel_scale"></label>
-  </div>
-  <div class="row" style="margin-top:12px">
-    <button onclick="act('gyrocal')">Calibrate gyro (keep still 2 s)</button>
-    <button onclick="act('gyroclear')">Clear calibration</button>
-    <span class="note mono" id="bias"></span>
-  </div>
-</section>
+<!-- ======================= Tools ======================= -->
+<div data-page="tools" class="split" hidden>
+  <div class="narrow" style="flex-basis:380px">
+    <section class="card stack" id="fw-card" aria-label="Firmware">
+      <h2>Firmware</h2>
+      <dl class="kv" id="fw-info" style="margin:0"></dl>
+      <div class="row" id="fw-step1">
+        <button class="primary" id="fw-go" onclick="fwStart()" disabled>Update</button>
+        <button onclick="fwCheck()">Check for updates</button>
+        <button onclick="$('fw-file').click()">Install a .uf2 file…</button>
+        <input type="file" id="fw-file" accept=".uf2" style="display:none" onchange="fwFile(this)">
+      </div>
+      <div id="fw-step2" class="stack" style="display:none">
+        <p class="note">The dongle restarted as a USB drive (<b>NICENANO</b>, <b>FTHR840BOOT</b> or <b>RP2350</b>). Choose that drive and the firmware is written to it; the dongle installs it and restarts by itself.</p>
+        <div class="row">
+          <button class="primary" id="fw-write" onclick="fwWrite()">Write to the drive…</button>
+          <button onclick="fwSave()">Save the .uf2 instead</button>
+        </div>
+      </div>
+      <p class="note" id="fw-note"></p>
+    </section>
 
-<section class="card tabbed" data-tab="0">
-  <h2>HD rumble</h2>
-  <div class="grid">
-    <label>Frequencies
-      <select data-k="rumble_freq_mode"><option value="0">Translate (HD rumble)</option><option value="1">Fixed (amplitude only)</option></select></label>
-    <label>Frequency scale (codes/octave)<input type="number" min="16" max="255" data-k="rumble_freq_slope"></label>
-  </div>
-  <p class="note">For all Pro Controller profiles. The Switch 2 rumble frequency encoding is not fully documented. If effects feel off, try "Fixed" or adjust the scale.</p>
-</section>
+    <section class="card stack" aria-label="Restart and reset">
+      <h2>Restart and reset</h2>
+      <div class="row">
+        <button onclick="act('reboot')">Restart dongle</button>
+        <button onclick="if(confirm('Restart into the USB bootloader to install a .uf2 by hand?'))act('bootloader')">Firmware update mode</button>
+      </div>
+      <div class="danger-zone">
+        <span>Factory reset erases every profile, pairing and setting.</span>
+        <button onclick="if(confirm('Erase every profile, pairing and setting?'))act('factory')">Factory reset…</button>
+      </div>
+    </section>
 
-<section class="card wifi-only">
-  <h2>Configuration Wi-Fi</h2>
-  <div class="grid">
-    <label>Network name<input type="text" maxlength="32" data-k="wifi_ssid"></label>
-    <label>Password (8+ chars, blank = keep)<input type="password" maxlength="63" id="wifi_pass" placeholder="unchanged"></label>
-    <label>Channel<input type="number" min="1" max="11" data-k="wifi_channel"></label>
-    <label class="check"><input type="checkbox" data-k="wifi_autostart">Start automatically while no controller is paired</label>
+    <section class="card stack" aria-label="Haptics test">
+      <div><h2>Haptics test</h2><p class="note" style="margin-top:2px">Plays on the connected controller.</p></div>
+      <div class="stack" style="gap:6px">
+        <span class="caps">Rumble</span>
+        <div class="row">
+          <button class="dark" onclick="act('rumble')">Test rumble</button>
+          <button onclick="act('motors&l=255&r=0')" title="Classic rumble's strong motor, on its own side">Left motor (strong)</button>
+          <button onclick="act('motors&l=0&r=255')" title="Classic rumble's weak motor, on its own side">Right motor (weak)</button>
+        </div>
+      </div>
+      <div class="stack" style="gap:6px">
+        <span class="caps">Feedback effects</span>
+        <div class="row">
+          <button onclick="haptic('tick')" title="Quick remap">Tick</button>
+          <button onclick="haptic('thump')" title="Profile chosen">Thump</button>
+          <button onclick="haptic('ba_thump')" title="Profile select">Ba-thump</button>
+        </div>
+      </div>
+      <div class="stack" style="gap:6px">
+        <span class="caps">Built-in samples</span>
+        <div class="samples">
+          <button onclick="playSample(1)" title="Buzz">1</button><button onclick="playSample(2)" title="Buzz and two beeps">2</button><button onclick="playSample(3)" title="Ba-thump (connect)">3</button><button onclick="playSample(4)" title="Ka-chink (pairing)">4</button><button onclick="playSample(5)" title="Heavier ba-thump">5</button><button onclick="playSample(6)" title="Ka">6</button><button onclick="playSample(7)" title="Chink">7</button>
+        </div>
+      </div>
+    </section>
   </div>
-  <div class="row" style="margin-top:12px">
-    <button onclick="act('wifi_off')">Turn Wi-Fi off now</button>
-  </div>
-</section>
 
-<section class="card" data-collapsed-default>
-  <h2>Haptics test</h2>
-  <p class="note" style="margin-top:0">Plays feedback on the connected controller. Left / right motor play the classic rumble the DualSense and Xbox modes use (strong left, weak right, each on its own side). The effects are the ones the shortcuts use; the built-in samples (1–7) are stored in the controller: 1 buzz, 2 buzz and two beeps, 3 the "ba-thump" it plays when it connects (also used for mode select), 4 the pairing "ka-chink", 5 a heavier 3, 6 and 7 the two halves of 4.</p>
-  <div class="row">
-    <button onclick="act('rumble')">Test rumble</button>
-    <button onclick="act('motors&l=255&r=0')">Left motor (strong)</button>
-    <button onclick="act('motors&l=0&r=255')">Right motor (weak)</button>
-    <button onclick="haptic('ba_thump')">Mode select (ba-thump)</button>
-    <button onclick="haptic('thump')">Mode chosen (thump)</button>
-    <button onclick="haptic('tick')">Remap (tick)</button>
-  </div>
-  <div class="row" style="margin-top:12px">
-    <label>Built-in sample <input type="number" id="sample-n" min="1" max="7" value="1" style="width:5em"></label>
-    <button onclick="playSample(0)">Play</button>
-    <button onclick="playSample(-1)">◀ Previous</button>
-    <button onclick="playSample(1)">Next ▶</button>
-  </div>
-</section>
-
-<section class="card" id="fw-card">
-  <h2>Firmware update</h2>
-  <dl class="kv" id="fw-info"></dl>
-  <div class="row" style="margin-top:12px" id="fw-step1">
-    <button class="primary" id="fw-go" onclick="fwStart()" disabled>Update</button>
-    <button onclick="fwCheck()">Check again</button>
-    <button onclick="$('fw-file').click()">Install a .uf2 file…</button>
-    <input type="file" id="fw-file" accept=".uf2" style="display:none" onchange="fwFile(this)">
-  </div>
-  <div id="fw-step2" style="display:none;margin-top:12px">
-    <p class="note" style="margin-top:0">The dongle restarted as a USB drive (<b>NICENANO</b>, <b>FTHR840BOOT</b> or <b>RP2350</b>). Choose that drive and the firmware is written to it; the dongle installs it and restarts by itself.</p>
+  <section class="card stack wide" aria-label="Log">
     <div class="row">
-      <button class="primary" id="fw-write" onclick="fwWrite()">Write to the drive…</button>
-      <button onclick="fwSave()">Save the .uf2 instead</button>
+      <h2 style="margin-right:auto">Log</h2>
+      <label class="check" style="font-size:13px"><input type="checkbox" id="log-follow" checked>Follow live</label>
+      <button onclick="copyLog()">Copy</button>
+      <button onclick="download('/api/log','switch2-pico.log')">Download</button>
     </div>
-  </div>
-  <p class="note" id="fw-note"></p>
-</section>
-
-<section class="card">
-  <div class="row">
-    <button class="primary" onclick="save()">Save settings</button>
-    <button onclick="act('reboot')">Reboot</button>
-    <button onclick="if(confirm('Reboot into the USB bootloader to install a new .uf2?'))act('bootloader')">Firmware update mode</button>
-    <button class="danger" onclick="if(confirm('Erase all settings and pairing?'))act('factory')">Factory reset</button>
-  </div>
-</section>
-
-<section class="card">
-  <h2>Log</h2>
-  <div class="row"><button onclick="loadLog()">Refresh</button><button onclick="copyLog()">Copy</button><button onclick="download('/api/log','switch2-pico.log')">Download</button></div>
-  <pre id="log" class="mono"></pre>
-</section>
+    <div class="seg small" role="tablist" aria-label="Log source">
+      <button role="tab" data-log="now" onclick="showLog('now')">This session</button>
+      <button role="tab" data-log="saved" onclick="showLog('saved')">Before last restart</button>
+    </div>
+    <pre id="log"></pre>
+  </section>
+</div>
 </main>
 <div id="toast"></div>
 <script>
@@ -365,27 +476,54 @@ let S=null;
 const $=id=>document.getElementById(id);
 function toast(t){const e=$('toast');e.textContent=t;e.classList.add('show');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove('show'),1800)}
 async function haptic(e){try{const r=await api('/api/action?do=haptic&effect='+e,{method:'POST'});if(!r.ok)toast(r.text()||'Failed')}catch(x){toast('Failed')}}
-async function playSample(step){const el=$('sample-n');const n=Math.max(1,Math.min(7,(+el.value||1)+step));el.value=n;
+async function playSample(n){
   try{const r=await api('/api/action?do=sample&n='+n,{method:'POST'});toast(r.ok?'Sample '+n:(r.text()||'Failed'))}catch(x){toast('Failed')}}
 // Paired controllers (newest pairing first); redrawn only when something changes.
 let BONDS_KEY='';
 function renderBonds(s){
   const list=(s.bond&&s.bond.list)||[],L=s.link||{},cur=L.state==='ready'?L.addr:'';
   const key=JSON.stringify(list)+cur;if(key===BONDS_KEY)return;BONDS_KEY=key;
-  $('bond-count').textContent=list.length?`(${list.length} of ${s.bond.max||list.length}; oldest is forgotten when full)`:'';
+  $('bond-count').textContent=list.length?`${list.length} of ${s.bond.max||list.length} · any of them reconnects with a button press, one at a time`:'';
   const el=$('bonds');el.innerHTML='';
-  if(!list.length){el.innerHTML='<p class="note" style="margin:0">None yet.</p>';return}
+  if(!list.length){el.innerHTML='<div class="empty">None yet. Hold the Sync button on a controller to pair it.</div>';return}
   list.forEach((b,i)=>{
     const row=document.createElement('div');row.className='b';
     const conn=b.addr===cur;
     row.innerHTML=`<b>${PIDS[b.pid]||('Controller 0x'+b.pid.toString(16))}</b><code>${b.addr}</code>`+
-      (conn?'<span class="pill ok">connected</span>':'')+(i===0?'<span class="note">newest</span>':i===list.length-1&&list.length>1?'<span class="note">oldest</span>':'');
-    const btn=document.createElement('button');btn.className='danger';btn.textContent='Forget';
-    btn.onclick=()=>{if(confirm('Forget '+b.addr+'? Hold Sync on it to pair it again.'))act('forget&addr='+b.addr)};
-    row.appendChild(btn);el.appendChild(row);
+      (conn?'<span class="tag">Connected</span>':'')+(i===list.length-1&&list.length>1?'<span class="hint">oldest: forgotten first when full</span>':'');
+    const btns=[];
+    if(conn){const d=document.createElement('button');d.textContent='Disconnect';d.onclick=()=>act('disconnect');btns.push(d)}
+    const f=document.createElement('button');f.className='danger';f.textContent='Forget';
+    f.onclick=()=>{if(confirm('Forget '+b.addr+'? Hold Sync on it to pair it again.'))act('forget&addr='+b.addr)};btns.push(f);
+    btns[0].classList.add('first');btns.forEach(x=>row.appendChild(x));el.appendChild(row);
   });
 }
-async function act(what){try{const r=await api('/api/action?do='+what,{method:'POST'});toast(r.ok?'Done':'Failed');setTimeout(loadSettings,700)}catch(e){toast('Failed')}}
+// Unsaved edits: the header's Save lights up; reloading settings would lose them.
+let DIRTY=false;
+function setDirty(d){
+  DIRTY=d;$('save-btn').disabled=!d||!S;
+  const n=$('dirty-note');n.textContent=d?'Unsaved changes':(S?'All changes saved':'');n.classList.toggle('dirty',d);
+}
+// Sections (Controller / Device / Tools) and the profile's sub-tabs; the
+// choice is remembered in this browser.
+function remember(k,v){try{localStorage.setItem('s2p-'+k,v)}catch(e){}}
+function recall(k,d){try{return localStorage.getItem('s2p-'+k)||d}catch(e){return d}}
+let SEC='ctrl',SUB='buttons';
+function showSection(sec){
+  SEC=sec;remember('sec',sec);
+  document.querySelectorAll('[data-page]').forEach(e=>e.hidden=e.dataset.page!==sec);
+  document.querySelectorAll('[data-sec]').forEach(b=>b.setAttribute('aria-selected',b.dataset.sec===sec?'true':'false'));
+  if(sec==='tools')loadLog().catch(()=>{});
+}
+function showSub(sub){
+  SUB=sub;remember('sub',sub);
+  document.querySelectorAll('[data-panel]').forEach(e=>e.hidden=e.dataset.panel!==sub);
+  document.querySelectorAll('[data-sub]').forEach(b=>b.setAttribute('aria-selected',b.dataset.sub===sub?'true':'false'));
+}
+// Actions; settings are reread afterwards (gyro bias, ...) unless that would
+// drop unsaved edits.
+async function act(what){try{const r=await api('/api/action?do='+what,{method:'POST'});toast(r.ok?'Done':'Failed');
+  if(!DIRTY||what==='factory')setTimeout(loadSettings,700)}catch(e){toast('Failed')}}
 function buildStatic(){
 }
 // The mapping grid shows the mode picked in "Mapping for" (each mode has
@@ -508,15 +646,14 @@ function stashSlots(){
 }
 // The profile editor for the current tab and profile.
 function renderProfile(){
-  const T=TYPE(),P=prof();
-  $('prof-sel').innerHTML=T.profiles.map((q,i)=>q?`<option value="${i}">${esc(q.name)}${i===T.active?' (in use)':''}</option>`:'').join('');
-  $('prof-sel').value=CUR[MAP_CTRL];
-  $('prof-use').disabled=CUR[MAP_CTRL]===T.active;
+  const T=TYPE(),P=prof(),cur=CUR[MAP_CTRL];
+  $('prof-chips').innerHTML='<span class="lead">Profiles</span>'+T.profiles.map((q,i)=>q?
+    `<button class="pchip${i===cur?' sel':''}" onclick="pickProfile(${i})"><span class="num">${i+1}</span><span>${esc(q.name)}</span>${i===T.active?'<span class="badge">IN USE</span>':''}</button>`:'').join('')+
+    (T.profiles.some(q=>!q)?'<button class="pchip add" onclick="profNew()">+ New profile</button>':'')+
+    `<span class="count">${T.profiles.filter(q=>q).length} of ${S.profile_max}</span>`;
+  $('pf-name').value=P.name;
   $('pf-mode').value=P.mode;
-  const pending=T.active!==S.saved_active[MAP_CTRL];
-  $('prof-note').textContent=(CUR[MAP_CTRL]===T.active?'This profile is in use.':'Not in use; "Use now" (then Save) switches to it.')+
-    (pending?' Save to apply the change of profile.':'');
-  ['map-prof-name','st-prof-name','rb-prof-name'].forEach(id=>$(id).textContent='— '+P.name);
+  const pu=$('prof-use');pu.disabled=cur===T.active;pu.textContent=cur===T.active?'In use':'Use this profile';
   const set=(id,v)=>{$(id).value=v;const l=$('v-'+id);if(l)l.textContent=v;$(id).oninput=()=>{if(l)l.textContent=$(id).value}};
   set('pf-deadzone',P.deadzone);set('pf-outer',P.outer);set('pf-threshold',P.threshold);set('pf-strength',P.strength);
   $('pf-swap').checked=!!P.swap;$('pf-rumble').checked=!!P.rumble;
@@ -526,35 +663,39 @@ function renderProfile(){
 }
 function esc(t){return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function pickProfile(i){stashProfile();CUR[MAP_CTRL]=i;renderProfile()}
-function profUse(){stashProfile();TYPE().active=CUR[MAP_CTRL];renderProfile();toast('Save to apply')}
+function profUse(){stashProfile();TYPE().active=CUR[MAP_CTRL];renderProfile();setDirty(true)}
 function freeSlot(){const i=TYPE().profiles.findIndex(q=>!q);if(i<0)alert('Each controller type can have up to '+S.profile_max+' profiles.');return i}
-function askName(def){const n=prompt('Profile name',def);if(n===null)return null;return n.trim().slice(0,19)||def}
+// The name is edited in place (chips follow as you type).
+function profName(v){
+  const P=prof();P.name=v.slice(0,19);setDirty(true);
+  const chip=$('prof-chips').querySelector('.pchip.sel span:nth-child(2)');if(chip)chip.textContent=P.name||' ';
+}
+function focusName(){const n=$('pf-name');n.focus();n.select()}
 function profNew(){
   stashProfile();const i=freeSlot();if(i<0)return;
-  const m=prof().mode,name=askName(MODE_NAMES[m]);if(name===null)return;
-  TYPE().profiles[i]={name,mode:m,deadzone:6,outer:95,swap:0,threshold:120,rumble:1,strength:100,map:TYPE().defaults[m].slice()};
-  CUR[MAP_CTRL]=i;renderProfile();
+  const m=prof().mode;
+  TYPE().profiles[i]={name:MODE_NAMES[m].replace(' controller',''),mode:m,deadzone:6,outer:95,swap:0,threshold:120,rumble:1,strength:100,map:TYPE().defaults[m].slice()};
+  CUR[MAP_CTRL]=i;renderProfile();setDirty(true);focusName();
 }
 function profDup(){
   stashProfile();const i=freeSlot();if(i<0)return;
-  const P=prof(),name=askName((P.name+' copy').slice(0,19));if(name===null)return;
-  TYPE().profiles[i]={...P,name,map:P.map.slice()};CUR[MAP_CTRL]=i;renderProfile();
+  const P=prof();
+  TYPE().profiles[i]={...P,name:(P.name+' copy').slice(0,19),map:P.map.slice()};CUR[MAP_CTRL]=i;renderProfile();setDirty(true);focusName();
 }
-function profRename(){stashProfile();const n=askName(prof().name);if(n===null)return;prof().name=n;renderProfile()}
 function profDel(){
   stashProfile();const T=TYPE(),i=CUR[MAP_CTRL];
-  if(i===T.active){alert('This profile is in use. Pick another one with "Use now" first.');return}
-  if(!confirm('Delete the profile "'+prof().name+'"?'))return;
+  if(i===T.active){alert('This profile is in use. Pick another one with "Use this profile" first.');return}
+  if(!confirm('Delete profile '+(i+1)+', "'+prof().name+'"?'))return;
   T.profiles[i]=null;
   for(const k in T.slots)if(T.slots[k]===i+1)T.slots[k]=0;
-  CUR[MAP_CTRL]=T.active;renderProfile();
+  CUR[MAP_CTRL]=T.active;renderProfile();setDirty(true);
 }
 // Changing a profile's mode starts its mapping from that mode's defaults
 // (outputs differ between modes).
 function profMode(m){
   stashProfile();const P=prof();if(P.mode===m)return;
   if(!confirm('Change this profile to '+MODE_NAMES[m]+'? Its button mapping starts over from that mode\'s defaults.')){$('pf-mode').value=P.mode;return}
-  P.mode=m;P.map=TYPE().defaults[m].slice();renderProfile();
+  P.mode=m;P.map=TYPE().defaults[m].slice();renderProfile();setDirty(true);
 }
 // Controller tabs: sections only for one controller type (data-tab) show / hide.
 function showTab(t){
@@ -562,7 +703,7 @@ function showTab(t){
   document.querySelectorAll('[data-tabbtn]').forEach(b=>{
     const i=+b.dataset.tabbtn;b.setAttribute('aria-selected',i===t?'true':'false');
     const conn=ST&&ST.link&&ST.link.state==='ready'&&(ST.link.pid===8307?1:0)===i;
-    b.innerHTML=(S&&S.types?S.types[i].name:b.textContent)+(conn?'<span class="dot" title="connected"></span>':'');
+    b.innerHTML=esc(S&&S.types?S.types[i].name:b.textContent)+(conn?'<span class="dot" title="connected"></span>':'');
   });
 }
 function setTab(t){
@@ -572,12 +713,15 @@ function setTab(t){
 const SLOTS=['A','B','X','Y','Up','Down','Left','Right'];
 function renderSlots(){
   const T=TYPE();
-  const opts='<option value="0">–</option>'+T.profiles.map((q,i)=>q?`<option value="${i+1}">${esc(q.name)}</option>`:'').join('');
+  // Numbered, so a profile is easy to tell apart when its name is cut off.
+  const opts='<option value="0">–</option>'+T.profiles.map((q,i)=>q?`<option value="${i+1}">${i+1} - ${esc(q.name)}</option>`:'').join('');
   const dia=(cells)=>'<div class="diamond">'+cells.map(([n,a])=>`<label style="--a:${a}">${n}<select data-slot="${n}">${opts}</select></label>`).join('')+'</div>';
   $('slots').innerHTML=dia([['Up','n'],['Left','w'],['Right','e'],['Down','s']])+dia([['X','n'],['Y','w'],['A','e'],['B','s']]);
   SLOTS.forEach(n=>$('slots').querySelector(`[data-slot="${n}"]`).value=T.slots[n]||0);
 }
 function render(){
+  // A report interval the menu doesn't list (set by older firmware) still shows.
+  const ui=$('usb-interval');if(S.usb_interval&&![...ui.options].some(o=>+o.value===S.usb_interval))ui.add(new Option(S.usb_interval+' ms',S.usb_interval));
   document.querySelectorAll('[data-k]').forEach(el=>{
     const k=el.dataset.k,v=S[k];
     if(el.type==='checkbox')el.checked=!!v;else el.value=v;
@@ -588,8 +732,8 @@ function render(){
   // Pairing window: boards with a Sync button only (the Pico's BOOTSEL).
   const pb=document.querySelector('[data-k="pair_button"]');
   pb.disabled=!S.sync_button;
-  $('pair-button-row').style.opacity=S.sync_button?'':'0.5';
-  $('pair-button-note').textContent=S.sync_button?'With BOOTSEL as Sync, a 1–5 s hold toggles the configuration Wi-Fi.':'Not available on this board (no Sync button): any controller in pairing mode pairs.';
+  $('pair-button-row').classList.toggle('off',!S.sync_button);
+  $('pair-button-note').textContent=S.sync_button?'A short BOOTSEL press or Pair a controller opens a 60 s window (the LED blinks fast); a 1–5 s hold toggles the configuration Wi-Fi.':'Pico 2 W only (BOOTSEL). Not available on this board.';
   // What runs now: the active profiles as saved (a restart is needed when
   // the in-use type's profile changes mode).
   S.saved_active=S.types.map(T=>T.active);
@@ -598,6 +742,7 @@ function render(){
   CUR[0]=S.types[0].active;CUR[1]=S.types[1].active;
   showTab(MAP_CTRL);
   renderProfile();
+  setDirty(false);
 }
 async function loadSettings(){S=(await api('/api/settings')).json();render()}
 async function save(){
@@ -612,6 +757,7 @@ async function save(){
   });
   document.querySelectorAll('[data-k]').forEach(el=>p.append(el.dataset.k,el.type==='checkbox'?(el.checked?1:0):el.value));
   const pw=$('wifi_pass').value;if(pw)p.append('wifi_pass',pw);
+  p.append('gyro_enabled',1);   // motion is always reported where the mode has it
   // The profile in use for the controller type that connects (or connected
   // last) now has another USB mode: the dongle restarts.
   const lt=S.last_ctrl||0,T=S.types[lt];
@@ -620,7 +766,7 @@ async function save(){
   if(r.ok){const keep=MAP_CTRL,cur=CUR.slice();S=r.json();render();
     // Stay where the user was.
     MAP_CTRL=keep;CUR[0]=S.types[0].profiles[cur[0]]?cur[0]:S.types[0].active;CUR[1]=S.types[1].profiles[cur[1]]?cur[1]:S.types[1].active;
-    showTab(MAP_CTRL);renderProfile();toast('Saved')}
+    showTab(MAP_CTRL);renderProfile();$('wifi_pass').value='';toast('Saved')}
   else toast('Save failed');
 }
 function presetIdentity(){const M=mapMode();IN.forEach((n,i)=>{document.querySelector(`[data-map="${n}"]`).value=M.default_map[i]})}
@@ -634,22 +780,24 @@ async function poll(){
     if(!USE_HTTP && !usbDev) return;
     const s=(await api('/api/status')).json();
     if(!ST||ST.version!==s.version||ST.platform!==s.platform){ST=s;fwRender()}else ST=s;
-    $('st-ver').textContent='v'+s.version;
     const P=s.pairing||{},pbtn=$('pair-btn');
     pbtn.disabled=!P.required;
     pbtn.title=P.required?'':(S&&S.sync_button?'Turn on "Pair only after pressing Sync" first':'Not available on this board');
     pbtn.textContent=P.open?'Stop pairing ('+Math.ceil(P.left_ms/1000)+' s)':'Pair a controller';
     const L=s.link,ready=L.state==='ready';
-    const sl=$('st-link');sl.textContent=ready?'Controller connected':L.state==='scanning'?(s.bond.bonded?'Waiting for controller':'Waiting for pairing'):L.state;
-    sl.className='pill '+(ready?'ok':'warn');
-    const su=$('st-usb');su.textContent=s.usb.mounted?(s.usb.report_mode?'USB streaming':'USB connected'):'USB not connected';su.className='pill '+(s.usb.mounted?'ok':'');
+    const MODES={switch_pro:'Switch Pro Controller',dualsense_edge:'DualSense Edge',dualsense:'DualSense',xbox360:'Xbox 360 controller',gc_adapter:'GameCube adapter'};
+    const sl=$('st-link');sl.textContent=ready?(PIDS[L.pid]||'Controller')+' connected':L.state==='scanning'?(s.bond.bonded?'Waiting for controller':'Waiting for pairing'):L.state;
+    sl.className='chip '+(ready?'ok':'warn');
+    const sb=$('st-batt');sb.hidden=!(ready&&L.battery_mv);
+    if(!sb.hidden)sb.textContent=`${L.battery_pct}%`+(L.power_level>=0?` · level ${L.power_level}/9`:' (estimate)')+(L.charging?' · charging':'');
+    const su=$('st-usb');su.textContent=s.usb.mounted?'USB: '+(MODES[s.usb_mode]||s.usb_mode):'USB not connected';su.className='chip'+(s.usb.mounted?'':' warn');
     kv($('ctrl'),[
       ['Type',PIDS[L.pid]||(L.pid?('0x'+L.pid.toString(16)):'—')],['Serial',L.serial||'—'],['Address',ready?L.addr:'—'],
       ['Battery',L.battery_mv?`${L.battery_pct}%${L.charging?' (charging)':''} · `+(L.power_level>=0?`controller level ${L.power_level}/9 · `:'estimated from voltage · ')+`${(L.battery_mv/1000).toFixed(2)} V · charge state 0x${(L.charge_state||0).toString(16).padStart(2,'0')}`:'—'],
       ['Report rate',ready?L.report_hz+' Hz ('+L.conn_interval_ms+' ms interval)':'—'],
       ['Gyro scale',['not detected','16.4','14.3'][L.gyro_range]||'—'],
       ['Dongle power',s.supply?`USB ${(s.supply.vbus/1000).toFixed(2)} V (lowest ${(s.supply.vbus_min/1000).toFixed(2)}), chip ${(s.supply.vdd/1000).toFixed(2)} V (lowest ${(s.supply.vdd_min/1000).toFixed(2)})`:'—'],
-      ['USB mode',{switch_pro:'Switch Pro Controller',dualsense_edge:'DualSense Edge',dualsense:'DualSense',xbox360:'Xbox 360 controller',gc_adapter:'GameCube adapter'}[s.usb_mode]||s.usb_mode],
+      ['USB mode',MODES[s.usb_mode]||s.usb_mode],
       ['Host',s.usb.mounted?`handshake ${s.usb.handshake?'yes':'no'}, mode 0x${s.usb.report_mode.toString(16)}, IMU ${s.usb.imu?'on':'off'}, ${s.usb.subcommands} subcommands, ${s.usb.reports} reports sent, rumble frames ${s.usb.rumble_frames}`:'—'],
     ]);
     // Live input only on the tab of the controller type that is connected.
@@ -660,15 +808,29 @@ async function poll(){
     }else{document.querySelectorAll('#map svg .on').forEach(e=>e.classList.remove('on'));stick($('dot-l'),2048,2048);stick($('dot-r'),2048,2048);if($('imu'))$('imu').textContent='';}
     if(S)showTab(MAP_CTRL);
     renderBonds(s);
-    document.querySelectorAll('.wifi-only').forEach(e=>e.style.display=s.wifi===false?'none':'');
+    document.querySelectorAll('.wifi-only').forEach(e=>e.hidden=s.wifi!==true);
     $('st-ver').textContent='v'+s.version+(s.platform?' · '+s.platform:'');
     if(S&&L.gyro_cal_busy===false)$('bias').textContent='bias: '+S.gyro_bias.join(', ');
-  }catch(e){$('st-link').textContent='offline';$('st-link').className='pill'}
+  }catch(e){$('st-link').textContent='Not connected';$('st-link').className='chip warn';$('st-batt').hidden=true}
 }
-async function loadLog(){if(!USE_HTTP&&!usbDev)return;const t=(await api('/api/log')).text();const e=$('log');e.textContent=t;e.scrollTop=e.scrollHeight}
+// The log: this start's lines, or the saved ones from before the last restart.
+const LOG_SEP='===== saved log from before this start is above =====\n';
+let LOG_TEXT='',LOG_VIEW='now';
+async function loadLog(){
+  if(!USE_HTTP&&!usbDev)return;
+  LOG_TEXT=(await api('/api/log')).text();showLog(LOG_VIEW);
+}
+function logPart(v){const k=LOG_TEXT.indexOf(LOG_SEP);if(k<0)return v==='now'?LOG_TEXT:'';return v==='now'?LOG_TEXT.slice(k+LOG_SEP.length):LOG_TEXT.slice(0,k)}
+function showLog(v){
+  LOG_VIEW=v;
+  document.querySelectorAll('[data-log]').forEach(b=>b.setAttribute('aria-selected',b.dataset.log===v?'true':'false'));
+  const e=$('log'),atEnd=e.scrollTop+e.clientHeight>=e.scrollHeight-20;
+  e.textContent=logPart(v)||(v==='saved'?'(nothing saved from before the last restart)':'');
+  if(atEnd||v==='saved')e.scrollTop=v==='saved'?0:e.scrollHeight;
+}
 async function copyLog(){
   try{await loadLog()}catch(e){}
-  const t=$('log').textContent; if(!t){toast('Log is empty');return}
+  const t=LOG_TEXT; if(!t){toast('Log is empty');return}
   try{await navigator.clipboard.writeText(t);toast('Log copied');return}catch(e){}
   // http://192.168.4.1 is not a secure context, so no Clipboard API there.
   const ta=document.createElement('textarea');ta.value=t;ta.style.position='fixed';ta.style.opacity='0';
@@ -803,26 +965,15 @@ function fwSave(){
   $('fw-note').textContent='Drag '+fwName+' onto the dongle\'s USB drive.';
 }
 
-// ---- Collapsible sections (state remembered in this browser) ---------------
-function setupCollapsible(){
-  let st={};
-  try{st=JSON.parse(localStorage.getItem('s2p-collapsed')||'{}')}catch(e){}
-  document.querySelectorAll('main > section.card').forEach(sec=>{
-    const h=sec.querySelector(':scope > h2');if(!h)return;
-    const key=h.firstChild.textContent.trim();
-    sec.classList.add('collapsible');
-    const collapsed=key in st?st[key]:sec.hasAttribute('data-collapsed-default');
-    sec.classList.toggle('collapsed',collapsed);
-    h.onclick=()=>{
-      const c=sec.classList.toggle('collapsed');
-      st[key]=c;
-      try{localStorage.setItem('s2p-collapsed',JSON.stringify(st))}catch(e){}
-    };
-  });
-}
-
-setupCollapsible();
 buildStatic();
+showSection(recall('sec','ctrl'));showSub(recall('sub','buttons'));
+// Any edit in Controller or Device is unsaved until Save.
+document.querySelectorAll('[data-page="ctrl"],[data-page="dev"]').forEach(pg=>{
+  pg.addEventListener('input',e=>{if(e.target.matches('input,select')&&S)setDirty(true)});
+  pg.addEventListener('change',e=>{if(e.target.matches('input,select')&&S)setDirty(true)});
+});
+window.addEventListener('beforeunload',e=>{if(DIRTY){e.preventDefault();e.returnValue=''}});
+setInterval(()=>{if(SEC==='tools'&&$('log-follow').checked&&LOG_VIEW==='now'&&!document.hidden)loadLog().catch(()=>{})},2000);
 fwCheck();
 if (USE_HTTP){loadSettings();loadLog();}
 else if (!navigator.usb){$('usb-help').style.display='';$('usb-help').innerHTML='<b>This browser has no WebUSB.</b> Use Chrome or Edge, or the Wi-Fi page (tap BOOTSEL, join Switch2-Pico-XXXX, open http://192.168.4.1).';}
@@ -834,8 +985,8 @@ else {
   navigator.usb.addEventListener('connect',e=>{if(!usbDev&&isDongleId(e.device))usbOpen(e.device).catch(()=>{})});
   navigator.usb.addEventListener('disconnect',e=>{if(e.device===usbDev){usbDev=null;$('usb-connect').style.display='';$('usb-help').style.display='';}});
 }
-// Faster while the button mapping (and its live drawing) is open.
-(function loop(){poll().finally(()=>{const open=$('map')&&!$('map').closest('section').classList.contains('collapsed');
+// Faster while the button mapping (and its live drawing) is shown.
+(function loop(){poll().finally(()=>{const open=SEC==='ctrl'&&SUB==='buttons';
   setTimeout(loop,open&&!document.hidden?100:250)})})();
 </script>
 </body>

@@ -69,7 +69,7 @@ offers the one for the connected board. Then:
 
 The board reboots into the firmware.
 
-**Updating:** the configuration page's **Firmware update** section shows the
+**Updating:** the configuration page's **Tools → Firmware** section shows the
 installed and latest version. **Update** downloads the latest build and sends
 it straight to the dongle over the configuration connection (from v0.5.2):
 the dongle stores it in spare flash, checks it (CRC-32 and vector table),
@@ -106,7 +106,7 @@ any of them can connect by pressing a button, one at a time (while one is
 connected, the others wait). To add one, hold Sync on it (on the Pico, press
 BOOTSEL first). Pairing a ninth forgets the oldest pairing; pairing a known
 controller again makes it the newest. The configuration page lists the paired
-controllers (**Controller → Paired controllers**) with a **Forget** button for
+controllers (**Device → Paired controllers**) with a **Forget** button for
 each and **Forget all**; holding the Pico's BOOTSEL button for 5 seconds also
 forgets all. A forgotten controller no longer reconnects by itself (it still
 remembers the dongle, but the dongle ignores it); hold Sync on it to pair it
@@ -153,7 +153,7 @@ movement the dongle disconnects the controller so it goes to sleep and saves
 its battery; press any button to reconnect (within the first 20 seconds
 after it disconnects, the controller's own reconnection attempts are
 ignored). Change the time or turn it off in the configuration page's
-**Controller** section.
+**Device → Power and radio**.
 
 **Remapping GL/GR from the controller.** Hold **C** and **GL** (or **GR**) and
 press another button: GL (GR) now sends what that button sends, and the
@@ -208,15 +208,18 @@ have their own profiles, up to 8. One profile per controller type is **in
 use**, and it applies whenever that controller connects. Several profiles can
 share a mode, for example two Xbox 360 profiles with different mappings.
 
-The configuration page has a **Pro Controller** tab and a **GameCube
-controller** tab. It opens on the connected controller's tab, marked with a
-green dot. Each tab has a **Profiles** card (pick, **Use now**, New, Duplicate,
-Rename, Delete, and the profile's mode), then that profile's **Button
-mapping**, **Sticks and triggers** and **Rumble**. Settings shared by every
-profile sit outside the profile cards or outside the tabs: report interval,
-pairing, Wi-Fi and firmware, plus motion and HD-rumble frequency on the Pro
-Controller tab. Changing a profile's mode starts its mapping over from that
-mode's defaults. The profile in use can't be deleted.
+The configuration page's **Controller** section has a **Pro Controller** tab
+and a **GameCube controller** tab. It opens on the connected controller's tab,
+marked with a green dot. Each tab lists that type's profiles as numbered chips
+(**IN USE** marks the active one; **+ New profile** adds one). Below them are
+the chosen profile's **Name** (edited in place), **Emulated Controller** (its
+USB mode), **Use this profile**, **Duplicate** and **Delete**. Then come its
+**Buttons**, **Sticks & triggers** and **Rumble** tabs. Beside them are
+**Quick switch** (the C + Home buttons) and, on the Pro Controller tab,
+**Motion**, which is shared by every Pro Controller profile. Changing a
+profile's mode starts its mapping over from that mode's defaults. The profile
+in use can't be deleted. Edits stay unsaved until **Save** in the header; the
+header says when there are unsaved changes.
 
 New dongles, and settings from before profiles, start with one profile per
 mode, named after it, holding that mode's mapping. In use: Switch Pro for the
@@ -246,14 +249,14 @@ mode. Defaults (the per-mode profiles):
 | Y | Switch Pro |
 | D-pad | – (empty) |
 
-**Profiles → Shortcut on the controller** assigns a profile, or – (empty), to
+**Quick switch** assigns a profile, or – (empty), to
 each face button and D-pad direction, per controller type. Empty buttons are
 ignored. Press C + Home again, or wait 5 seconds without pressing anything, to
 leave without a change. While choosing, the host sees no buttons pressed.
 While C is held, Home doesn't reach the host, so the hold doesn't open the
 host's home menu. Setting every button to – turns off both the shortcut and
 this Home blocking, except on the Pico 2 W while the Wi-Fi hotkey is on. The
-**Haptics test** section plays these effects, and the controller's built-in
+**Tools → Haptics test** plays these effects, and the controller's built-in
 vibration samples.
 
 A change of mode restarts the dongle, which then has that controller's USB
@@ -289,7 +292,7 @@ Rumble is the two-motor kind these controllers have, played on the Switch 2's
 HD rumble actuators like the motors of a real pad: the strong, heavy motor in
 the left grip and the weak, light one in the right, each on its own side, so
 games that signal left vs right (Fez's L2/R2 hints, for example) can be told
-apart. **Haptics test → Left motor / Right motor** plays each one. The
+apart. **Tools → Haptics test → Left motor / Right motor** plays each one. The
 DualSense's audio-driven haptics aren't available (the emulated DualSense has
 no audio interface); games fall back to this rumble. Gyro is reported in the DualSense modes (the Xbox 360
 controller has none). Player LEDs follow the host. Switch consoles need the
@@ -301,6 +304,12 @@ Turn on **System Settings → Controllers and Sensors → Pro Controller Wired
 Communication**, then plug the dongle into the dock or the console.
 
 ## Configuration page
+
+The page has three sections: **Controller** (profiles, button mapping,
+sticks, rumble, quick switch, motion), **Device** (paired controllers, power
+and radio, USB, Wi-Fi on the Pico 2 W, connection details) and **Tools**
+(firmware, restart and reset, haptics test, log). The header always shows the
+controller, battery and USB mode, and **Save**.
 
 ### Over USB (WebUSB)
 
@@ -323,8 +332,8 @@ enable it once under **Settings → Pages → Source: GitHub Actions**.
 * **Windows:** no driver needed; the dongle tells Windows to use WinUSB for
   the configuration interface.
 * The WebUSB interface adds a second USB interface next to the controller. If
-  a Switch 1 console doesn't accept the dongle, turn off *WebUSB configuration
-  interface* (via Wi-Fi if needed) so it matches a genuine Pro Controller
+  a Switch 1 console doesn't accept the dongle, turn off *Configuration over USB
+  (WebUSB)* under **Device → USB** (via Wi-Fi if needed) so it matches a genuine Pro Controller
   exactly.
 
 ### Over Wi-Fi
@@ -385,11 +394,11 @@ went away (port, cable or hub).
 **The dongle restarts by itself (nRF52840) and the log says `power on (power
 was off or dropped)`.** The board really lost power for a moment: the USB
 port, hub or cable couldn't keep up, or the board's regulator browned out.
-**Controller → Dongle power** shows the USB and chip supply (with the lowest
+**Device → Connection details → Dongle power** shows the USB and chip supply (with the lowest
 seen since start), and the log records new lows (`power: … dropped to …`).
 Try another port directly on the computer (not a hub) or another cable, and
-don't charge the controller from the same hub. **USB and system → Bluetooth
-transmit power** lowers the dongle's peak current; 0 dBm still reaches
+don't charge the controller from the same hub. **Device → Power and radio →
+Bluetooth transmit power** lowers the dongle's peak current; 0 dBm still reaches
 across a room.
 
 **The Wi-Fi network shows up but http://192.168.4.1 doesn't load.** Make sure
@@ -411,7 +420,7 @@ reconnect, and work with a Switch 1 console and with Steam on SteamOS.
 | Switch 1 Pro Controller USB protocol (handshake, subcommands, SPI calibration) | ✅ confirmed with a Switch 1 and with Linux/Steam |
 | IMU axis mapping and units | Medium: derived from SDL's Switch 1 and Switch 2 drivers. Use the gyro settings if an axis feels wrong. |
 | HD rumble **amplitude** | Medium-high |
-| HD rumble **frequency** translation | **Low.** The Switch 2 frequency encoding hasn't been published. It is anchored on the console's idle frame (verified bit-exact in tests) with a configurable scale, and a *Fixed* fallback mode is available. |
+| HD rumble **frequency** translation | **Low.** The Switch 2 frequency encoding hasn't been published. It is anchored on the console's idle frame (verified bit-exact in tests) with a scale and a *Fixed* fallback mode in the settings (no longer on the configuration page). |
 
 If something doesn't work, the log on the configuration page usually shows
 where it stopped. Please include it in bug reports.
