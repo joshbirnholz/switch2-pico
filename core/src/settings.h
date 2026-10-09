@@ -35,6 +35,7 @@ typedef enum {
     OUT_UP, OUT_DOWN, OUT_LEFT, OUT_RIGHT,
     // Macros (no single Pro Controller button; see mapping_macro_step()).
     OUT_HOME_A,         // tap: Home, then Home + A (Steam quick access menu)
+    OUT_HOME_R,         // tap: Home, then Home + R (Steam screenshot)
     OUT_COUNT
 } out_button_t;
 
@@ -74,6 +75,7 @@ typedef enum {
     GP_PADDLE_L, GP_PADDLE_R,
     GP_FN_L, GP_FN_R,
     GP_MACRO_QAM,       // tap: Guide, then Guide + South (Steam quick access)
+    GP_MACRO_SHOT,      // tap: Guide, then Guide + R1 (Steam screenshot)
     GP_COUNT
 } gp_out_t;
 

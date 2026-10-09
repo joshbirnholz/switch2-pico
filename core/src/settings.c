@@ -36,7 +36,7 @@ static void v1_mode_map(ctrl_type_t t, usb_mode_t mode, uint8_t out[IN_COUNT_V1]
 static const char *const OUT_NAMES[OUT_COUNT] = {
     "None", "A", "B", "X", "Y", "L", "R", "ZL", "ZR", "Minus", "Plus", "LStick", "RStick",
     "Home", "Capture", "Up", "Down", "Left", "Right",
-    "Home+A (Steam quick access)",
+    "Home+A (Steam quick access)", "Home+R (Steam screenshot)",
 };
 
 static const char *const CTRL_NAMES[CTRL_TYPE_COUNT] = {

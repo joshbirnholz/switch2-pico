@@ -369,29 +369,32 @@ bool mapping_macro_busy(const mapping_macro_t *m) {
 
 uint32_t mapping_macro_step(mapping_macro_t *m, const settings_t *s, ctrl_type_t type, uint32_t prev, uint32_t raw,
                             uint32_t now_ms) {
-    switch (mapping_macro_run(m, settings_active_map(s, type), OUT_HOME_A, prev, raw, now_ms)) {
+    switch (mapping_macro_run(m, settings_active_map(s, type), OUT_HOME_A, OUT_HOME_R, prev, raw, now_ms)) {
     case MACRO_GUIDE: return S1_BTN_HOME;
     case MACRO_GUIDE_SOUTH: return S1_BTN_HOME | S1_BTN_A;
+    case MACRO_GUIDE_R1: return S1_BTN_HOME | S1_BTN_R;
     default: return 0;
     }
 }
 
-macro_phase_t mapping_macro_run(mapping_macro_t *m, const uint8_t map[IN_COUNT], uint8_t macro_value, uint32_t prev,
-                                uint32_t raw, uint32_t now_ms) {
+macro_phase_t mapping_macro_run(mapping_macro_t *m, const uint8_t map[IN_COUNT], uint8_t qam, uint8_t shot,
+                                uint32_t prev, uint32_t raw, uint32_t now_ms) {
     uint32_t pressed = raw & ~prev;
     if (m->held) {
         if (pressed & ~m->held) m->spoiled = true;
         if (!(raw & m->held)) {
             if (!m->spoiled && !m->running) {
                 m->running = true;
+                m->shot = m->held_shot;
                 m->start_ms = now_ms;
             }
             m->held = 0;
         }
     } else {
         for (int i = 0; i < IN_COUNT; i++) {
-            if (map[i] == macro_value && (pressed & IN_BITS[i])) {
+            if ((map[i] == qam || map[i] == shot) && (pressed & IN_BITS[i])) {
                 m->held = IN_BITS[i];
+                m->held_shot = map[i] == shot;
                 // Pressed together with others (e.g. already holding GL): not a tap.
                 m->spoiled = (raw & ~IN_BITS[i]) != 0;
                 break;
@@ -401,7 +404,7 @@ macro_phase_t mapping_macro_run(mapping_macro_t *m, const uint8_t map[IN_COUNT],
     if (!m->running) return MACRO_IDLE;
     uint32_t t = now_ms - m->start_ms;
     if (t < MACRO_HOME_MS) return MACRO_GUIDE;
-    if (t < MACRO_HOME_MS + MACRO_HOME_A_MS) return MACRO_GUIDE_SOUTH;
+    if (t < MACRO_HOME_MS + MACRO_HOME_A_MS) return m->shot ? MACRO_GUIDE_R1 : MACRO_GUIDE_SOUTH;
     m->running = false;
     return MACRO_IDLE;
 }
@@ -419,7 +422,7 @@ uint32_t mapping_gp_buttons(const settings_t *s, const uint8_t map[IN_COUNT], co
     uint32_t out = 0;
     for (int i = 0; i < IN_COUNT; i++) {
         uint8_t o = map[i];
-        if ((raw & IN_BITS[i]) && o != GP_NONE && o != GP_MACRO_QAM && o < GP_COUNT) out |= GP_BIT(o);
+        if ((raw & IN_BITS[i]) && o != GP_NONE && o != GP_MACRO_QAM && o != GP_MACRO_SHOT && o < GP_COUNT) out |= GP_BIT(o);
     }
     return out;
 }

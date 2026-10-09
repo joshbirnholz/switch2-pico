@@ -233,6 +233,10 @@ modifier above. While the shortcut plays (about 0.16 s) the host sees only
 those buttons: everything else released, sticks centered. Don't use it on a Switch, where Home + A launches the selected
 game.
 
+**Steam screenshot on Capture.** Likewise, *Home+R (Steam screenshot)* sends
+Home, then Home + R, Steam's screenshot shortcut (Guide + RB / PS + R1 in the
+other modes). Map Capture (or any button) to it.
+
 ### USB modes (DualSense Edge, DualSense, Xbox 360, GameCube adapter)
 
 Under **Mode** (on each controller tab) the dongle can present itself as:
@@ -353,7 +357,7 @@ DualSense modes add these outputs to the map:
 * **Left / right paddle** and **left / right Fn** (DualSense Edge only; the
   Edge defaults are GL → left paddle, GR → right paddle, C → right Fn).
 * **PS + Cross (Steam quick access)**, the macro equivalent of Home+A (Xbox:
-  Guide + A).
+  Guide + A), and **PS + R1 (Steam screenshot)** (Xbox: Guide + RB).
 
 The battery level (DualSense percentage, Switch Pro full / medium / low /
 critical) is the controller's own level (0–9, what the console shows), with

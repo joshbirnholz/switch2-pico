@@ -494,15 +494,19 @@ static void update_input(void) {
                 }
             }
             uint32_t gp;
-            switch (mapping_macro_run(&macro, map, GP_MACRO_QAM, prev, in.buttons, platform_millis())) {
-            // While the quick access shortcut plays, the host sees only its
-            // buttons: nothing else pressed, sticks centered.
+            switch (mapping_macro_run(&macro, map, GP_MACRO_QAM, GP_MACRO_SHOT, prev, in.buttons, platform_millis())) {
+            // While a shortcut (Steam quick access, screenshot) plays, the
+            // host sees only its buttons: nothing else pressed, sticks centered.
             case MACRO_GUIDE:
                 gp = GP_BIT(GP_GUIDE);
                 neutral_input(&in);
                 break;
             case MACRO_GUIDE_SOUTH:
                 gp = GP_BIT(GP_GUIDE) | GP_BIT(GP_SOUTH);
+                neutral_input(&in);
+                break;
+            case MACRO_GUIDE_R1:
+                gp = GP_BIT(GP_GUIDE) | GP_BIT(GP_R1);
                 neutral_input(&in);
                 break;
             default:

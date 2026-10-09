@@ -112,6 +112,7 @@ const char *usb_mode_output_name(usb_mode_t m, gp_out_t g) {
     case GP_FN_L: return m == USB_MODE_DUALSENSE_EDGE ? "Left Fn" : NULL;
     case GP_FN_R: return m == USB_MODE_DUALSENSE_EDGE ? "Right Fn" : NULL;
     case GP_MACRO_QAM: return ds ? "PS+Cross (Steam quick access)" : x ? "Guide+A (Steam quick access)" : NULL;
+    case GP_MACRO_SHOT: return ds ? "PS+R1 (Steam screenshot)" : x ? "Guide+RB (Steam screenshot)" : NULL;
     default: return NULL;
     }
 }

@@ -330,6 +330,18 @@ static void test_macro(void) {
     CHECK(mapping_macro_step(&m, &s, CTRL_PRO, 0, C, 4000) == 0 && !mapping_macro_busy(&m));
     // The macro output itself sets no button through the normal mapping.
     CHECK(mapping_out_button_bit(OUT_HOME_A) == 0);
+
+    // Screenshot: Home, then Home + R; each tap runs the macro of the button tapped.
+    PRO_MAP(s)[IN_C] = OUT_HOME_R;
+    PRO_MAP(s)[IN_CAPTURE] = OUT_HOME_A;
+    CHECK(mapping_macro_step(&m, &s, CTRL_PRO, 0, C, 5000) == 0);
+    CHECK(mapping_macro_step(&m, &s, CTRL_PRO, C, 0, 5010) == S1_BTN_HOME);
+    CHECK(mapping_macro_step(&m, &s, CTRL_PRO, 0, 0, 5010 + MACRO_HOME_MS) == (S1_BTN_HOME | S1_BTN_R));
+    CHECK(mapping_macro_step(&m, &s, CTRL_PRO, 0, 0, 5010 + MACRO_HOME_MS + MACRO_HOME_A_MS) == 0);
+    CHECK(mapping_macro_step(&m, &s, CTRL_PRO, 0, S2_BTN_CAPTURE, 6000) == 0);
+    CHECK(mapping_macro_step(&m, &s, CTRL_PRO, S2_BTN_CAPTURE, 0, 6010) == S1_BTN_HOME);
+    CHECK(mapping_macro_step(&m, &s, CTRL_PRO, 0, 0, 6010 + MACRO_HOME_MS) == (S1_BTN_HOME | S1_BTN_A));
+    CHECK(mapping_out_button_bit(OUT_HOME_R) == 0);
 }
 
 static void test_ds5(void) {
@@ -486,9 +498,18 @@ static void test_gp_map(void) {
     mapping_macro_t m;
     memset(&m, 0, sizeof m);
     map[IN_C] = GP_MACRO_QAM;
-    CHECK(mapping_macro_run(&m, map, GP_MACRO_QAM, 0, S2_BTN_C, 0) == MACRO_IDLE);
-    CHECK(mapping_macro_run(&m, map, GP_MACRO_QAM, S2_BTN_C, 0, 10) == MACRO_GUIDE);
-    CHECK(mapping_macro_run(&m, map, GP_MACRO_QAM, 0, 0, 10 + MACRO_HOME_MS) == MACRO_GUIDE_SOUTH);
+    CHECK(mapping_macro_run(&m, map, GP_MACRO_QAM, GP_MACRO_SHOT, 0, S2_BTN_C, 0) == MACRO_IDLE);
+    CHECK(mapping_macro_run(&m, map, GP_MACRO_QAM, GP_MACRO_SHOT, S2_BTN_C, 0, 10) == MACRO_GUIDE);
+    CHECK(mapping_macro_run(&m, map, GP_MACRO_QAM, GP_MACRO_SHOT, 0, 0, 10 + MACRO_HOME_MS) == MACRO_GUIDE_SOUTH);
+    map[IN_C] = GP_MACRO_SHOT;
+    CHECK(mapping_macro_run(&m, map, GP_MACRO_QAM, GP_MACRO_SHOT, 0, 0, 1000) == MACRO_IDLE);
+    CHECK(mapping_macro_run(&m, map, GP_MACRO_QAM, GP_MACRO_SHOT, 0, S2_BTN_C, 2000) == MACRO_IDLE);
+    CHECK(mapping_macro_run(&m, map, GP_MACRO_QAM, GP_MACRO_SHOT, S2_BTN_C, 0, 2010) == MACRO_GUIDE);
+    CHECK(mapping_macro_run(&m, map, GP_MACRO_QAM, GP_MACRO_SHOT, 0, 0, 2010 + MACRO_HOME_MS) == MACRO_GUIDE_R1);
+    s2_input_t sin;
+    memset(&sin, 0, sizeof sin);
+    sin.buttons = S2_BTN_C;
+    CHECK(mapping_gp_buttons(&s, map, NULL, &sin) == 0);   // sets nothing directly
 }
 
 static void test_imu_sdl(void) {
