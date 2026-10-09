@@ -307,9 +307,11 @@ static void neutral_input(s2_input_t *in) {
 }
 
 // ---------------------------------------------------------------------------
-// Joy-Con 2 mouse (USB mouse interface, see usb_hid.h): the optical sensor
-// moves it; that Joy-Con's shoulder, trigger and stick click are its buttons
-// and its stick scrolls (each optional: then they stay the gamepad's).
+// Mouse Mode (USB mouse interface, see usb_hid.h): a Joy-Con 2 lying on a
+// surface is the mouse. Either one can be, one at a time: the first put down
+// stays the mouse until it is lifted. Its optical sensor moves the pointer,
+// its shoulder clicks, trigger right-clicks, stick click middle-clicks and
+// its stick scrolls; those aren't the controller's while it is the mouse.
 // ---------------------------------------------------------------------------
 #define MOUSE_SCROLL_HZ      12.0f   // wheel steps per second at full deflection
 #define MOUSE_SCROLL_DEAD    0.25f
@@ -318,46 +320,53 @@ static void neutral_input(s2_input_t *in) {
 #define MOUSE_ON_SURFACE     800
 #define MOUSE_LIFTED         1500
 
-// The mouse in use, if any: the profile asks for it and the USB interface is there.
-static const profile_t *mouse_profile(joycon_mouse_buttons_t *mb) {
+static uint16_t s_mouse_pid;   // the Joy-Con 2 that is the mouse now (0: none)
+
+// Mouse Mode is on for what's connected (and the USB mouse is there).
+static bool mouse_mode(void) {
     ctrl_type_t t = mapping_ctrl_type(s2_link_mapping_ctx());
-    const profile_t *p = settings_active(&g_settings, t);
-    if (!usb_mode_has_mouse() || !settings_profile_mouse(p, t) || !joycon_mouse_buttons(t, p->mouse_src, mb)) return NULL;
-    return p;
+    return usb_mode_has_mouse() && settings_profile_mouse(settings_active(&g_settings, t), t);
 }
 
-// The mouse Joy-Con is lying on a surface: only then is it a mouse (moving,
-// clicking, scrolling); held in the hand its buttons and stick are the
-// controller's.
-static bool s_mouse_down;
-
-static void mouse_surface_update(const profile_t *p) {
-    bool down = false;
+static bool mouse_distance(uint16_t pid, uint16_t *d) {
     s2_input_t side;
-    uint16_t pid = p && p->mouse_src == MOUSE_JOYCON_L ? S2_PID_JOYCON2_L : S2_PID_JOYCON2_R;
-    if (p && s2_link_side_input(pid, &side, NULL)) {
-        down = s_mouse_down ? side.mouse_distance < MOUSE_LIFTED : side.mouse_distance < MOUSE_ON_SURFACE;
+    if (!s2_link_side_input(pid, &side, NULL)) return false;
+    *d = side.mouse_distance;
+    return true;
+}
+
+// Which Joy-Con 2 is the mouse: the one on a surface, the first one put down
+// keeping it until it is lifted.
+static void mouse_pick(void) {
+    uint16_t pid = s_mouse_pid, d;
+    if (!mouse_mode()) {
+        pid = 0;
+    } else if (pid) {
+        if (!mouse_distance(pid, &d) || d > MOUSE_LIFTED) pid = 0;
     }
-    if (down != s_mouse_down) {
-        s_mouse_down = down;
-        LOG("mouse: Joy-Con %s", down ? "on a surface: it's the mouse" : "lifted: its buttons are the controller's");
+    if (mouse_mode() && !pid) {
+        static const uint16_t SIDES[2] = {S2_PID_JOYCON2_R, S2_PID_JOYCON2_L};
+        for (int i = 0; i < 2 && !pid; i++) {
+            if (mouse_distance(SIDES[i], &d) && d < MOUSE_ON_SURFACE) pid = SIDES[i];
+        }
+    }
+    if (pid != s_mouse_pid) {
+        if (pid) LOG("mouse: Joy-Con 2 (%c) on a surface: it's the mouse", pid == S2_PID_JOYCON2_L ? 'L' : 'R');
+        else LOG("mouse: Joy-Con 2 (%c) lifted: its buttons are the controller's", s_mouse_pid == S2_PID_JOYCON2_L ? 'L' : 'R');
+        s_mouse_pid = pid;
     }
 }
 
 // What the mouse takes, the gamepad doesn't get (while it's on a surface).
 static void mouse_take_from_gamepad(s2_input_t *in) {
+    mouse_pick();
+    if (!s_mouse_pid) return;
+    const mapping_ctx_t *c = s2_link_mapping_ctx();
     joycon_mouse_buttons_t mb;
-    const profile_t *p = mouse_profile(&mb);
-    mouse_surface_update(p);
-    if (!p || !s_mouse_down) return;
-    if (p->mouse_flags & MOUSE_BUTTONS) in->buttons &= ~(mb.left | mb.right | mb.middle);
-    if (p->mouse_flags & MOUSE_SCROLL) {
-        // A single Joy-Con 2's stick is the (turned) left stick.
-        const mapping_ctx_t *c = s2_link_mapping_ctx();
-        ctrl_type_t t = mapping_ctrl_type(c);
-        if (t != CTRL_JOYCON_PAIR || mb.stick_left) memcpy(in->stick_l, c->cal_l.center, sizeof in->stick_l);
-        else memcpy(in->stick_r, c->cal_r.center, sizeof in->stick_r);
-    }
+    joycon_mouse_buttons(mapping_ctrl_type(c), s_mouse_pid == S2_PID_JOYCON2_L, &mb);
+    in->buttons &= ~(mb.left | mb.right | mb.middle);
+    if (mb.stick_left) memcpy(in->stick_l, c->cal_l.center, sizeof in->stick_l);
+    else memcpy(in->stick_r, c->cal_r.center, sizeof in->stick_r);
 }
 
 static void mouse_task(void) {
@@ -365,61 +374,41 @@ static void mouse_task(void) {
     static float acc_wheel;
     static uint8_t sent_buttons;
     static uint32_t last_ms;
+    static bool collected;
     uint32_t now = platform_millis();
     float dt = (float)(now - last_ms) / 1000.0f;
     last_ms = now;
     if (dt > 0.1f) dt = 0.1f;
 
-    joycon_mouse_buttons_t mb;
-    const profile_t *p = mouse_profile(&mb);
-    mouse_surface_update(p);
-    int32_t dx = 0, dy = 0;
+    mouse_pick();
+    // Movement of a Joy-Con that isn't the mouse (held, lifted) is dropped.
+    int32_t dx = 0, dy = 0, tx, ty;
+    s2_link_mouse_take(S2_PID_JOYCON2_L, &tx, &ty);
+    if (s_mouse_pid == S2_PID_JOYCON2_L) dx = tx, dy = ty;
+    s2_link_mouse_take(S2_PID_JOYCON2_R, &tx, &ty);
+    if (s_mouse_pid == S2_PID_JOYCON2_R) dx = tx, dy = ty;
+
     uint8_t buttons = 0;
-    // What the mouse is doing, every 2 s while it is in use (for the log).
-    static uint32_t log_at, sent, moved_x, moved_y;
-    static bool was_ready;
-    if (usb_mouse_ready() != was_ready) {
-        was_ready = !was_ready;
-        LOG("mouse: the host %s the USB mouse", was_ready ? "reads" : "stopped reading");
-    }
-    // Lifted: what the sensor reads is dropped (and nothing is clicked).
-    bool linked = p && s2_link_mouse_take(p->mouse_src, &dx, &dy);
-    if (linked && !s_mouse_down) dx = dy = 0;
-    if (linked) {
-        moved_x += (uint32_t)(dx < 0 ? -dx : dx);
-        moved_y += (uint32_t)(dy < 0 ? -dy : dy);
-        if (platform_time_reached(log_at)) {
-            log_at = platform_deadline_ms(2000);
-            s2_input_t side;
-            uint16_t pid = p->mouse_src == MOUSE_JOYCON_L ? S2_PID_JOYCON2_L : S2_PID_JOYCON2_R;
-            if (s2_link_side_input(pid, &side, NULL)) {
-                LOG("mouse: sensor x=%u y=%u (quality %u, distance %u), moved %lu/%lu, %lu reports sent, host %s",
-                    side.mouse_x, side.mouse_y, side.mouse_quality, side.mouse_distance, (unsigned long)moved_x,
-                    (unsigned long)moved_y,
-                    (unsigned long)sent, usb_mouse_ready() ? "ready" : "not using it");
-            }
-            moved_x = moved_y = 0;
-        }
-    }
-    if (linked && s_mouse_down) {
+    if (s_mouse_pid) {
+        ctrl_type_t t = mapping_ctrl_type(s2_link_mapping_ctx());
+        const profile_t *p = settings_active(&g_settings, t);
         int32_t ox, oy;
         joycon_mouse_apply(p, dx, dy, &ox, &oy);
         acc_x += ox;
         acc_y += oy;
-        if ((p->mouse_flags & MOUSE_BUTTONS) && !s_msel.active) {
+        joycon_mouse_buttons_t mb;
+        joycon_mouse_buttons(t, s_mouse_pid == S2_PID_JOYCON2_L, &mb);
+        if (!s_msel.active) {
             if (s_raw_buttons & mb.left) buttons |= USB_MOUSE_LEFT;
             if (s_raw_buttons & mb.right) buttons |= USB_MOUSE_RIGHT;
             if (s_raw_buttons & mb.middle) buttons |= USB_MOUSE_MIDDLE;
         }
-        if (p->mouse_flags & MOUSE_SCROLL) {
-            uint16_t pid = p->mouse_src == MOUSE_JOYCON_L ? S2_PID_JOYCON2_L : S2_PID_JOYCON2_R;
-            s2_input_t side;
-            s2_stick_cal_t cal;
-            if (s2_link_side_input(pid, &side, &cal)) {
-                const uint16_t *raw = pid == S2_PID_JOYCON2_L ? side.stick_l : side.stick_r;
-                float y = s2_stick_axis(&cal, 1, raw[1]);
-                if (y > MOUSE_SCROLL_DEAD || y < -MOUSE_SCROLL_DEAD) acc_wheel += y * MOUSE_SCROLL_HZ * dt;
-            }
+        s2_input_t side;
+        s2_stick_cal_t cal;
+        if (s2_link_side_input(s_mouse_pid, &side, &cal)) {
+            const uint16_t *raw = s_mouse_pid == S2_PID_JOYCON2_L ? side.stick_l : side.stick_r;
+            float y = s2_stick_axis(&cal, 1, raw[1]);
+            if (y > MOUSE_SCROLL_DEAD || y < -MOUSE_SCROLL_DEAD) acc_wheel += y * MOUSE_SCROLL_HZ * dt;
         }
     } else {
         acc_x = acc_y = 0;
@@ -443,7 +432,10 @@ static void mouse_task(void) {
     if (!x && !y && !w && buttons == sent_buttons) return;
     if (!usb_mouse_ready()) return;
     if (usb_mouse_send(buttons, (int8_t)x, (int8_t)y, (int8_t)w)) {
-        sent++;
+        if (!collected && s_mouse_pid) {
+            collected = true;
+            LOG("mouse: sending to the host");
+        }
         acc_x -= x * 100;
         acc_y -= y * 100;
         acc_wheel -= (float)w;

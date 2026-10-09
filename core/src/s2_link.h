@@ -66,9 +66,9 @@ bool s2_link_get_input(s2_input_t *out, uint32_t *seq);
 const mapping_ctx_t *s2_link_mapping_ctx(void);
 // One Joy-Con 2's own input (pid S2_PID_JOYCON2_L / _R) and stick calibration.
 bool s2_link_side_input(uint16_t pid, s2_input_t *out, s2_stick_cal_t *cal);
-// Optical sensor movement of the Joy-Con 2 `src` (mouse_src_t) since the
-// last call; false when it isn't connected.
-bool s2_link_mouse_take(uint8_t src, int32_t *dx, int32_t *dy);
+// Optical sensor movement of a Joy-Con 2 (pid S2_PID_JOYCON2_L / _R) since
+// the last call; false when it isn't connected.
+bool s2_link_mouse_take(uint16_t pid, int32_t *dx, int32_t *dy);
 
 // Rumble from the host, decoded (see hd_rumble.h).
 void s2_link_rumble_submit(const rumble_sample_t *left, int nl, const rumble_sample_t *right, int nr);

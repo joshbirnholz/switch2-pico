@@ -38,7 +38,6 @@ void settings_default_profile_for(ctrl_type_t type, usb_mode_t mode, profile_t *
     if (ctrl_is_joycon(type)) {
         // The mouse stays off until chosen; these are its starting options.
         p->mouse_speed_pct = 100;
-        p->mouse_flags = MOUSE_BUTTONS | MOUSE_SCROLL;
     }
 }
 
@@ -145,12 +144,10 @@ void settings_sanitize_profiles(ctrl_type_t type, ctrl_profiles_t *c) {
         p->rumble_enabled = p->rumble_enabled ? 1 : 0;
         p->rumble_strength_pct = clamp(p->rumble_strength_pct, 0, 200);
         if (ctrl_is_joycon(type)) {
-            // A single Joy-Con 2 can only be its own mouse.
-            if (p->mouse_src > MOUSE_JOYCON_L) p->mouse_src = MOUSE_OFF;
-            if (type == CTRL_JOYCON_L && p->mouse_src) p->mouse_src = MOUSE_JOYCON_L;
-            if (type == CTRL_JOYCON_R && p->mouse_src) p->mouse_src = MOUSE_JOYCON_R;
+            // On or off (earlier versions named a side: either is on).
+            p->mouse_src = p->mouse_src ? MOUSE_ON : MOUSE_OFF;
             p->mouse_speed_pct = clamp(p->mouse_speed_pct ? p->mouse_speed_pct : 100, 10, 250);
-            p->mouse_flags &= MOUSE_BUTTONS | MOUSE_SCROLL | MOUSE_INVERT_X | MOUSE_INVERT_Y | MOUSE_SWAP_XY;
+            p->mouse_flags = 0;
         } else {
             p->mouse_src = p->mouse_speed_pct = p->mouse_flags = 0;
         }

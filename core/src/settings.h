@@ -113,17 +113,14 @@ static inline bool ctrl_is_joycon(ctrl_type_t t) {
     return t == CTRL_JOYCON_PAIR || t == CTRL_JOYCON_L || t == CTRL_JOYCON_R;
 }
 
-// Joy-Con 2 optical sensor as a USB mouse (profile_t.mouse_src).
+// Mouse Mode (profile_t.mouse_src): a Joy-Con 2's optical sensor as a USB
+// mouse. Either Joy-Con can be it, one at a time: the one lying on a surface
+// (the first one put down, until it is lifted). Its shoulder clicks, its
+// trigger right-clicks, its stick click middle-clicks and its stick scrolls.
 typedef enum {
     MOUSE_OFF = 0,
-    MOUSE_JOYCON_R = 1,    // Joy-Con 2 (R): R left click, ZR right click, stick click middle
-    MOUSE_JOYCON_L = 2,    // Joy-Con 2 (L): L, ZL, stick click
+    MOUSE_ON = 1,
 } mouse_src_t;
-#define MOUSE_BUTTONS  0x01   // its shoulder / trigger / stick click are mouse buttons (not the gamepad's)
-#define MOUSE_SCROLL   0x02   // its stick scrolls (not the gamepad's)
-#define MOUSE_INVERT_X 0x04
-#define MOUSE_INVERT_Y 0x08
-#define MOUSE_SWAP_XY  0x10   // the sensor's x is up / down
 
 // Profiles: a USB mode with a button map and the options that go with it.
 // Each controller type has one per shortcut button (p[] is indexed by
@@ -145,7 +142,7 @@ typedef struct {
     // Joy-Con 2 types only (zero elsewhere): the USB mouse.
     uint8_t mouse_src;                  // mouse_src_t
     uint8_t mouse_speed_pct;            // 10..250
-    uint8_t mouse_flags;                // MOUSE_*
+    uint8_t mouse_flags;                // unused (0; once inverts and options)
     uint8_t reserved[5];
 } profile_t;
 

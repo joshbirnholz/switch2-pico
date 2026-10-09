@@ -910,19 +910,19 @@ static void test_joycon(void) {
     profile_t p;
     memset(&p, 0, sizeof p);
     p.mouse_speed_pct = 150;
-    p.mouse_flags = MOUSE_INVERT_Y;
     int32_t ox, oy;
     joycon_mouse_apply(&p, 10, -7, &ox, &oy);
-    CHECK(ox == 1500 && oy == 1050);
-    p.mouse_flags = MOUSE_SWAP_XY;
-    joycon_mouse_apply(&p, 10, -7, &ox, &oy);
-    CHECK(ox == -1050 && oy == 1500);
+    CHECK(ox == 1500 && oy == -1050);
 
+    // Mouse buttons and wheel: that Joy-Con's shoulder, trigger, stick click
+    // and stick (a single one's stick is the left stick).
     joycon_mouse_buttons_t mb;
-    CHECK(!joycon_mouse_buttons(CTRL_PRO, MOUSE_JOYCON_R, &mb));
-    CHECK(!joycon_mouse_buttons(CTRL_JOYCON_PAIR, MOUSE_OFF, &mb));
-    CHECK(joycon_mouse_buttons(CTRL_JOYCON_PAIR, MOUSE_JOYCON_L, &mb) && mb.left == S2_BTN_L && mb.stick_left);
-    CHECK(joycon_mouse_buttons(CTRL_JOYCON_R, MOUSE_JOYCON_R, &mb) && mb.right == S2_BTN_ZR && !mb.stick_left);
+    joycon_mouse_buttons(CTRL_JOYCON_PAIR, true, &mb);
+    CHECK(mb.left == S2_BTN_L && mb.right == S2_BTN_ZL && mb.middle == S2_BTN_LSTICK && mb.stick_left);
+    joycon_mouse_buttons(CTRL_JOYCON_PAIR, false, &mb);
+    CHECK(mb.left == S2_BTN_R && mb.right == S2_BTN_ZR && mb.middle == S2_BTN_RSTICK && !mb.stick_left);
+    joycon_mouse_buttons(CTRL_JOYCON_R, false, &mb);
+    CHECK(mb.left == S2_BTN_R && mb.stick_left);
 }
 
 static void test_joycon_profiles(void) {
@@ -967,19 +967,20 @@ static void test_joycon_profiles(void) {
     CHECK(c.p[0].usb_mode == USB_MODE_XBOX360 && c.p[1].usb_mode == USB_MODE_DUALSENSE && !c.p[2].used);
     CHECK(c.active == 1);
 
-    // Mouse fields: kept on Joy-Con types (a single one is its own mouse),
-    // cleared on the others.
+    // Mouse fields: on / off and speed on Joy-Con types (an older side
+    // value is "on"), cleared on the others.
     settings_default_profiles(CTRL_JOYCON_L, &c);
-    c.p[0].mouse_src = MOUSE_JOYCON_R;
+    c.p[0].mouse_src = 2;
     c.p[0].mouse_speed_pct = 0;
+    c.p[0].mouse_flags = 0x0F;
     settings_sanitize_profiles(CTRL_JOYCON_L, &c);
-    CHECK(c.p[0].mouse_src == MOUSE_JOYCON_L && c.p[0].mouse_speed_pct == 100);
+    CHECK(c.p[0].mouse_src == MOUSE_ON && c.p[0].mouse_speed_pct == 100 && c.p[0].mouse_flags == 0);
     // ... and only used when the profile emulates an Xbox 360 controller.
     CHECK(!settings_profile_mouse(&c.p[0], CTRL_JOYCON_L));
     c.p[0].usb_mode = USB_MODE_XBOX360;
     CHECK(settings_profile_mouse(&c.p[0], CTRL_JOYCON_L));
     settings_default_profiles(CTRL_PRO, &c);
-    c.p[MODE_SLOT_Y].mouse_src = MOUSE_JOYCON_R;
+    c.p[MODE_SLOT_Y].mouse_src = MOUSE_ON;
     settings_sanitize_profiles(CTRL_PRO, &c);
     CHECK(c.p[MODE_SLOT_Y].mouse_src == MOUSE_OFF);
     CHECK(!settings_profile_mouse(&c.p[MODE_SLOT_Y], CTRL_PRO));

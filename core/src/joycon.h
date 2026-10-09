@@ -52,15 +52,16 @@ void joycon_mouse_reset(joycon_mouse_track_t *t);
 // Movement since the previous position (0, 0 for the first one).
 void joycon_mouse_delta(joycon_mouse_track_t *t, uint16_t x, uint16_t y, int32_t *dx, int32_t *dy);
 
-// What the mouse buttons and wheel come from: the Joy-Con 2 `src` (mouse_src_t).
+// What the mouse buttons and wheel come from: the Joy-Con 2 (L) (`left`) or
+// (R) that is the mouse, as controller type `type` sees it.
 typedef struct {
     uint32_t left, right, middle;   // raw S2_BTN_* bit of each button
     bool stick_left;                // its stick is the left stick (else the right)
 } joycon_mouse_buttons_t;
-bool joycon_mouse_buttons(ctrl_type_t type, uint8_t src, joycon_mouse_buttons_t *out);
+void joycon_mouse_buttons(ctrl_type_t type, bool left, joycon_mouse_buttons_t *out);
 
-// Orient and scale a movement as the profile says (swap, inverts, speed).
-// The result is in hundredths of a count (the caller keeps the remainder).
+// Scale a movement by the profile's speed. The result is in hundredths of a
+// count (the caller keeps the remainder).
 void joycon_mouse_apply(const profile_t *p, int32_t dx, int32_t dy, int32_t *ox, int32_t *oy);
 
 #ifdef __cplusplus

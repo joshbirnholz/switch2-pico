@@ -37,7 +37,7 @@ Switch 2 Pro Controller  ──BLE──▶  dongle    ──USB──▶  PC / 
 | USB modes | **Switch Pro Controller** (default; Switch consoles and PCs), **DualSense Edge** (GL, GR and C become its back paddles and Fn button, so Steam Input can map them), **DualSense**, or **Xbox 360 controller**. Each mode has its own button map. |
 | Nintendo GameCube Controller | Basic support: buttons, sticks, analog triggers acting as L/R past a threshold, and rumble on its motor (strength by switching it on and off every 12 ms, as SDL does). |
 | Joy-Con 2 | A **Joy-Con 2 (L)** and a **Joy-Con 2 (R)** connected together are one controller, **Joy-Con 2 (L/R)**. A single one is held sideways (SL / SR are its shoulders). Each of the three has its own profiles. **Untested on hardware** (see [Joy-Con 2](#joy-con-2)). |
-| Mouse | A Joy-Con 2's optical sensor can be a USB mouse next to the controller (a profile option). |
+| Mouse | Mouse Mode: a Joy-Con 2's optical sensor as a USB mouse next to the controller (a profile option, Xbox 360 mode). |
 | Configuration page | Over **WebUSB** in Chrome/Edge with the dongle plugged in, or (Pico 2 W only) over the dongle's own Wi-Fi from any phone or computer. |
 
 ## Hardware
@@ -146,16 +146,14 @@ GameCube Controller).
   Pro Controller's. A single Joy-Con 2 has no shortcut: its profiles are
   numbered 1–8, and the one in use is chosen on the configuration page.
 
-**Mouse.** On the Joy-Con 2 tabs, a profile's **Mouse** tab (Mouse Mode) turns one Joy-Con
-2 (either side of a pair, or the single one) into a USB mouse: lay it on its
-side on a surface and move it. It is only the mouse while it lies on
-something (the sensor reports how far the surface is): held in the hand, its
-buttons and stick are the controller's again. Its shoulder button clicks, its trigger
-right-clicks, its stick click middle-clicks, and its stick scrolls (each
-optional; what the mouse uses isn't sent to the controller). Speed and the
-direction of each axis can be set (the sensor's axes haven't been checked
-on hardware yet). The mouse is a second USB device next to the controller,
-so turning it on or off restarts the dongle; some consoles may not accept it.
+**Mouse Mode.** On the Joy-Con 2 tabs, a profile's **Mouse** tab has one
+switch, Mouse Mode, and the pointer speed. With it on, a Joy-Con 2 laid on
+its side on a surface is a USB mouse: either one, one at a time (the first
+put down stays the mouse until it is lifted; the sensor reports how far the
+surface is). Its shoulder button clicks, its trigger right-clicks, its stick
+click middle-clicks and its stick scrolls; picked up, they are the
+controller's again. The mouse is a second USB device next to the
+controller, so turning Mouse Mode on or off restarts the dongle.
 
 **Xbox 360 mode only.** Mouse Mode works only in profiles that emulate an
 Xbox 360 controller; elsewhere the setting is kept but does nothing (and the
@@ -490,7 +488,7 @@ reconnect, and work with a Switch 1 console and with Steam on SteamOS.
 | IMU axis mapping and units | Medium: derived from SDL's Switch 1 and Switch 2 drivers. Use the gyro settings if an axis feels wrong. |
 | HD rumble **amplitude** | Medium-high |
 | Joy-Con 2: connection, pairing, input, sideways use, pairs | **Untested.** Built from the published report layouts (the same report 0x05 as the Pro Controller, SL / SR bits, the Joy-Con-specific reports and rumble characteristics). |
-| Joy-Con 2 mouse | **Untested.** The sensor's position (report 0x05, offset 0x10) is read as relative movement; axes and scale may need the profile's invert / speed options. |
+| Joy-Con 2 Mouse Mode | ✅ Works on SteamOS in Xbox 360 mode. The sensor's position (report 0x05, offset 0x10) gives the movement and its distance field (0x16) whether it lies on a surface. |
 | Two Bluetooth connections at once | **Untested** on both boards (nRF52840: two central links; Pico: BTstack with two connections on the CYW43439). |
 | HD rumble **frequency** translation | **Low.** The Switch 2 frequency encoding hasn't been published. It is anchored on the console's idle frame (verified bit-exact in tests) with a scale and a *Fixed* fallback mode in the settings (no longer on the configuration page). |
 

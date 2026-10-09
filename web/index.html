@@ -298,16 +298,10 @@ body.offline #usb-help{display:flex}
       </div>
       <div class="panel fields" data-panel="mouse" hidden>
         <p class="note warn-note" id="mouse-x360" style="grid-column:1/-1" hidden>Mouse Mode is only available for emulated Xbox 360 controllers.</p>
-        <label>Mouse <span class="hint">Lay the Joy-Con 2 on its side and move it like a mouse</span>
-          <select id="pf-mouse" onchange="mouseFields()"><option value="0">Off</option><option value="1">Joy-Con 2 (R)</option><option value="2">Joy-Con 2 (L)</option></select></label>
+        <label class="check"><input type="checkbox" id="pf-mouse" onchange="mouseFields()"><span>Mouse Mode</span></label>
         <label>Speed
           <span class="slider"><input type="range" min="10" max="250" id="pf-mouse-speed"><b><span id="v-pf-mouse-speed"></span>%</b></span></label>
-        <label class="check"><input type="checkbox" id="pf-mouse-buttons"><span id="pf-mouse-buttons-label">R clicks, ZR right-clicks, stick click middle-clicks</span></label>
-        <label class="check"><input type="checkbox" id="pf-mouse-scroll"><span>Its stick scrolls</span></label>
-        <label class="check"><input type="checkbox" id="pf-mouse-invx"><span>Invert left / right</span></label>
-        <label class="check"><input type="checkbox" id="pf-mouse-invy"><span>Invert up / down</span></label>
-        <label class="check"><input type="checkbox" id="pf-mouse-swap"><span>Swap the two directions</span></label>
-        <p class="note" style="grid-column:1/-1">The dongle adds a USB mouse next to the controller. Buttons and stick used by the mouse aren't sent to the controller. Turning the mouse on or off restarts the dongle; some consoles may not accept the extra device.</p>
+        <p class="note" style="grid-column:1/-1">Lay a Joy-Con 2 on its side on a surface and move it: it's the mouse while it lies there, one Joy-Con at a time. Its shoulder button clicks, its trigger right-clicks, its stick click middle-clicks and its stick scrolls; picked up, they're the controller's again. The dongle adds a USB mouse next to the controller, so turning Mouse Mode on or off restarts it.</p>
       </div>
     </section>
 
@@ -720,20 +714,16 @@ function stashProfile(){
   P.deadzone=+$('pf-deadzone').value;P.outer=+$('pf-outer').value;P.swap=$('pf-swap').checked?1:0;
   P.threshold=+$('pf-threshold').value;P.rumble=$('pf-rumble').checked?1:0;P.strength=+$('pf-strength').value;
   if(isJC()){
-    P.mouse=+$('pf-mouse').value;P.mouse_speed=+$('pf-mouse-speed').value;
-    P.mouse_flags=($('pf-mouse-buttons').checked?1:0)|($('pf-mouse-scroll').checked?2:0)|($('pf-mouse-invx').checked?4:0)|($('pf-mouse-invy').checked?8:0)|($('pf-mouse-swap').checked?16:0);
+    P.mouse=$('pf-mouse').checked?1:0;P.mouse_speed=+$('pf-mouse-speed').value;P.mouse_flags=0;
   }
 }
-// The mouse's options apply once it is on; its buttons are that Joy-Con's.
+// Mouse Mode: Xbox 360 mode only (in the other modes Linux's controller
+// drivers claim the mouse interface too; the firmware ignores it there).
 function mouseFields(){
   const P=prof(),x360=!!P&&P.mode===3;
-  // Xbox 360 mode only: in the other modes Linux's controller drivers claim
-  // the mouse interface too (the firmware ignores the setting there).
   $('mouse-x360').hidden=x360;
   $('pf-mouse').disabled=!x360;
-  const src=x360?+$('pf-mouse').value:0,l=+$('pf-mouse').value===2;
-  $('pf-mouse-buttons-label').textContent=l?'L clicks, ZL right-clicks, stick click middle-clicks':'R clicks, ZR right-clicks, stick click middle-clicks';
-  document.querySelectorAll('[data-panel="mouse"] input').forEach(e=>e.disabled=!src);
+  $('pf-mouse-speed').disabled=!x360||!$('pf-mouse').checked;
 }
 // Button icons for the profile tiles.
 function btnIcon(key){
@@ -811,13 +801,8 @@ function renderProfile(){
   $('pf-swap-label').textContent=isGC()?'Swap main stick and C-stick':'Swap left and right sticks';
   $('pf-swap').closest('label').hidden=isSingle();
   if(isJC()){
-    const mo=$('pf-mouse');
-    [...mo.options].forEach(o=>o.hidden=MAP_CTRL===3&&o.value==='1'||MAP_CTRL===4&&o.value==='2');
-    mo.value=P.mouse||0;
+    $('pf-mouse').checked=!!P.mouse;
     set('pf-mouse-speed',P.mouse_speed||100);
-    const f=P.mouse_flags||0;
-    $('pf-mouse-buttons').checked=!!(f&1);$('pf-mouse-scroll').checked=!!(f&2);
-    $('pf-mouse-invx').checked=!!(f&4);$('pf-mouse-invy').checked=!!(f&8);$('pf-mouse-swap').checked=!!(f&16);
     mouseFields();
   }
   renderMap(P.mode);
@@ -830,7 +815,7 @@ function profName(v){
   const P=prof();if(!P)return;P.name=v.slice(0,19);setDirty(true);
   const t=document.querySelector(`.ptile[data-i="${CUR[MAP_CTRL]}"] .pname`);if(t)t.textContent=P.name||' ';
 }
-function newProfile(m){return {name:SHORT[m],mode:m,deadzone:6,outer:95,swap:0,threshold:120,rumble:1,strength:100,mouse:0,mouse_speed:100,mouse_flags:3,map:TYPE().defaults[m].slice()}}
+function newProfile(m){return {name:SHORT[m],mode:m,deadzone:6,outer:95,swap:0,threshold:120,rumble:1,strength:100,mouse:0,mouse_speed:100,mouse_flags:0,map:TYPE().defaults[m].slice()}}
 // Emulated Controller: None clears the button; on an empty button a mode makes
 // a profile; another mode starts the mapping over from that mode's defaults.
 function profMode(m){
@@ -941,7 +926,7 @@ async function save(){
   const prof=[];
   S.types.forEach((T,t)=>{
     T.profiles.forEach((P,i)=>prof.push(`prof_${t}_${i}=`+(P?[P.mode,P.deadzone,P.outer,P.swap,P.threshold,P.rumble,P.strength,...P.map].join(',')+
-      (S.profile_mouse?`,m${P.mouse||0},${P.mouse_speed||100},${P.mouse_flags??3}`:'')+','+encodeURIComponent(P.name):'')));
+      (S.profile_mouse?`,m${P.mouse?1:0},${P.mouse_speed||100},0`:'')+','+encodeURIComponent(P.name):'')));
     p.append(`active_${t}`,T.active);
   });
   document.querySelectorAll('[data-k]').forEach(el=>p.append(el.dataset.k,el.type==='checkbox'?(el.checked?1:0):el.value));

@@ -758,13 +758,9 @@ static void led_task(link_t *k) {
 
 static uint8_t features_wanted(const link_t *k) {
     uint8_t f = FEATURE_FLAGS;
-    const profile_t *p = settings_active(&g_settings, s_type);
-    if (pid_is_joycon(k->pid) && settings_profile_mouse(p, s_type)) {
-        uint8_t src = p->mouse_src;
-        if ((src == MOUSE_JOYCON_L && k->pid == S2_PID_JOYCON2_L) ||
-            (src == MOUSE_JOYCON_R && k->pid == S2_PID_JOYCON2_R)) {
-            f |= S2_FEATURE_MOUSE;
-        }
+    // Mouse Mode: either Joy-Con 2 may become the mouse, so both report it.
+    if (pid_is_joycon(k->pid) && settings_profile_mouse(settings_active(&g_settings, s_type), s_type)) {
+        f |= S2_FEATURE_MOUSE;
     }
     return f;
 }
@@ -1777,9 +1773,9 @@ const mapping_ctx_t *s2_link_mapping_ctx(void) {
     return &s_map;
 }
 
-bool s2_link_mouse_take(uint8_t src, int32_t *dx, int32_t *dy) {
-    link_t *k = link_by_pid(src == MOUSE_JOYCON_L ? S2_PID_JOYCON2_L : S2_PID_JOYCON2_R);
-    if (src == MOUSE_OFF || !k || k->state != S2_LINK_READY) {
+bool s2_link_mouse_take(uint16_t pid, int32_t *dx, int32_t *dy) {
+    link_t *k = link_by_pid(pid);
+    if (!k || k->state != S2_LINK_READY) {
         *dx = *dy = 0;
         return false;
     }

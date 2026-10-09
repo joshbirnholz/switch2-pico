@@ -106,24 +106,14 @@ void joycon_mouse_delta(joycon_mouse_track_t *t, uint16_t x, uint16_t y, int32_t
     t->valid = true;
 }
 
-bool joycon_mouse_buttons(ctrl_type_t type, uint8_t src, joycon_mouse_buttons_t *out) {
-    if (!ctrl_is_joycon(type) || src == MOUSE_OFF) return false;
-    if (src == MOUSE_JOYCON_L) {
-        *out = (joycon_mouse_buttons_t){S2_BTN_L, S2_BTN_ZL, S2_BTN_LSTICK, true};
-    } else {
-        *out = (joycon_mouse_buttons_t){S2_BTN_R, S2_BTN_ZR, S2_BTN_RSTICK, false};
-    }
-    return true;
+void joycon_mouse_buttons(ctrl_type_t type, bool left, joycon_mouse_buttons_t *out) {
+    if (left) *out = (joycon_mouse_buttons_t){S2_BTN_L, S2_BTN_ZL, S2_BTN_LSTICK, true};
+    else *out = (joycon_mouse_buttons_t){S2_BTN_R, S2_BTN_ZR, S2_BTN_RSTICK, false};
+    // A single (sideways) Joy-Con 2's stick is the left stick.
+    if (type != CTRL_JOYCON_PAIR) out->stick_left = true;
 }
 
 void joycon_mouse_apply(const profile_t *p, int32_t dx, int32_t dy, int32_t *ox, int32_t *oy) {
-    if (p->mouse_flags & MOUSE_SWAP_XY) {
-        int32_t t = dx;
-        dx = dy;
-        dy = t;
-    }
-    if (p->mouse_flags & MOUSE_INVERT_X) dx = -dx;
-    if (p->mouse_flags & MOUSE_INVERT_Y) dy = -dy;
     int32_t sp = p->mouse_speed_pct ? p->mouse_speed_pct : 100;
     *ox = dx * sp;
     *oy = dy * sp;
