@@ -80,11 +80,18 @@ def kidney(b, a0, a1, r_in, r_out):
     return poly(b, pts)
 
 svg = [f'<svg viewBox="0 -56 {W} {H + 56}" aria-hidden="true">']
-# ZL / Z: pills above the shoulders (as on the Pro Controller drawing).
-for b, lab, x0, x1 in (("ZL", "ZL", 55, 115), ("ZR", "Z", 355, 430)):
-    svg.append(f'<rect class="pill" x="{f(x0)}" y="-50" width="{f(x1-x0)}" height="38" rx="19"/>'
-               f'<text x="{f((x0+x1)/2)}" y="-31">{lab}</text>'
-               f'<rect class="b" data-b="{b}" x="{f(x0)}" y="-50" width="{f(x1-x0)}" height="38" rx="19"/>')
+# Buttons on top of the controller, as pills above the drawing (like ZL / ZR
+# on the Pro Controller's): ZL and Z over the shoulders, Capture, Home and C
+# between them. Positions in drawing units.
+def pill(b, lab, x0, x1):
+    svg.append(f'<rect class="pill" x="{x0}" y="-50" width="{x1-x0}" height="38" rx="19"/>'
+               f'<text x="{(x0+x1)/2}" y="-31">{lab}</text>'
+               f'<rect class="b" data-b="{b}" x="{x0}" y="-50" width="{x1-x0}" height="38" rx="19"/>')
+pill("ZL", "ZL", f(55), f(115))
+pill("ZR", "Z", f(355), f(430))
+for i, (b, lab) in enumerate((("Capture", "Capture"), ("Home", "Home"), ("C", "C"))):
+    x0 = 330 + i * 110
+    pill(b, lab, x0, x0 + 100)
 svg.append(f'<image href="${{GC_IMG}}" x="0" y="0" width="{W}" height="{H}"/>')
 # L / R: the grey shoulder buttons.
 svg.append(poly("L", [(64, 46), (66, 36), (72, 26), (84, 18), (98, 14), (116, 14), (130, 19), (118, 25), (106, 29), (94, 33), (84, 38), (74, 44)]))
