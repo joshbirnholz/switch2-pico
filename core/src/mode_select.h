@@ -1,8 +1,7 @@
 #ifndef S2P_MODE_SELECT_H
 #define S2P_MODE_SELECT_H
 
-// Profile shortcut on the controller: hold C + Home (a Joy-Con 2 (L) on its
-// own, which has neither: Minus + Capture) to enter selection, then
+// Profile shortcut on the controller: hold C + Home to enter selection, then
 // press a face button or D-pad direction that has a profile assigned
 // (ctrl_profiles_t.slot). C + Home again, or a few seconds without any
 // button held, leaves without a change. Buttons without a profile are ignored.
@@ -36,13 +35,13 @@ typedef struct {
     uint32_t since;        // when it went down
     uint32_t prev;         // raw buttons at the previous update
     uint32_t idle_since;   // last time any button was held (while active)
-    uint32_t combo;        // raw buttons of the shortcut (0: C + Home)
 } mode_select_t;
 
-// The shortcut of a controller type, and its first button: while that is held
-// the second doesn't reach the host (so holding C doesn't open Home).
-uint32_t mode_select_combo(ctrl_type_t t);
-uint32_t mode_select_combo_modifier(ctrl_type_t t);
+// A single Joy-Con 2 (sideways) has no shortcut: its profile is chosen on
+// the configuration page (its profiles are numbered, not on buttons).
+static inline bool mode_select_for(ctrl_type_t t) {
+    return t != CTRL_JOYCON_L && t != CTRL_JOYCON_R;
+}
 
 void mode_select_init(mode_select_t *m);
 // True if any button has a profile assigned (otherwise the shortcut is off).

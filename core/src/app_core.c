@@ -127,10 +127,17 @@ static void mode_select_step(uint32_t raw) {
     ctrl_profiles_t *profiles = settings_profiles(&g_settings, type);
     uint8_t slots[MODE_SLOT_COUNT];
     settings_profile_slots(&g_settings, type, slots);
-    s_msel.combo = mode_select_combo(type);
+    if (!mode_select_for(type)) {
+        // No shortcut on a single Joy-Con 2 (chosen on the page instead).
+        if (s_msel.active) {
+            mode_select_cancel(&s_msel);
+            s2_link_set_led_override(-1);
+        }
+        return;
+    }
     switch (mode_select_update(&s_msel, slots, raw, now, &chosen)) {
     case MODE_SELECT_ENTER:
-        LOG("profile select: press a button with a profile (the shortcut again to leave)");
+        LOG("profile select: press a button with a profile (C + Home again to leave)");
         s2_link_haptic(S2_HAPTIC_BA_THUMP);
         s_blink_on = true;
         s_blink_at = now;
@@ -243,14 +250,12 @@ static uint32_t host_buttons(uint32_t raw) {
     raw &= ~s_swallow;
     // C + Home is a shortcut (mode selection; on Wi-Fi boards also the access
     // point): keep Home from the host while C is held, so holding it doesn't
-    // open the host's home menu first. (A Joy-Con 2 (L) alone: Capture while
-    // Minus is held.)
+    // open the host's home menu first.
     ctrl_type_t t = mapping_ctrl_type(s2_link_mapping_ctx());
     uint8_t slots[MODE_SLOT_COUNT];
     settings_profile_slots(&g_settings, t, slots);
-    bool shortcut = mode_select_enabled(slots) || (g_settings.hotkey_enabled && platform_has_wifi());
-    uint32_t mod = mode_select_combo_modifier(t);
-    if (shortcut && (raw & mod)) raw &= ~(mode_select_combo(t) & ~mod);
+    bool shortcut = (mode_select_for(t) && mode_select_enabled(slots)) || (g_settings.hotkey_enabled && platform_has_wifi());
+    if (shortcut && (raw & S2_BTN_C)) raw &= ~S2_BTN_HOME;
     return raw;
 }
 
@@ -346,7 +351,24 @@ static void mouse_task(void) {
     const profile_t *p = mouse_profile(&mb);
     int32_t dx = 0, dy = 0;
     uint8_t buttons = 0;
+    // What the mouse is doing, every 2 s while it is in use (for the log).
+    static uint32_t log_at, sent, moved_x, moved_y;
+    static bool was_ready;
+    if (usb_mouse_ready() != was_ready && (was_ready = !was_ready)) LOG("mouse: USB mouse interface in use by the host");
     if (p && s2_link_mouse_take(p->mouse_src, &dx, &dy)) {
+        moved_x += (uint32_t)(dx < 0 ? -dx : dx);
+        moved_y += (uint32_t)(dy < 0 ? -dy : dy);
+        if (platform_time_reached(log_at)) {
+            log_at = platform_deadline_ms(2000);
+            s2_input_t side;
+            uint16_t pid = p->mouse_src == MOUSE_JOYCON_L ? S2_PID_JOYCON2_L : S2_PID_JOYCON2_R;
+            if (s2_link_side_input(pid, &side, NULL)) {
+                LOG("mouse: sensor x=%u y=%u (%u %u), moved %lu/%lu, %lu reports sent, host %s", side.mouse_x,
+                    side.mouse_y, side.mouse_unk1, side.mouse_unk2, (unsigned long)moved_x, (unsigned long)moved_y,
+                    (unsigned long)sent, usb_mouse_ready() ? "ready" : "not using it");
+            }
+            moved_x = moved_y = 0;
+        }
         int32_t ox, oy;
         joycon_mouse_apply(p, dx, dy, &ox, &oy);
         acc_x += ox;
@@ -388,6 +410,7 @@ static void mouse_task(void) {
     if (!x && !y && !w && buttons == sent_buttons) return;
     if (!usb_mouse_ready()) return;
     if (usb_mouse_send(buttons, (int8_t)x, (int8_t)y, (int8_t)w)) {
+        sent++;
         acc_x -= x * 100;
         acc_y -= y * 100;
         acc_wheel -= (float)w;

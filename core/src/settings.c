@@ -263,6 +263,10 @@ void settings_init(void) {
             for (int t = CTRL_JOYCON_PAIR; t < CTRL_TYPE_COUNT; t++) {
                 settings_default_profiles((ctrl_type_t)t, &g_settings.prof[t]);
             }
+        } else if (rev < 13) {
+            // A single Joy-Con 2's profiles were on its buttons: numbered now.
+            settings_profiles_numbered(&g_settings.prof[CTRL_JOYCON_L]);
+            settings_profiles_numbered(&g_settings.prof[CTRL_JOYCON_R]);
         }
         g_settings.ext_rev = SETTINGS_EXT_REV;
         settings_sanitize(&g_settings);

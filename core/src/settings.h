@@ -81,10 +81,10 @@ typedef enum {
     MODE_SLOT_COUNT
 } mode_slot_t;
 #define MODE_SLOT_EMPTY 0
-#define SETTINGS_EXT_REV 12  // 1: mode_map; 2: mode_slot; 3: ble_tx_power; 4: idle_*; 5: pair_button;
+#define SETTINGS_EXT_REV 13  // 1: mode_map; 2: mode_slot; 3: ble_tx_power; 4: idle_*; 5: pair_button;
                              // 6: gc_profile; 7: gc_profile sticks / rumble; 8: bonds;
                              // 9: gc_usb_mode, last_ctrl; 10: profiles; 11: one profile per button;
-                             // 12: Joy-Con 2 types
+                             // 12: Joy-Con 2 types; 13: single Joy-Con 2 profiles numbered
 
 // Remembered (paired) controllers. Any of them can connect, one at a time
 // (or a Joy-Con 2 (L) together with a Joy-Con 2 (R)); pairing one more when
@@ -294,6 +294,12 @@ void settings_sanitize_profiles(ctrl_type_t type, ctrl_profiles_t *c);
 // ext_rev 10 -> 11: put each profile on the button(s) that selected it,
 // the others on free buttons.
 void settings_profiles_to_buttons(ctrl_profiles_t *c);
+// A single Joy-Con 2's profiles are numbered (no shortcut buttons); this
+// packs them from the first (ext_rev 12 -> 13).
+void settings_profiles_numbered(ctrl_profiles_t *c);
+static inline bool profiles_on_buttons(ctrl_type_t t) {
+    return t != CTRL_JOYCON_L && t != CTRL_JOYCON_R;
+}
 
 static inline ctrl_profiles_t *settings_profiles(const settings_t *s, ctrl_type_t t) {
     return (ctrl_profiles_t *)&s->prof[t < CTRL_TYPE_COUNT ? t : CTRL_PRO];

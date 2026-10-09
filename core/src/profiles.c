@@ -54,22 +54,26 @@ void settings_default_profiles(ctrl_type_t type, ctrl_profiles_t *c) {
     memset(c, 0, sizeof *c);
     for (int m = 0; m < USB_MODE_COUNT; m++) settings_default_profile_for(type, (usb_mode_t)m, &c->p[BUTTON_OF_MODE[m]]);
     c->active = BUTTON_OF_MODE[type == CTRL_GAMECUBE ? USB_MODE_GC_ADAPTER : USB_MODE_SWITCH_PRO];
-    // A single sideways Joy-Con 2 reaches only one diamond (its own buttons):
-    // the D-pad for the (L), the face buttons for the (R).
-    if (type == CTRL_JOYCON_L) {
-        // Sideways, Up is in Y's place, Down A's, Right X's, Left B's.
-        static const uint8_t DPAD_OF_MODE[USB_MODE_COUNT] = {
-            [USB_MODE_SWITCH_PRO] = MODE_SLOT_UP, [USB_MODE_DUALSENSE_EDGE] = MODE_SLOT_DOWN,
-            [USB_MODE_DUALSENSE] = MODE_SLOT_RIGHT, [USB_MODE_XBOX360] = MODE_SLOT_LEFT,
-        };
-        ctrl_profiles_t d;
-        memset(&d, 0, sizeof d);
-        for (int m = 0; m < USB_MODE_COUNT; m++) {
-            if (m == USB_MODE_GC_ADAPTER) continue;   // four buttons: the gamepad modes
-            d.p[DPAD_OF_MODE[m]] = c->p[BUTTON_OF_MODE[m]];
-        }
-        d.active = MODE_SLOT_UP;
-        *c = d;
+    // A single Joy-Con 2 has no shortcut: its profiles are just numbered
+    // (chosen on the page), one per mode in mode order, the first in use.
+    if (!profiles_on_buttons(type)) {
+        memset(c, 0, sizeof *c);
+        for (int m = 0; m < USB_MODE_COUNT; m++) settings_default_profile_for(type, (usb_mode_t)m, &c->p[m]);
+        c->active = 0;
+    }
+}
+
+// Numbered profiles (single Joy-Con 2): the first one in use takes over,
+// and settings_profiles_numbered() packs them from the start.
+void settings_profiles_numbered(ctrl_profiles_t *c) {
+    ctrl_profiles_t old = *c;
+    int n = 0;
+    memset(c->p, 0, sizeof c->p);
+    c->active = 0;
+    for (int i = 0; i < PROFILE_MAX; i++) {
+        if (!old.p[i].used) continue;
+        if (i == old.active) c->active = (uint8_t)n;
+        c->p[n++] = old.p[i];
     }
 }
 
@@ -158,8 +162,9 @@ void settings_sanitize_profiles(ctrl_type_t type, ctrl_profiles_t *c) {
     // The profile in use was cleared (or never set): another one takes over.
     if (c->active >= PROFILE_MAX || !c->p[c->active].used) {
         for (int k = 0; k < PROFILE_MAX; k++) {
-            if (c->p[FALLBACK_ORDER[k]].used) {
-                c->active = FALLBACK_ORDER[k];
+            int i = profiles_on_buttons(type) ? FALLBACK_ORDER[k] : k;
+            if (c->p[i].used) {
+                c->active = (uint8_t)i;
                 break;
             }
         }

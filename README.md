@@ -142,10 +142,9 @@ GameCube Controller).
   When the other side connects to a single one, they become the pair.
   A pair stays a pair if one side drops; the dongle reconnects it when it
   wakes up.
-* The profile shortcut: **C + Home** on a pair and on an (R) alone; an (L)
-  alone has neither, so it uses **Minus + Capture**. A single Joy-Con can
-  only reach the profiles on its own buttons (the D-pad diamond for an (L),
-  the face buttons for an (R)).
+* Profiles: a pair's are on buttons and switch with **C + Home**, like the
+  Pro Controller's. A single Joy-Con 2 has no shortcut: its profiles are
+  numbered 1–8, and the one in use is chosen on the configuration page.
 
 **Mouse.** On the Joy-Con 2 tabs, a profile's **Mouse** tab turns one Joy-Con
 2 (either side of a pair, or the single one) into a USB mouse: lay it on its
@@ -553,7 +552,7 @@ sketch.
 | `core/src/usb_hid.c`, `usb_pro_desc.c` | TinyUSB HID class drivers (the controller, the Joy-Con 2 mouse) and the Pro Controller report descriptor |
 | `core/src/hd_rumble.c` | Switch 1 HD rumble decoder and Switch 2 encoder |
 | `core/src/mapping.c` | Button remapping, stick calibration and deadzones, IMU conversion |
-| `core/src/mode_select.c` | Profile shortcut on the controller (C + Home, or Minus + Capture on a Joy-Con 2 (L) alone, then a button) |
+| `core/src/mode_select.c` | Profile shortcut on the controller (C + Home, then a button; not on a single Joy-Con 2) |
 | `core/src/profiles.c` | Profiles per controller type: defaults, checks |
 | `core/src/web_api.c`, `webusb.c` | Configuration API, served over HTTP or WebUSB |
 | `core/src/app_core.c`, `settings.c` | Glue, USB suspend / wakeup, settings |

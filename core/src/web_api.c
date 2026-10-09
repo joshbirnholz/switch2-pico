@@ -220,7 +220,9 @@ static void api_settings_get(http_response_t *r) {
         const ctrl_profiles_t *c = settings_profiles(s, (ctrl_type_t)t);
         jb_printf(&j, "%s{\"name\":", t ? "," : "");
         jb_str(&j, ctrl_type_name((ctrl_type_t)t));
-        jb_printf(&j, ",\"active\":%u,\"profiles\":[", c->active);
+        // numbered: no shortcut buttons (a single Joy-Con 2), profiles 1..8.
+        jb_printf(&j, ",\"numbered\":%s,\"active\":%u,\"profiles\":[",
+                  profiles_on_buttons((ctrl_type_t)t) ? "false" : "true", c->active);
         for (int i = 0; i < PROFILE_MAX; i++) {
             const profile_t *p = &c->p[i];
             jb_printf(&j, "%s", i ? "," : "");

@@ -941,24 +941,40 @@ static void test_joycon_profiles(void) {
     settings_default_mode_map(CTRL_JOYCON_R, USB_MODE_GC_ADAPTER, m);
     CHECK(m[IN_X] == GP_SOUTH && m[IN_A] == GP_WEST && m[IN_ZR] == GP_R1 && m[IN_PLUS] == GP_START);
 
-    // Profiles: an (L) only reaches the D-pad, so its defaults sit there.
+    // Profiles: a single Joy-Con 2's are numbered (one per mode, the first
+    // in use); the pair's are on buttons like the Pro's.
     ctrl_profiles_t c;
     settings_default_profiles(CTRL_JOYCON_L, &c);
-    CHECK(c.active == MODE_SLOT_UP && c.p[MODE_SLOT_UP].used && c.p[MODE_SLOT_UP].usb_mode == USB_MODE_SWITCH_PRO);
-    CHECK(!c.p[MODE_SLOT_A].used && !c.p[MODE_SLOT_Y].used);
-    CHECK(c.p[MODE_SLOT_DOWN].usb_mode == USB_MODE_DUALSENSE_EDGE);
-    CHECK(c.p[MODE_SLOT_UP].mouse_src == MOUSE_OFF && c.p[MODE_SLOT_UP].mouse_speed_pct == 100);
-    settings_default_profiles(CTRL_JOYCON_R, &c);
+    CHECK(c.active == 0 && c.p[0].used && c.p[0].usb_mode == USB_MODE_SWITCH_PRO);
+    CHECK(c.p[1].usb_mode == USB_MODE_DUALSENSE_EDGE && c.p[4].usb_mode == USB_MODE_GC_ADAPTER && !c.p[5].used);
+    CHECK(c.p[0].mouse_src == MOUSE_OFF && c.p[0].mouse_speed_pct == 100);
+    settings_default_profiles(CTRL_JOYCON_PAIR, &c);
     CHECK(c.active == MODE_SLOT_Y && c.p[MODE_SLOT_A].used);
+    CHECK(!mode_select_for(CTRL_JOYCON_R) && mode_select_for(CTRL_JOYCON_PAIR) && mode_select_for(CTRL_PRO));
+
+    // A cleared profile in use: the first numbered one takes over.
+    settings_default_profiles(CTRL_JOYCON_R, &c);
+    c.p[0].used = 0;
+    settings_sanitize_profiles(CTRL_JOYCON_R, &c);
+    CHECK(c.active == 1);
+
+    // ext_rev 12 -> 13: profiles on an (L)'s D-pad become numbered, in order.
+    memset(&c, 0, sizeof c);
+    settings_default_profile_for(CTRL_JOYCON_L, USB_MODE_XBOX360, &c.p[MODE_SLOT_UP]);
+    settings_default_profile_for(CTRL_JOYCON_L, USB_MODE_DUALSENSE, &c.p[MODE_SLOT_RIGHT]);
+    c.active = MODE_SLOT_RIGHT;
+    settings_profiles_numbered(&c);
+    CHECK(c.p[0].usb_mode == USB_MODE_XBOX360 && c.p[1].usb_mode == USB_MODE_DUALSENSE && !c.p[2].used);
+    CHECK(c.active == 1);
 
     // Mouse fields: kept on Joy-Con types (a single one is its own mouse),
     // cleared on the others.
     settings_default_profiles(CTRL_JOYCON_L, &c);
-    c.p[MODE_SLOT_UP].mouse_src = MOUSE_JOYCON_R;
-    c.p[MODE_SLOT_UP].mouse_speed_pct = 0;
+    c.p[0].mouse_src = MOUSE_JOYCON_R;
+    c.p[0].mouse_speed_pct = 0;
     settings_sanitize_profiles(CTRL_JOYCON_L, &c);
-    CHECK(c.p[MODE_SLOT_UP].mouse_src == MOUSE_JOYCON_L && c.p[MODE_SLOT_UP].mouse_speed_pct == 100);
-    CHECK(settings_profile_mouse(&c.p[MODE_SLOT_UP], CTRL_JOYCON_L));
+    CHECK(c.p[0].mouse_src == MOUSE_JOYCON_L && c.p[0].mouse_speed_pct == 100);
+    CHECK(settings_profile_mouse(&c.p[0], CTRL_JOYCON_L));
     settings_default_profiles(CTRL_PRO, &c);
     c.p[MODE_SLOT_Y].mouse_src = MOUSE_JOYCON_R;
     settings_sanitize_profiles(CTRL_PRO, &c);

@@ -48,6 +48,10 @@ main.wrap{padding-top:20px;padding-bottom:40px;display:flex;flex-direction:colum
 .pgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}
 @media (max-width:760px){.pgrid{grid-template-columns:minmax(0,1fr)}}
 .pdia{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.plist{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+@media (max-width:760px){.plist{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.ptile .pnum{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;background:currentColor}
+.ptile .pnum b{color:var(--card);font-size:15px}
 .ptile{display:flex;align-items:center;gap:12px;padding:10px 12px;height:76px;overflow:hidden;min-width:0;border-radius:10px;text-align:left;border:1px solid var(--fieldline);background:var(--field);cursor:grab;color:var(--fg)}
 .ptile.empty{border-style:dashed;background:var(--bg)}
 .ptile.sel{border:2px solid var(--fg);padding:9px 11px}
@@ -236,12 +240,14 @@ body.offline #usb-help{display:flex}
   </div>
 
   <section class="card stack" aria-label="Profiles">
-    <div class="row" style="align-items:baseline;gap:6px 12px"><h2>Profiles</h2><span class="note">Hold <span id="combo-name">C + Home</span> until you hear a click, then press a button to activate its profile. Drag a profile onto another button to swap them.</span></div>
-    <div class="pbar" id="dup-bar" role="status" hidden><span>Click the button to copy <b id="dup-name"></b> to.</span><button onclick="dupCancel()">Cancel</button></div>
+    <div class="row" style="align-items:baseline;gap:6px 12px"><h2>Profiles</h2><span class="note" id="prof-hint-buttons">Hold C + Home until you hear a click, then press a button to activate its profile. Drag a profile onto another button to swap them.</span><span class="note" id="prof-hint-numbered" hidden>A single Joy-Con 2 has no shortcut: choose the profile in use here.</span></div>
+    <div class="pbar" id="dup-bar" role="status" hidden><span>Click the <span id="dup-where">button</span> to copy <b id="dup-name"></b> to.</span><button onclick="dupCancel()">Cancel</button></div>
     <div class="pbar danger" id="ovr-bar" role="alertdialog" aria-label="Overwrite profile" hidden><span id="ovr-text"></span><button class="ovr" onclick="dupOverwrite()">Overwrite</button><button onclick="dupCancel()">Cancel</button></div>
     <div class="pgrid">
       <div class="pdia" id="dia-dpad" aria-label="D-pad profiles"></div>
       <div class="pdia" id="dia-face" aria-label="Face button profiles"></div>
+    </div>
+    <div class="plist" id="plist" aria-label="Profiles" hidden>
     </div>
     <div class="profrow">
       <label>Name<input type="text" id="pf-name" maxlength="19" oninput="profName(this.value)"></label>
@@ -741,6 +747,18 @@ const IN_USE_MARK='<svg class="pcheck" width="16" height="16" viewBox="0 0 16 16
 // Duplicate…: DUP is the button copied from while the user picks a target;
 // OVR the target that already has a profile (waiting for Overwrite).
 let DUP=-1,OVR=-1,DRAG=-1,PNOTE='';
+// Numbered profiles (a single Joy-Con 2): no shortcut buttons.
+const numbered=()=>!!(S&&TYPE().numbered);
+function slotLabel(i){return numbered()?'Profile '+(i+1):BTN_LABEL[BTN[i]]}
+function numTileHTML(i){
+  const T=TYPE(),q=T.profiles[i],cur=CUR[MAP_CTRL];
+  const cls=['ptile',q?'':'empty',i===cur&&DUP<0?'sel':'',DUP>=0&&i!==DUP?'target':''].filter(Boolean).join(' ');
+  const inUse=q&&i===T.active;
+  return `<button class="${cls}" draggable="${q?'true':'false'}" data-i="${i}" aria-pressed="${i===cur}" aria-label="Profile ${i+1}: ${q?esc(q.name):'empty'}${inUse?', in use':''}">
+    <span class="pico"><span class="pnum"><b>${i+1}</b></span>${inUse?IN_USE_MARK:''}</span>
+    <span class="ptext"><span class="pname">${q?esc(q.name):'Empty'}</span>
+    <span class="pmode">${q?EMU[q.mode]:''}</span></span></button>`;
+}
 function tileHTML(key,pos){
   const T=TYPE(),i=BTN.indexOf(key),q=T.profiles[i],cur=CUR[MAP_CTRL];
   const cls=['ptile',q?'':'empty',i===cur&&DUP<0?'sel':'',DUP>=0&&i!==DUP?'target':''].filter(Boolean).join(' ');
@@ -756,13 +774,16 @@ function renderProfile(){
   const T=TYPE(),cur=CUR[MAP_CTRL],P=T.profiles[cur];
   $('dia-dpad').innerHTML=Object.entries(DPAD_POS).map(([k,pos])=>tileHTML(k,pos)).join('');
   $('dia-face').innerHTML=Object.entries(FACE_POS[isGC()?1:0]).map(([k,pos])=>tileHTML(k,pos)).join('');
-  // A single Joy-Con 2 reaches only its own buttons' profiles.
-  $('dia-dpad').hidden=MAP_CTRL===4;$('dia-face').hidden=MAP_CTRL===3;
-  $('combo-name').textContent=MAP_CTRL===3?'Minus + Capture':'C + Home';
+  // A single Joy-Con 2: numbered profiles, chosen here.
+  const num=numbered();
+  document.querySelector('.pgrid').hidden=num;$('plist').hidden=!num;
+  $('prof-hint-buttons').hidden=num;$('prof-hint-numbered').hidden=!num;
+  if(num)$('plist').innerHTML=T.profiles.map((_,i)=>numTileHTML(i)).join('');
+  $('dup-where').textContent=num?'profile slot':'button';
   $('dup-bar').hidden=DUP<0||OVR>=0;
   if(DUP>=0&&T.profiles[DUP])$('dup-name').textContent=T.profiles[DUP].name;
   $('ovr-bar').hidden=OVR<0;
-  if(OVR>=0)$('ovr-text').textContent=`${BTN_LABEL[BTN[OVR]]} already has “${T.profiles[OVR].name}”. Overwrite it with a copy of “${T.profiles[DUP].name}”?`;
+  if(OVR>=0)$('ovr-text').textContent=`${slotLabel(OVR)} already has “${T.profiles[OVR].name}”. Overwrite it with a copy of “${T.profiles[DUP].name}”?`;
   $('pf-mode').value=P?P.mode:-1;
   const nm=$('pf-name');nm.value=P?P.name:'';nm.disabled=!P;
   const pu=$('prof-use'),inUse=P&&cur===T.active;pu.disabled=!P||inUse;pu.textContent=inUse?'In use':'Use this profile';
@@ -820,8 +841,9 @@ function profDel(){
   if(!T.profiles[i])return;
   T.profiles[i]=null;PNOTE='';
   if(T.active===i){
-    const k=FALLBACK.map(b=>BTN.indexOf(b)).find(j=>T.profiles[j]);
-    if(k!==undefined){T.active=k;PNOTE=`That was the profile in use: when you save, “${T.profiles[k].name}” on ${BTN_LABEL[BTN[k]]} takes over.`}
+    const order=numbered()?T.profiles.map((_,j)=>j):FALLBACK.map(b=>BTN.indexOf(b));
+    const k=order.find(j=>T.profiles[j]);
+    if(k!==undefined){T.active=k;PNOTE=`That was the profile in use: when you save, “${T.profiles[k].name}” (${slotLabel(k)}) takes over.`}
   }
   renderProfile();setDirty(true);
 }
@@ -849,7 +871,7 @@ function tileClick(i){
   }
   pickProfile(i);
 }
-['dia-dpad','dia-face'].forEach(id=>{
+['dia-dpad','dia-face','plist'].forEach(id=>{
   const d=$(id),tile=e=>e.target.closest('.ptile');
   d.addEventListener('click',e=>{const t=tile(e);if(t)tileClick(+t.dataset.i)});
   d.addEventListener('dragstart',e=>{const t=tile(e);if(!t)return;DRAG=+t.dataset.i;e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',t.dataset.i);t.classList.add('dragging')});
