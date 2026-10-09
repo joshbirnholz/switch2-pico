@@ -305,7 +305,7 @@ Communication**, then plug the dongle into the dock or the console.
 
 ## Configuration page
 
-The page has three sections: **Controller** (profiles, button mapping,
+Until it finds a dongle, the page shows only how to connect. Then it has three sections: **Controller** (profiles, button mapping,
 sticks, rumble, quick switch, motion), **Device** (paired controllers, power
 and radio, USB, Wi-Fi on the Pico 2 W, connection details) and **Tools**
 (firmware, restart and reset, haptics test, log). The header always shows the

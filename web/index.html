@@ -147,7 +147,13 @@ details.card>summary{cursor:pointer;font-weight:600;font-size:15px}
 .mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
 pre#log{margin:0;padding:12px 14px;background:var(--logbg);color:var(--logfg);border-radius:10px;font:12px/1.6 ui-monospace,Menlo,Consolas,monospace;height:640px;max-height:70vh;overflow:auto;white-space:pre-wrap;word-break:break-all}
 .note{color:var(--muted);font-size:13px;margin:0}
-#usb-help{margin-top:16px}
+/* Until a dongle is detected only the connect card shows. */
+body.offline .status,body.offline .savebox,body.offline nav.sections,body.offline main{display:none!important}
+body.offline .bar{padding-bottom:12px}
+#usb-help{display:none;max-width:560px;margin:48px auto;flex-direction:column;gap:12px;padding:24px}
+body.offline #usb-help{display:flex}
+#usb-help h2{font-size:20px}
+#usb-help .primary{align-self:flex-start;padding:10px 20px;min-height:44px}
 @media (max-width:640px){
   .bar{gap:8px 12px;padding-top:10px}
   .brand{flex:1}
@@ -162,7 +168,7 @@ pre#log{margin:0;padding:12px 14px;background:var(--logbg);color:var(--logfg);bo
 #toast.show{opacity:1}
 </style>
 </head>
-<body>
+<body class="offline">
 <header class="top">
   <div class="wrap bar">
     <div class="brand"><b>Switch2-Pico</b><span id="st-ver" class="sub"></span></div>
@@ -173,7 +179,6 @@ pre#log{margin:0;padding:12px 14px;background:var(--logbg);color:var(--logfg);bo
     </div>
     <div class="savebox">
       <span id="dirty-note"></span>
-      <button id="usb-connect" class="primary" style="display:none" onclick="usbConnect()">Connect over USB</button>
       <button id="save-btn" class="primary" onclick="save()" disabled>Save</button>
     </div>
   </div>
@@ -184,14 +189,11 @@ pre#log{margin:0;padding:12px 14px;background:var(--logbg);color:var(--logfg);bo
   </nav>
 </header>
 <div class="wrap">
-<div id="usb-help" class="card" style="display:none">
-  <b>Connect to your dongle over USB.</b> Plug in the Switch2-Pico, click <i>Connect over USB</i> and choose
-  it. Its name follows the mode: "Pro Controller", "DualSense Edge Wireless Controller", "DualSense Wireless
-  Controller", "Controller" (Xbox 360) or "WUP-028" (GameCube adapter). Each mode is a separate USB device to the
-  browser, so the first time in a mode it has to be chosen once; after that the page connects by itself.
-  Needs Chrome, Edge or another Chromium browser.
-  <span class="note">Linux: install the udev rule from the README first. If WebUSB is turned off on the dongle, use the
-  Wi-Fi page instead (tap BOOTSEL, join Switch2-Pico-XXXX, open http://192.168.4.1).</span>
+<div id="usb-help" class="card">
+  <h2>Connect your Switch2-Pico</h2>
+  <p class="note" style="color:var(--fg)">Plug in the dongle, click <b>Connect over USB</b> and choose it. Its name follows its mode: "Pro Controller", "DualSense Edge Wireless Controller", "DualSense Wireless Controller", "Controller" (Xbox 360) or "WUP-028" (GameCube adapter).</p>
+  <button id="usb-connect" class="primary" onclick="usbConnect()">Connect over USB</button>
+  <p class="note">Each mode is a separate USB device to the browser, so pick it once per mode; after that the page connects by itself. Needs Chrome, Edge or another Chromium browser. Linux: install the udev rule from the README first. If WebUSB is turned off on the dongle, use the Wi-Fi page instead (Pico 2 W: tap BOOTSEL, join Switch2-Pico-XXXX, open http://192.168.4.1).</p>
 </div>
 </div>
 <main class="wrap">
@@ -417,9 +419,12 @@ async function usbOpen(dev){
   if (dev.configuration === null) await dev.selectConfiguration(1);
   await dev.claimInterface(1);
   usbDev = dev;
-  $('usb-connect').style.display='none'; $('usb-help').style.display='none';
+  setOnline(true);
   loadSettings(); loadLog();
 }
+// Connected to a dongle (or served by its Wi-Fi): the full page; otherwise
+// just the connect card.
+function setOnline(on){document.body.classList.toggle('offline',!on)}
 async function usbConnect(){
   try{
     const dev = await navigator.usb.requestDevice({filters:USB_IDS.map(([v,p])=>({vendorId:v, productId:p, classCode:0xff}))});
@@ -975,15 +980,16 @@ document.querySelectorAll('[data-page="ctrl"],[data-page="dev"]').forEach(pg=>{
 window.addEventListener('beforeunload',e=>{if(DIRTY){e.preventDefault();e.returnValue=''}});
 setInterval(()=>{if(SEC==='tools'&&$('log-follow').checked&&LOG_VIEW==='now'&&!document.hidden)loadLog().catch(()=>{})},2000);
 fwCheck();
-if (USE_HTTP){loadSettings();loadLog();}
-else if (!navigator.usb){$('usb-help').style.display='';$('usb-help').innerHTML='<b>This browser has no WebUSB.</b> Use Chrome or Edge, or the Wi-Fi page (tap BOOTSEL, join Switch2-Pico-XXXX, open http://192.168.4.1).';}
+if (USE_HTTP){setOnline(true);loadSettings();loadLog();}
+else if (!navigator.usb){$('usb-help').innerHTML='<h2>This browser has no WebUSB</h2><p class="note" style="color:var(--fg)">Open this page in Chrome or Edge, or use the Pico 2 W\'s Wi-Fi page (tap BOOTSEL, join Switch2-Pico-XXXX, open http://192.168.4.1).</p>';}
 else {
-  $('usb-connect').style.display=''; $('usb-help').style.display='';
   // Try each permitted match in turn: a real DualSense or Xbox pad has the same IDs
   // but no configuration interface, so opening it fails and the next one is tried.
   navigator.usb.getDevices().then(async ds=>{for(const d of ds.filter(isDongleId)){if(usbDev)break;try{await usbOpen(d)}catch(e){}}});
   navigator.usb.addEventListener('connect',e=>{if(!usbDev&&isDongleId(e.device))usbOpen(e.device).catch(()=>{})});
-  navigator.usb.addEventListener('disconnect',e=>{if(e.device===usbDev){usbDev=null;$('usb-connect').style.display='';$('usb-help').style.display='';}});
+  // While a firmware update waits for the dongle's USB drive (it is restarted
+// as a drive then), the page stays up for the "Write to the drive" step.
+  navigator.usb.addEventListener('disconnect',e=>{if(e.device===usbDev){usbDev=null;if($('fw-step2').style.display==='none')setOnline(false)}});
 }
 // Faster while the button mapping (and its live drawing) is shown.
 (function loop(){poll().finally(()=>{const open=SEC==='ctrl'&&SUB==='buttons';
