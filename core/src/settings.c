@@ -16,8 +16,22 @@ static uint32_t s_save_deadline;
 
 static const char *const IN_NAMES[IN_COUNT] = {
     "A", "B", "X", "Y", "L", "R", "ZL", "ZR", "Minus", "Plus", "LStick", "RStick",
-    "Home", "Capture", "Up", "Down", "Left", "Right", "GL", "GR", "C",
+    "Home", "Capture", "Up", "Down", "Left", "Right", "GL", "GR", "C", "SL_R", "SR_R",
 };
+
+// Legacy maps (kept only to migrate older saves) hold the IN_COUNT_V1
+// inputs there were then.
+static void v1_button_map(ctrl_type_t t, uint8_t out[IN_COUNT_V1]) {
+    uint8_t m[IN_COUNT];
+    settings_default_button_map(t, m);
+    memcpy(out, m, IN_COUNT_V1);
+}
+
+static void v1_mode_map(ctrl_type_t t, usb_mode_t mode, uint8_t out[IN_COUNT_V1]) {
+    uint8_t m[IN_COUNT];
+    settings_default_mode_map(t, mode, m);
+    memcpy(out, m, IN_COUNT_V1);
+}
 
 static const char *const OUT_NAMES[OUT_COUNT] = {
     "None", "A", "B", "X", "Y", "L", "R", "ZL", "ZR", "Minus", "Plus", "LStick", "RStick",
@@ -81,8 +95,8 @@ void settings_defaults(settings_t *s) {
     s->size = sizeof *s;
 
     // Pro Controller maps (the original fields) and the GameCube controller's.
-    settings_default_button_map(CTRL_PRO, s->button_map);
-    for (int m = 0; m < MODE_MAP_SLOTS; m++) settings_default_mode_map(CTRL_PRO, (usb_mode_t)m, s->mode_map[m]);
+    v1_button_map(CTRL_PRO, s->button_map);
+    for (int m = 0; m < MODE_MAP_SLOTS; m++) v1_mode_map(CTRL_PRO, (usb_mode_t)m, s->mode_map[m]);
     settings_default_mode_slots(s->mode_slot);
     settings_default_profile(CTRL_GAMECUBE, &s->gc_profile);
     s->gc_usb_mode = USB_MODE_GC_ADAPTER;
@@ -179,7 +193,7 @@ static void profiles_from_legacy(settings_t *s, ctrl_type_t t) {
         settings_default_profile_for(t, (usb_mode_t)m, p);
         const uint8_t *map = m == USB_MODE_SWITCH_PRO ? (gc ? g->button_map : s->button_map)
                                                       : (gc ? g->mode_map[m] : s->mode_map[m]);
-        memcpy(p->map, map, IN_COUNT);
+        memcpy(p->map, map, IN_COUNT_V1);
         p->stick_deadzone_pct = gc ? g->stick_deadzone_pct : s->stick_deadzone_pct;
         p->stick_outer_pct = gc ? g->stick_outer_pct : s->stick_outer_pct;
         p->swap_sticks = gc ? g->swap_sticks : s->swap_sticks;
@@ -211,7 +225,7 @@ void settings_init(void) {
         uint8_t rev = g_settings.ext_rev;
         if (rev > SETTINGS_EXT_REV) rev = 0;
         if (rev < 1) {
-            for (int m = 0; m < MODE_MAP_SLOTS; m++) settings_default_mode_map(CTRL_PRO, (usb_mode_t)m, g_settings.mode_map[m]);
+            for (int m = 0; m < MODE_MAP_SLOTS; m++) v1_mode_map(CTRL_PRO, (usb_mode_t)m, g_settings.mode_map[m]);
         }
         if (rev < 2) settings_default_mode_slots(g_settings.mode_slot);
         if (rev < 3) g_settings.ble_tx_power = 0;
@@ -224,7 +238,7 @@ void settings_init(void) {
             // The GameCube controller gets its own maps; the Pro's GameCube
             // adapter map (new, GameCube-controller defaults) gets the Pro's.
             settings_default_profile(CTRL_GAMECUBE, &g_settings.gc_profile);
-            settings_default_mode_map(CTRL_PRO, USB_MODE_GC_ADAPTER, g_settings.mode_map[USB_MODE_GC_ADAPTER]);
+            v1_mode_map(CTRL_PRO, USB_MODE_GC_ADAPTER, g_settings.mode_map[USB_MODE_GC_ADAPTER]);
         }
         if (rev < 9) {
             // One USB mode for both before.
@@ -247,6 +261,21 @@ void settings_init(void) {
             g_settings.gc_profile.swap_sticks = g_settings.swap_sticks;
             g_settings.gc_profile.rumble_enabled = g_settings.rumble_enabled;
             g_settings.gc_profile.rumble_strength_pct = g_settings.rumble_strength_pct;
+        }
+        if (rev >= 10 && rev < 14) {
+            // Profiles stored with shorter maps (IN_COUNT_V1): what was
+            // copied over them above is the old layout. Rebuild them from
+            // the stored bytes, and the fields that followed them.
+            const size_t at = offsetof(settings_t, prof);
+            size_t room = stored->size - 4u > at ? stored->size - 4u - at : 0;
+            int n = (int)(room / CTRL_PROFILES_V13_SIZE);
+            if (n > CTRL_TYPE_COUNT) n = CTRL_TYPE_COUNT;
+            for (int t = n; t < CTRL_TYPE_COUNT; t++) settings_default_profiles((ctrl_type_t)t, &g_settings.prof[t]);
+            settings_profiles_from_v13(raw + at, n, g_settings.prof);
+            size_t tail = at + (size_t)n * CTRL_PROFILES_V13_SIZE;
+            // joycon_single came with 0.11.0 (ext_rev 13, a larger size).
+            g_settings.joycon_single = tail + 4u <= stored->size - 4u ? raw[tail] : 0;
+            memset(g_settings.reserved_end, 0, sizeof g_settings.reserved_end);
         }
         if (rev < 10) {
             // Profiles: one per mode from that mode's map (after the steps

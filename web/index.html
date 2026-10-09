@@ -278,7 +278,7 @@ body.offline #usb-help{display:flex}
           <button id="preset-swap" onclick="presetSwapFace()">Swap A/B and X/Y</button>
           <div class="row" id="remap-row" style="margin-left:auto;gap:6px">
             <label class="check"><input type="checkbox" data-k="quick_remap"><span id="remap-label">Remap GL/GR from the controller</span></label>
-            <span class="help"><button type="button" aria-label="About remapping GL/GR from the controller">?</button><span class="tipbox" role="tooltip">Hold <b>C</b> and either <b>GL</b> or <b>GR</b>, and then press another button to map it to the <span id="remap-what">back buttons</span>. Do it again to clear the mapping.</span></span>
+            <span class="help"><button type="button" aria-label="About remapping GL/GR from the controller">?</button><span class="tipbox" role="tooltip">Hold <b>C</b> and either <b>GL</b> or <b>GR</b><span id="remap-on"></span>, and then press another button to map it to the <span id="remap-what">back buttons</span>. Do it again to clear the mapping.</span></span>
           </div>
         </div>
       </div>
@@ -523,8 +523,8 @@ async function download(path, name){
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([r.bytes])); a.download = name; a.click();
   }catch(e){toast('Failed')}
 }
-const IN=["A","B","X","Y","L","R","ZL","ZR","Minus","Plus","LStick","RStick","Home","Capture","Up","Down","Left","Right","GL","GR","C"];
-const S2BIT={A:3,B:2,X:1,Y:0,L:22,R:6,ZL:23,ZR:7,Minus:8,Plus:9,LStick:11,RStick:10,Home:12,Capture:13,Up:17,Down:16,Left:19,Right:18,GL:25,GR:24,C:14};
+const IN=["A","B","X","Y","L","R","ZL","ZR","Minus","Plus","LStick","RStick","Home","Capture","Up","Down","Left","Right","GL","GR","C","SL_R","SR_R"];
+const S2BIT={A:3,B:2,X:1,Y:0,L:22,R:6,ZL:23,ZR:7,Minus:8,Plus:9,LStick:11,RStick:10,Home:12,Capture:13,Up:17,Down:16,Left:19,Right:18,GL:25,GR:24,C:14,SL_R:5,SR_R:4};
 let S=null;
 const $=id=>document.getElementById(id);
 function toast(t){const e=$('toast');e.textContent=t;e.classList.add('show');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove('show'),1800)}
@@ -661,6 +661,7 @@ const FACE_POS=[{X:[2,1],Y:[1,2],A:[3,2],B:[2,3]},{Y:[2,1],B:[1,2],A:[2,2],X:[3,
 const isGC=()=>MAP_CTRL===1,isJC=()=>MAP_CTRL>=2,isSingle=()=>MAP_CTRL===3||MAP_CTRL===4;
 // Buttons a single Joy-Con 2 doesn't have.
 const JC_ABSENT={3:['A','B','X','Y','R','ZR','Plus','RStick','Home','C'],4:['Up','Down','Left','Right','L','ZL','Minus','LStick','Capture']};
+const SIDE_LABEL={SL_R:'SL',SR_R:'SR'};
 const FACE_SHAPE=[{},{A:'big',B:'small',X:'kidneyV',Y:'kidneyH'}];
 // Who takes over when the profile in use is removed (as the firmware does).
 const FALLBACK=['Y','A','X','B','Up','Right','Down','Left'];
@@ -673,10 +674,17 @@ function renderMap(mode){
   const cell=(n,lab,a)=>`<label${a?` style="--a:${a}"`:''}>${lab}<select data-map="${n}">${opts}</select></label>`;
   const grp=k=>{const [t,cells,lay]=PAD_GROUPS[k];
     return `<div class="grp g-${k}"><h4>${t}</h4><div class="${lay||''}">${cells.map(c=>cell(...c)).join('')}</div></div>`};
+  // Shoulder columns. Joy-Con 2: the (L)'s SL / SR arrive as GL / GR and
+  // the (R)'s as SL_R / SR_R (a pair; a single one's are GL / GR), each
+  // under its own Joy-Con.
+  const shoulder=MAP_CTRL===2?[['L','ZL','GL','GR'],['R','ZR','SL_R','SR_R']]:
+    MAP_CTRL===3?[['L','ZL','GL','GR'],['R','ZR','SL_R','SR_R']]:
+    MAP_CTRL===4?[['L','ZL','SL_R','SR_R'],['R','ZR','GL','GR']]:
+    [['L','ZL','GL'],['R','ZR','GR','SL_R','SR_R']];
   m.innerHTML=grp('ls')+grp('dpad')+grp('face')+grp('rs')+
-    `<div class="col g-lsh">${cell('L','L')}${cell('ZL','ZL')}${cell('GL','GL')}</div>`+
+    `<div class="col g-lsh">${shoulder[0].map(n=>cell(n,SIDE_LABEL[n]||n)).join('')}</div>`+
     `<div class="cen g-cen">${[['Minus','minus'],['Plus','plus'],['Capture','cap'],['Home','home'],['C','c']].map(([n,a])=>cell(n,n,a)).join('')}</div>`+
-    `<div class="col g-rsh">${cell('R','R')}${cell('ZR','ZR')}${cell('GR','GR')}</div>`+
+    `<div class="col g-rsh">${shoulder[1].map(n=>cell(n,SIDE_LABEL[n]||n)).join('')}</div>`+
     `<div class="g-img">${isGC()?GC_SVG:isSingle()?'':PAD_SVG}</div>`;
   // Light up the drawing for the button being edited.
   m.querySelectorAll('select[data-map]').forEach(sel=>{
@@ -689,7 +697,9 @@ function renderMap(mode){
   $('preset-reset').textContent=M.family==='switch'?'Reset to labels':'Reset to defaults';
   // GameCube controller: no Minus, stick clicks or GL / GR (their maps stay
   // stored, just not shown); Z and Start are its names for ZR and Plus.
-  // Joy-Con 2: SL / SR arrive as GL / GR; a single one has half the buttons.
+  // The (R)'s own SL / SR: a Joy-Con 2 pair only.
+  if(MAP_CTRL!==2)['SL_R','SR_R'].forEach(n=>m.querySelector(`[data-map="${n}"]`).parentElement.style.display='none');
+  // Joy-Con 2: GL / GR are SL / SR; a single one has half the buttons.
   if(isJC()){
     [['GL','SL'],['GR','SR']].forEach(([n,lab])=>m.querySelector(`[data-map="${n}"]`).parentElement.firstChild.textContent=lab);
     (JC_ABSENT[MAP_CTRL]||[]).forEach(n=>m.querySelector(`[data-map="${n}"]`).parentElement.style.display='none');
@@ -792,12 +802,13 @@ function renderProfile(){
   $('prof-settings').classList.toggle('off',!P);
   // GL / GR remap from the controller: only where GL / GR exist and the host
   // doesn't remap them itself (DualSense Edge paddles).
-  // The Pro Controller's GL / GR, or a Joy-Con 2 pair's SL / SR (the same
-  // inputs; SL / SR of either Joy-Con): one setting for both.
+  // The Pro Controller's GL / GR, or a Joy-Con 2 pair's SL / SR (each
+  // Joy-Con's own): one setting for all of them.
   $('remap-row').hidden=!((MAP_CTRL===0||MAP_CTRL===2)&&P&&P.mode!==1);
   const sl=MAP_CTRL===2,ab=sl?['SL','SR']:['GL','GR'];
   $('remap-label').textContent=`Remap ${ab[0]}/${ab[1]} from the controller`;
-  $('remap-what').textContent=sl?'SL / SR buttons':'back buttons';
+  $('remap-what').textContent=sl?'SL or SR you are holding':'back buttons';
+  $('remap-on').textContent=sl?' on either Joy-Con':'';
   document.querySelectorAll('#remap-row .tipbox b').forEach((b,k)=>{if(k===1)b.textContent=ab[0];if(k===2)b.textContent=ab[1]});
   // Mouse: Joy-Con 2 types only (a single one can only be its own mouse).
   document.querySelector('[data-sub="mouse"]').hidden=!isJC();

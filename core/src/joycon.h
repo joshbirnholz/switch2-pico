@@ -26,8 +26,9 @@ typedef struct {
 
 // The controller of type `type` (CTRL_JOYCON_*) from its sides (either may
 // be missing):
-//  * buttons: each side's own, with SL / SR as GL / GR (SL of either side
-//    is GL, SR is GR);
+//  * buttons: each side's own; on a pair the (L)'s SL / SR are GL / GR and
+//    the (R)'s their own inputs (IN_SL_R / IN_SR_R), on a single Joy-Con 2
+//    its SL / SR are GL / GR;
 //  * sticks: the (L)'s left, the (R)'s right; a single Joy-Con's stick turned
 //    a quarter (as it is held sideways) and made the left stick;
 //  * motion from the (R) when there is one (else the (L)), battery from the

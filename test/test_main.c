@@ -289,6 +289,14 @@ static void test_quick_remap(void) {
     CHECK(changed == IN_GR && PRO_MAP(s)[IN_GR] == OUT_UP && PRO_MAP(s)[IN_GL] == OUT_X);
     CHECK(!mapping_quick_remap(&s, CTRL_PRO, chord | S2_BTN_GR, chord | S2_BTN_GR | S2_BTN_Y, &changed));
     CHECK(!mapping_quick_remap(&s, CTRL_PRO, chord, chord | S2_BTN_HOME, &changed));
+
+    // A Joy-Con 2 pair: the (R)'s SL / SR are inputs of their own.
+    uint8_t *jm = s.prof[CTRL_JOYCON_PAIR].p[s.prof[CTRL_JOYCON_PAIR].active].map;
+    uint32_t chord_sl = S2_BTN_C | S2_BTN_SL_R;
+    CHECK(mapping_quick_remap_held(chord_sl) && mapping_quick_remap_held(S2_BTN_C | S2_BTN_SR_R));
+    CHECK(mapping_quick_remap(&s, CTRL_JOYCON_PAIR, chord_sl, chord_sl | S2_BTN_B, &changed));
+    CHECK(changed == IN_SL_R && jm[IN_SL_R] == jm[IN_B] && jm[IN_GL] == OUT_NONE);
+    CHECK(!mapping_quick_remap(&s, CTRL_JOYCON_PAIR, chord_sl | S2_BTN_GL, chord_sl | S2_BTN_GL | S2_BTN_A, &changed));
 }
 
 static void test_macro(void) {
@@ -844,8 +852,9 @@ static void test_joycon(void) {
     s2_input_t out;
 
     // Pair: each side's own buttons (a stray bit from the other side's
-    // layout is dropped), SL / SR as GL / GR, the (L)'s left stick and the
-    // (R)'s right stick, motion from the (R), the lower battery.
+    // layout is dropped), the (L)'s SL / SR as GL / GR and the (R)'s as
+    // their own inputs, the (L)'s left stick and the (R)'s right stick,
+    // motion from the (R), the lower battery.
     joycon_side_t l = jc_side(S2_BTN_UP | S2_BTN_SL_L | S2_BTN_A, c + 500, c, 0, 0);
     joycon_side_t r = jc_side(S2_BTN_A | S2_BTN_SR_R | S2_BTN_UP, 0, 0, c, c - 400);
     l.in.battery_mv = 3600;
@@ -853,7 +862,7 @@ static void test_joycon(void) {
     r.in.gyro[0] = 77;
     l.in.gyro[0] = 11;
     joycon_merge(CTRL_JOYCON_PAIR, &l, &r, &out, &ctx);
-    CHECK(out.buttons == (S2_BTN_UP | S2_BTN_SL_L | S2_BTN_A | S2_BTN_SR_R | S2_BTN_GL | S2_BTN_GR));
+    CHECK(out.buttons == (S2_BTN_UP | S2_BTN_SL_L | S2_BTN_A | S2_BTN_SR_R | S2_BTN_GL));
     CHECK(out.stick_l[0] == c + 500 && out.stick_r[1] == c - 400);
     CHECK(out.gyro[0] == 77);
     CHECK(out.battery_mv == 3600);
@@ -881,6 +890,11 @@ static void test_joycon(void) {
     joycon_side_t sr = jc_side(0, 0, 0, c - 500, c);
     joycon_merge(CTRL_JOYCON_R, NULL, &sr, &out, &ctx);
     CHECK(out.stick_l[0] == c && out.stick_l[1] == c + 500);
+    // ... its SL / SR are GL / GR (not the pair's (R) inputs).
+    sr.in.buttons = S2_BTN_SL_R | S2_BTN_SR_R;
+    joycon_merge(CTRL_JOYCON_R, NULL, &sr, &out, &ctx);
+    CHECK(out.buttons == (S2_BTN_GL | S2_BTN_GR));
+    sr.in.buttons = 0;
     sr.in.stick_r[0] = c;
     sr.in.stick_r[1] = c + 200;
     joycon_merge(CTRL_JOYCON_R, NULL, &sr, &out, &ctx);

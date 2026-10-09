@@ -16,8 +16,14 @@ typedef enum {
     IN_HOME, IN_CAPTURE,
     IN_UP, IN_DOWN, IN_LEFT, IN_RIGHT,
     IN_GL, IN_GR, IN_C,
+    // Joy-Con 2 (R)'s SL / SR in a pair (a pair's GL / GR are the (L)'s SL /
+    // SR; a single Joy-Con 2's SL / SR are GL / GR).
+    IN_SL_R, IN_SR_R,
     IN_COUNT
 } in_button_t;
+// Inputs before IN_SL_R / IN_SR_R: the size of the maps stored before
+// settings ext_rev 14 (the legacy fields keep it, so the layout stays put).
+#define IN_COUNT_V1 21
 
 // Buttons of the emulated Switch (1) Pro Controller.
 typedef enum {
@@ -81,10 +87,11 @@ typedef enum {
     MODE_SLOT_COUNT
 } mode_slot_t;
 #define MODE_SLOT_EMPTY 0
-#define SETTINGS_EXT_REV 13  // 1: mode_map; 2: mode_slot; 3: ble_tx_power; 4: idle_*; 5: pair_button;
+#define SETTINGS_EXT_REV 14  // 1: mode_map; 2: mode_slot; 3: ble_tx_power; 4: idle_*; 5: pair_button;
                              // 6: gc_profile; 7: gc_profile sticks / rumble; 8: bonds;
                              // 9: gc_usb_mode, last_ctrl; 10: profiles; 11: one profile per button;
-                             // 12: Joy-Con 2 types; 13: single Joy-Con 2 profiles numbered
+                             // 12: Joy-Con 2 types; 13: single Joy-Con 2 profiles numbered;
+                             // 14: maps include IN_SL_R / IN_SR_R
 
 // Remembered (paired) controllers. Any of them can connect, one at a time
 // (or a Joy-Con 2 (L) together with a Joy-Con 2 (R)); pairing one more when
@@ -155,8 +162,8 @@ typedef struct {
 
 // Before profiles (ext_rev < 10): one map per mode. Read only to migrate.
 typedef struct {
-    uint8_t button_map[IN_COUNT];                  // Switch Pro mode: out_button_t
-    uint8_t mode_map[MODE_MAP_SLOTS][IN_COUNT];    // other modes: gp_out_t
+    uint8_t button_map[IN_COUNT_V1];                  // Switch Pro mode: out_button_t
+    uint8_t mode_map[MODE_MAP_SLOTS][IN_COUNT_V1];    // other modes: gp_out_t
     uint8_t mode_slot[MODE_SLOT_COUNT];            // mode shortcut buttons
     // Sticks and rumble (the Pro's are the top-level fields of the same names).
     uint8_t stick_deadzone_pct;
@@ -177,7 +184,7 @@ typedef struct {
     uint16_t size;
 
     // ---- input mapping ----
-    uint8_t button_map[IN_COUNT];       // out_button_t for each physical button
+    uint8_t button_map[IN_COUNT_V1];    // legacy: out_button_t for each physical button
     uint8_t stick_deadzone_pct;         // inner radial deadzone, 0..40
     uint8_t stick_outer_pct;            // radius treated as full deflection, 50..100
     uint8_t swap_sticks;                // swap left and right sticks
@@ -231,7 +238,7 @@ typedef struct {
     uint8_t quick_remap_off;            // disable the C + GL/GR + button remap shortcut
     uint8_t usb_mode;                   // usb_mode_t (0 in images saved before it existed)
     uint8_t ext_rev;                    // SETTINGS_EXT_REV; 0 in images saved before mode_map existed
-    uint8_t mode_map[MODE_MAP_SLOTS][IN_COUNT];   // gp_out_t per button, for the non-Switch modes
+    uint8_t mode_map[MODE_MAP_SLOTS][IN_COUNT_V1];   // legacy: gp_out_t per button, for the non-Switch modes
     uint8_t mode_slot[MODE_SLOT_COUNT]; // usb_mode_t + 1 per mode_slot_t (MODE_SLOT_EMPTY: none)
     uint8_t ble_tx_power;               // radio power: 0 +8 dBm, 1 +4, 2 0, 3 -4 (nRF52840)
     uint8_t idle_disconnect_off;        // don't disconnect an unused controller (inverted: 0 = on)
@@ -293,6 +300,11 @@ void settings_default_profiles(ctrl_type_t type, ctrl_profiles_t *c);
 void settings_default_profile_for(ctrl_type_t type, usb_mode_t mode, profile_t *p);   // default name / map / options
 const char *settings_mode_profile_name(usb_mode_t mode);
 void settings_sanitize_profiles(ctrl_type_t type, ctrl_profiles_t *c);
+// ext_rev 10..13 -> 14: profiles as stored then (maps of IN_COUNT_V1), from
+// `raw` (`n` controller types), into the current layout (the new inputs
+// unassigned).
+void settings_profiles_from_v13(const uint8_t *raw, int n, ctrl_profiles_t *out);
+#define CTRL_PROFILES_V13_SIZE 468   // sizeof the stored ctrl_profiles_t then
 // ext_rev 10 -> 11: put each profile on the button(s) that selected it,
 // the others on free buttons.
 void settings_profiles_to_buttons(ctrl_profiles_t *c);

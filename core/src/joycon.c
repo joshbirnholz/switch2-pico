@@ -37,11 +37,18 @@ void joycon_rotate_stick(bool left, const uint16_t raw[2], const s2_stick_cal_t 
     *out_cal = c;
 }
 
-// SL / SR of either side as GL / GR (the inputs the maps have for them).
-static uint32_t side_buttons(uint32_t b) {
+// SL / SR as the inputs the maps have for them: on a pair the (L)'s are GL
+// / GR and the (R)'s are IN_SL_R / IN_SR_R (their own bits); a single
+// Joy-Con 2's are GL / GR.
+static uint32_t side_buttons(uint32_t b, bool pair) {
+    if (pair) {
+        if (b & S2_BTN_SL_L) b |= S2_BTN_GL;
+        if (b & S2_BTN_SR_L) b |= S2_BTN_GR;
+        return b;
+    }
     if (b & (S2_BTN_SL_L | S2_BTN_SL_R)) b |= S2_BTN_GL;
     if (b & (S2_BTN_SR_L | S2_BTN_SR_R)) b |= S2_BTN_GR;
-    return b;
+    return b & ~(S2_BTN_SL_R | S2_BTN_SR_R);
 }
 
 void joycon_merge(ctrl_type_t type, const joycon_side_t *l, const joycon_side_t *r, s2_input_t *out,
@@ -62,7 +69,7 @@ void joycon_merge(ctrl_type_t type, const joycon_side_t *l, const joycon_side_t 
         out->charge_state = l->in.charge_state;
     }
     uint32_t b = (hl ? l->in.buttons & S2_BTNS_JOYCON_L : 0) | (hr ? r->in.buttons & S2_BTNS_JOYCON_R : 0);
-    out->buttons = side_buttons(b);
+    out->buttons = side_buttons(b, type == CTRL_JOYCON_PAIR);
     out->trigger_l = out->trigger_r = 0;
 
     s2_stick_cal_t def;

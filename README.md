@@ -129,8 +129,9 @@ GameCube Controller).
 
 * **Both connected: Joy-Con 2 (L/R).** One controller with the (L)'s left
   stick and buttons and the (R)'s; motion comes from the (R). The battery
-  shown is the lower one. Rumble goes to each side's own motor. SL / SR (of
-  either side) can be mapped as SL and SR.
+  shown is the lower one. Rumble goes to each side's own motor. Each
+  Joy-Con's SL and SR are inputs of their own (four in all), mapped
+  separately.
 * **One on its own.** By default it is its half of the Joy-Con 2 (L/R)
   (the other half's buttons and stick just aren't there until it connects).
   With **Device → Paired controllers → Allow a single Joy-Con 2 on its own**
@@ -147,8 +148,8 @@ GameCube Controller).
   it when it wakes up.
 * **SL / SR** of a pair can be remapped from the controller like the Pro
   Controller's GL / GR (**Remap SL/SR from the controller** on its Buttons
-  tab): hold C and SL or SR, then press another button. SL of either
-  Joy-Con is one input, SR the other.
+  tab): hold C and SL or SR of either Joy-Con, then press another button;
+  only the SL or SR held changes.
 * Profiles: a pair's are on buttons and switch with **C + Home**, like the
   Pro Controller's. A single Joy-Con 2 has no shortcut: its profiles are
   numbered 1–8, and the one in use is chosen on the configuration page.

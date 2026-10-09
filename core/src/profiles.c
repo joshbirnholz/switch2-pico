@@ -62,6 +62,53 @@ void settings_default_profiles(ctrl_type_t type, ctrl_profiles_t *c) {
     }
 }
 
+// Profiles as stored before ext_rev 14: maps of IN_COUNT_V1 inputs.
+typedef struct {
+    uint8_t used, usb_mode;
+    char name[PROFILE_NAME_LEN];
+    uint8_t map[IN_COUNT_V1];
+    uint8_t stick_deadzone_pct, stick_outer_pct, swap_sticks, trigger_threshold;
+    uint8_t rumble_enabled, rumble_strength_pct;
+    uint8_t mouse_src, mouse_speed_pct, mouse_flags;
+    uint8_t reserved[5];
+} profile_v13_t;
+typedef struct {
+    profile_v13_t p[PROFILE_MAX];
+    uint8_t slot[MODE_SLOT_COUNT];
+    uint8_t active;
+    uint8_t reserved[3];
+} ctrl_profiles_v13_t;
+_Static_assert(sizeof(profile_v13_t) == 57, "stored profile layout");
+_Static_assert(sizeof(ctrl_profiles_v13_t) == CTRL_PROFILES_V13_SIZE, "stored profiles layout");
+
+void settings_profiles_from_v13(const uint8_t *raw, int n, ctrl_profiles_t *out) {
+    for (int t = 0; t < n; t++) {
+        ctrl_profiles_v13_t old;
+        memcpy(&old, raw + (size_t)t * sizeof old, sizeof old);
+        ctrl_profiles_t *c = &out[t];
+        memset(c, 0, sizeof *c);
+        for (int i = 0; i < PROFILE_MAX; i++) {
+            const profile_v13_t *o = &old.p[i];
+            profile_t *p = &c->p[i];
+            p->used = o->used;
+            p->usb_mode = o->usb_mode;
+            memcpy(p->name, o->name, sizeof p->name);
+            memcpy(p->map, o->map, IN_COUNT_V1);   // the inputs added since: unassigned (0)
+            p->stick_deadzone_pct = o->stick_deadzone_pct;
+            p->stick_outer_pct = o->stick_outer_pct;
+            p->swap_sticks = o->swap_sticks;
+            p->trigger_threshold = o->trigger_threshold;
+            p->rumble_enabled = o->rumble_enabled;
+            p->rumble_strength_pct = o->rumble_strength_pct;
+            p->mouse_src = o->mouse_src;
+            p->mouse_speed_pct = o->mouse_speed_pct;
+            p->mouse_flags = o->mouse_flags;
+        }
+        memcpy(c->slot, old.slot, sizeof c->slot);
+        c->active = old.active;
+    }
+}
+
 // Numbered profiles (single Joy-Con 2): the first one in use takes over,
 // and settings_profiles_numbered() packs them from the start.
 void settings_profiles_numbered(ctrl_profiles_t *c) {

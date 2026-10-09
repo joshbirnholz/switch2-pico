@@ -315,14 +315,24 @@ static int s_parse_type, s_parse_index;   // the profile parse_profile() reads
 static bool parse_profile(const char *v, profile_t *p) {
     memset(p, 0, sizeof *p);
     if (!*v) return true;   // unused
+    // 7 fields and the map: IN_COUNT inputs, or IN_COUNT_V1 from an older page.
     uint8_t num[7 + IN_COUNT];
     char *end;
-    for (size_t k = 0; k < sizeof num; k++) {
+    const char *v1_end = NULL;
+    size_t got = 0;
+    while (got < sizeof num) {
         long n = strtol(v, &end, 10);
-        if (end == v || *end != ',') return false;
-        num[k] = (uint8_t)(n < 0 ? 0 : n > 255 ? 255 : n);
+        if (end == v || *end != ',') break;
+        num[got++] = (uint8_t)(n < 0 ? 0 : n > 255 ? 255 : n);
         v = end + 1;
+        if (got == 7 + IN_COUNT_V1) v1_end = v;
     }
+    bool short_map = got < sizeof num;
+    if (short_map) {
+        if (!v1_end) return false;
+        v = v1_end;
+    }
+    const profile_t *old = &settings_profiles(&g_settings, (ctrl_type_t)s_parse_type)->p[s_parse_index];
     p->used = 1;
     p->usb_mode = num[0];
     p->stick_deadzone_pct = num[1];
@@ -331,7 +341,13 @@ static bool parse_profile(const char *v, profile_t *p) {
     p->trigger_threshold = num[4];
     p->rumble_enabled = num[5];
     p->rumble_strength_pct = num[6];
-    memcpy(p->map, num + 7, IN_COUNT);
+    if (short_map) {
+        // An older page: the inputs it doesn't know stay as they are.
+        memcpy(p->map, num + 7, IN_COUNT_V1);
+        if (old->used) memcpy(p->map + IN_COUNT_V1, old->map + IN_COUNT_V1, IN_COUNT - IN_COUNT_V1);
+    } else {
+        memcpy(p->map, num + 7, IN_COUNT);
+    }
     // Mouse fields: "m<n>,<n>,<n>," exactly (an older page's name such as
     // "mario" is still a name).
     uint8_t mo[3];
@@ -358,7 +374,6 @@ static bool parse_profile(const char *v, profile_t *p) {
         p->mouse_flags = mo[2];
     } else {
         // An older page: the profile's mouse fields stay as they are.
-        const profile_t *old = &settings_profiles(&g_settings, (ctrl_type_t)s_parse_type)->p[s_parse_index];
         if (old->used) {
             p->mouse_src = old->mouse_src;
             p->mouse_speed_pct = old->mouse_speed_pct;

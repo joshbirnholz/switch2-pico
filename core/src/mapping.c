@@ -22,6 +22,7 @@ static const uint32_t IN_BITS[IN_COUNT] = {
     [IN_HOME] = S2_BTN_HOME, [IN_CAPTURE] = S2_BTN_CAPTURE,
     [IN_UP] = S2_BTN_UP, [IN_DOWN] = S2_BTN_DOWN, [IN_LEFT] = S2_BTN_LEFT, [IN_RIGHT] = S2_BTN_RIGHT,
     [IN_GL] = S2_BTN_GL, [IN_GR] = S2_BTN_GR, [IN_C] = S2_BTN_C,
+    [IN_SL_R] = S2_BTN_SL_R, [IN_SR_R] = S2_BTN_SR_R,
 };
 
 // A Joy-Con 2 on its own is held sideways, rail up: the four buttons under
@@ -66,6 +67,7 @@ void settings_default_button_map(ctrl_type_t type, uint8_t map[IN_COUNT]) {
     map[IN_GL] = pair ? OUT_NONE : OUT_LSTICK;
     map[IN_GR] = pair ? OUT_NONE : OUT_RSTICK;
     map[IN_C] = OUT_NONE;
+    map[IN_SL_R] = map[IN_SR_R] = OUT_NONE;
 }
 
 // Sideways Joy-Con 2, non-Switch modes (positional outputs).
@@ -166,8 +168,14 @@ void settings_default_mode_map(ctrl_type_t type, usb_mode_t mode, uint8_t map[IN
 }
 
 void settings_default_profile(ctrl_type_t type, ctrl_profile_t *p) {
-    settings_default_button_map(type, p->button_map);
-    for (int m = 0; m < MODE_MAP_SLOTS; m++) settings_default_mode_map(type, (usb_mode_t)m, p->mode_map[m]);
+    // Legacy maps: the inputs there were then.
+    uint8_t map[IN_COUNT];
+    settings_default_button_map(type, map);
+    memcpy(p->button_map, map, IN_COUNT_V1);
+    for (int m = 0; m < MODE_MAP_SLOTS; m++) {
+        settings_default_mode_map(type, (usb_mode_t)m, map);
+        memcpy(p->mode_map[m], map, IN_COUNT_V1);
+    }
     settings_default_mode_slots(p->mode_slot);
     p->stick_deadzone_pct = 6;
     p->stick_outer_pct = 95;
@@ -317,8 +325,13 @@ void mapping_pack_stick(const uint16_t v[2], uint8_t out[3]) {
     out[2] = (uint8_t)(v[1] >> 4);
 }
 
+// The inputs the C + button shortcut remaps: GL / GR (a Joy-Con 2 pair: the
+// (L)'s SL / SR) and the (R)'s SL / SR.
+static const in_button_t REMAP_BACK[] = {IN_GL, IN_GR, IN_SL_R, IN_SR_R};
+#define REMAP_BACK_BITS (S2_BTN_GL | S2_BTN_GR | S2_BTN_SL_R | S2_BTN_SR_R)
+
 bool mapping_quick_remap_held(uint32_t raw) {
-    return (raw & S2_BTN_C) && (raw & (S2_BTN_GL | S2_BTN_GR));
+    return (raw & S2_BTN_C) && (raw & REMAP_BACK_BITS);
 }
 
 bool mapping_quick_remap(settings_t *s, ctrl_type_t type, uint32_t prev, uint32_t raw, in_button_t *changed) {
@@ -327,13 +340,20 @@ bool mapping_quick_remap(settings_t *s, ctrl_type_t type, uint32_t prev, uint32_
 
 bool mapping_quick_remap_map(uint8_t map[IN_COUNT], uint32_t prev, uint32_t raw, in_button_t *changed) {
     if (!(raw & S2_BTN_C)) return false;
-    bool gl = raw & S2_BTN_GL, gr = raw & S2_BTN_GR;
-    if (gl == gr) return false;   // neither, or both (ambiguous)
-    in_button_t back = gl ? IN_GL : IN_GR;
+    // Exactly one of them held (none, or several: ambiguous).
+    int held = 0;
+    in_button_t back = IN_GL;
+    for (size_t k = 0; k < sizeof REMAP_BACK / sizeof REMAP_BACK[0]; k++) {
+        if (raw & IN_BITS[REMAP_BACK[k]]) {
+            held++;
+            back = REMAP_BACK[k];
+        }
+    }
+    if (held != 1) return false;
     uint32_t pressed = raw & ~prev;
     for (int i = 0; i < IN_COUNT; i++) {
         // Home stays out: C + Home is the configuration Wi-Fi hotkey.
-        if (i == IN_GL || i == IN_GR || i == IN_C || i == IN_HOME) continue;
+        if ((IN_BITS[i] & REMAP_BACK_BITS) || i == IN_C || i == IN_HOME) continue;
         if (!(pressed & IN_BITS[i])) continue;
         uint8_t target = map[i];
         map[back] = map[back] == target ? 0 : target;   // 0: OUT_NONE / GP_NONE
