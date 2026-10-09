@@ -1455,8 +1455,11 @@ void s2c_on_input_enabled(uint8_t link, bool ok) {
     set_state(k, S2_LINK_READY);
     power_start(k);
     if (links_ready() == S2T_LINKS) s_pair_complete = true;
-    // The pairing window stays open for the other half of a Joy-Con 2 pair.
-    if (s_pair_open && !(pid_is_joycon(k->pid) && links_ready() < S2T_LINKS)) {
+    // A controller paired: the pairing window closes (the other half of a
+    // Joy-Con 2 pair is paired with the window opened again). One that only
+    // reconnected closes it unless it is a Joy-Con 2 still waiting for its
+    // other half.
+    if (s_pair_open && (k->need_pairing || !(pid_is_joycon(k->pid) && links_ready() < S2T_LINKS))) {
         s_pair_open = false;
         LOG("s2: pairing window closed (controller connected)");
     }

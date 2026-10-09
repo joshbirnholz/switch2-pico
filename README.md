@@ -118,8 +118,8 @@ again.
 ### Joy-Con 2
 
 Pair each Joy-Con 2 like any controller (hold its Sync button), one after the
-other: the first stays connected while the pairing window is open again for
-the second (on the Pico, a Joy-Con 2 kept this way is only let go if another
+other: the pairing window closes once the first is paired, and the first
+stays connected while the window is opened again for the second (on the Pico, a Joy-Con 2 kept this way is only let go if another
 kind of controller shows up in pairing mode). Only one
 controller connects at a time, with one exception: a **Joy-Con 2 (L)** and a
 **Joy-Con 2 (R)** connect together. Once one Joy-Con 2 is connected, the
@@ -174,7 +174,8 @@ the USB ID belongs to the whole device.
 **Pairing only on request (Pico, on by default).** The Pico ignores
 controllers in pairing mode unless its pairing window is open: a short
 BOOTSEL press or **Controller → Pair a controller** opens it for 60 seconds
-(press again to close it); a connected controller is let go meanwhile. So
+or until a controller is paired (press again to close it); a connected
+controller is let go meanwhile. So
 pairing your controller with a Switch 2 or a PC nearby doesn't get it grabbed
 by the dongle. Turn it off under **Controller** to pair any time (the nRF52840
 has no button and always works that way).
