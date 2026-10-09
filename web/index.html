@@ -24,6 +24,7 @@ header.top{position:sticky;top:0;z-index:20;background:var(--card);border-bottom
 .chip.ok::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--ok)}
 .chip.warn{color:var(--warn);font-weight:600}
 .savebox{display:flex;align-items:center;gap:12px}
+.warn-note{color:var(--warn);font-weight:500}
 #dirty-note{font-size:13px;color:var(--muted)}
 #dirty-note.dirty{color:var(--warn);font-weight:500}
 nav.sections{display:flex;gap:4px}
@@ -305,6 +306,7 @@ body.offline #usb-help{display:flex}
         <label class="check"><input type="checkbox" id="pf-mouse-invx"><span>Invert left / right</span></label>
         <label class="check"><input type="checkbox" id="pf-mouse-invy"><span>Invert up / down</span></label>
         <label class="check"><input type="checkbox" id="pf-mouse-swap"><span>Swap the two directions</span></label>
+        <p class="note warn-note" id="mouse-linux" style="grid-column:1/-1" hidden>On Linux the mouse doesn't work with this emulated controller: the kernel's driver for it also claims the mouse. Use <b>Xbox 360 Controller</b> (or GameCube adapter) for profiles with the mouse.</p>
         <p class="note" style="grid-column:1/-1">The dongle adds a USB mouse next to the controller. Buttons and stick used by the mouse aren't sent to the controller. Turning the mouse on or off restarts the dongle; some consoles may not accept the extra device.</p>
       </div>
     </section>
@@ -724,7 +726,10 @@ function stashProfile(){
 }
 // The mouse's options apply once it is on; its buttons are that Joy-Con's.
 function mouseFields(){
-  const src=+$('pf-mouse').value,l=src===2;
+  const src=+$('pf-mouse').value,l=src===2,P=prof();
+  // Switch Pro / DualSense modes: Linux's hid-nintendo / hid-playstation
+  // claim every interface of the device, the mouse's too.
+  $('mouse-linux').hidden=!(src&&P&&P.mode<=2);
   $('pf-mouse-buttons-label').textContent=l?'L clicks, ZL right-clicks, stick click middle-clicks':'R clicks, ZR right-clicks, stick click middle-clicks';
   document.querySelectorAll('[data-panel="mouse"] input').forEach(e=>e.disabled=!src);
 }

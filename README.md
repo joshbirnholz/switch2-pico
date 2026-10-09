@@ -155,6 +155,13 @@ direction of each axis can be set (the sensor's axes haven't been checked
 on hardware yet). The mouse is a second USB device next to the controller,
 so turning it on or off restarts the dongle; some consoles may not accept it.
 
+**Mouse on Linux:** use **Xbox 360 Controller** (or GameCube adapter) as the
+profile's emulated controller. In the Switch Pro and DualSense modes the
+kernel's driver for that controller (`hid-nintendo`, `hid-playstation`)
+claims every interface of the device, the mouse's too, fails on it, and the
+mouse gets no driver; the dongle can't avoid that, as the USB ID belongs to
+the whole device. The Mouse tab warns about it.
+
 **Pairing only on request (Pico, on by default).** The Pico ignores
 controllers in pairing mode unless its pairing window is open: a short
 BOOTSEL press or **Controller → Pair a controller** opens it for 60 seconds
