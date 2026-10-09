@@ -399,7 +399,7 @@ static void mouse_one(int i, mouse_state_t *m, float dt) {
         if (s2_link_side_input(MOUSE_PID[i], &side, &cal)) {
             const uint16_t *raw = i == 0 ? side.stick_l : side.stick_r;
             float x = s2_stick_axis(&cal, 0, raw[0]), y = s2_stick_axis(&cal, 1, raw[1]);
-            float v = fabsf(y) >= fabsf(x) ? y : -x;
+            float v = fabsf(y) >= fabsf(x) ? y : x;
             if (v > MOUSE_SCROLL_DEAD || v < -MOUSE_SCROLL_DEAD) m->acc_wheel += v * MOUSE_SCROLL_HZ * dt;
         }
     } else {
