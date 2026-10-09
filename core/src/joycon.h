@@ -64,8 +64,9 @@ void joycon_mouse_buttons(ctrl_type_t type, bool left, joycon_mouse_buttons_t *o
 // Scrolling from the mouse Joy-Con's stick (`left`: an (L)), its axes
 // -1..1 as s2_stick_axis() gives them. The stronger direction counts: up /
 // down scroll up / down (`wheel`, up positive); left / right scroll sideways
-// (`pan`), or with `up_down_only` up (left) / down (right).
-void joycon_mouse_scroll(bool left, float x, float y, bool up_down_only, float *wheel, float *pan);
+// (`pan`), or with MOUSE_FLAG_SCROLL_UP_DOWN_ONLY up (left) / down (right);
+// MOUSE_FLAG_INVERT_* turn either the other way.
+void joycon_mouse_scroll(bool left, float x, float y, uint8_t flags, float *wheel, float *pan);
 
 // Scale a movement by the profile's speed. The result is in hundredths of a
 // count (the caller keeps the remainder).

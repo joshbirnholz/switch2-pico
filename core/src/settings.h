@@ -132,6 +132,10 @@ typedef enum {
 // down and its left / right sideways; on: left / right scroll up / down too
 // (as on a Switch 2).
 #define MOUSE_FLAG_SCROLL_UP_DOWN_ONLY 0x01
+// The stick's up / down, or its left / right, scroll the other way.
+#define MOUSE_FLAG_INVERT_UP_DOWN      0x02
+#define MOUSE_FLAG_INVERT_LEFT_RIGHT   0x04
+#define MOUSE_FLAGS_ALL                0x07
 
 // Profiles: a USB mode with a button map and the options that go with it.
 // Each controller type has one per shortcut button (p[] is indexed by

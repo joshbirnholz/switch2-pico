@@ -931,16 +931,23 @@ static void test_joycon(void) {
     // Scrolling: the stronger direction; left / right sideways (the (R)'s
     // horizontal axis runs the other way), or up / down with the option.
     float wv, pv;
-    joycon_mouse_scroll(true, 0.2f, 0.9f, false, &wv, &pv);
+    joycon_mouse_scroll(true, 0.2f, 0.9f, 0, &wv, &pv);
     CHECK(wv == 0.9f && pv == 0.0f);
-    joycon_mouse_scroll(true, 0.8f, 0.1f, false, &wv, &pv);
+    joycon_mouse_scroll(true, 0.8f, 0.1f, 0, &wv, &pv);
     CHECK(wv == 0.0f && pv == -0.8f);
-    joycon_mouse_scroll(false, 0.8f, 0.1f, false, &wv, &pv);
+    joycon_mouse_scroll(false, 0.8f, 0.1f, 0, &wv, &pv);
     CHECK(wv == 0.0f && pv == 0.8f);
-    joycon_mouse_scroll(true, -0.8f, 0.1f, true, &wv, &pv);   // (L) left: up
+    joycon_mouse_scroll(true, -0.8f, 0.1f, MOUSE_FLAG_SCROLL_UP_DOWN_ONLY, &wv, &pv);   // (L) left: up
     CHECK(wv == 0.8f && pv == 0.0f);
-    joycon_mouse_scroll(false, 0.8f, 0.1f, true, &wv, &pv);   // (R) left: up
+    joycon_mouse_scroll(false, 0.8f, 0.1f, MOUSE_FLAG_SCROLL_UP_DOWN_ONLY, &wv, &pv);   // (R) left: up
     CHECK(wv == 0.8f && pv == 0.0f);
+    // Inverted: each direction on its own.
+    joycon_mouse_scroll(true, 0.2f, 0.9f, MOUSE_FLAG_INVERT_UP_DOWN, &wv, &pv);
+    CHECK(wv == -0.9f && pv == 0.0f);
+    joycon_mouse_scroll(true, 0.8f, 0.1f, MOUSE_FLAG_INVERT_UP_DOWN | MOUSE_FLAG_INVERT_LEFT_RIGHT, &wv, &pv);
+    CHECK(wv == 0.0f && pv == 0.8f);
+    joycon_mouse_scroll(false, 0.8f, 0.1f, MOUSE_FLAG_SCROLL_UP_DOWN_ONLY | MOUSE_FLAG_INVERT_LEFT_RIGHT, &wv, &pv);
+    CHECK(wv == -0.8f && pv == 0.0f);
 
     // Mouse buttons and wheel: that Joy-Con's shoulder, trigger, stick click
     // and stick (a single one's stick is the left stick).
@@ -1000,9 +1007,9 @@ static void test_joycon_profiles(void) {
     settings_default_profiles(CTRL_JOYCON_L, &c);
     c.p[0].mouse_src = 2;
     c.p[0].mouse_speed_pct = 0;
-    c.p[0].mouse_flags = 0x0F;
+    c.p[0].mouse_flags = 0x0F;   // bit 3: none
     settings_sanitize_profiles(CTRL_JOYCON_L, &c);
-    CHECK(c.p[0].mouse_src == MOUSE_ON && c.p[0].mouse_speed_pct == 100 && c.p[0].mouse_flags == MOUSE_FLAG_SCROLL_UP_DOWN_ONLY);
+    CHECK(c.p[0].mouse_src == MOUSE_ON && c.p[0].mouse_speed_pct == 100 && c.p[0].mouse_flags == MOUSE_FLAGS_ALL);
     // ... and only used when the profile emulates an Xbox 360 controller.
     CHECK(!settings_profile_mouse(&c.p[0], CTRL_JOYCON_L));
     c.p[0].usb_mode = USB_MODE_XBOX360;

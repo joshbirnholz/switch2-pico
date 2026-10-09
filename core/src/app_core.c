@@ -398,9 +398,8 @@ static void mouse_one(int i, mouse_state_t *m, float dt) {
         if (s2_link_side_input(MOUSE_PID[i], &side, &cal)) {
             const uint16_t *raw = i == 0 ? side.stick_l : side.stick_r;
             float x = s2_stick_axis(&cal, 0, raw[0]), y = s2_stick_axis(&cal, 1, raw[1]);
-            bool up_down = settings_active(&g_settings, t)->mouse_flags & MOUSE_FLAG_SCROLL_UP_DOWN_ONLY;
             float wv, pv;
-            joycon_mouse_scroll(i == 0, x, y, up_down, &wv, &pv);
+            joycon_mouse_scroll(i == 0, x, y, settings_active(&g_settings, t)->mouse_flags, &wv, &pv);
             if (fabsf(wv) > MOUSE_SCROLL_DEAD) m->acc_wheel += wv * MOUSE_SCROLL_HZ * dt;
             if (fabsf(pv) > MOUSE_SCROLL_DEAD) m->acc_pan += pv * MOUSE_SCROLL_HZ * dt;
         }

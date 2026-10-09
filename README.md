@@ -161,8 +161,9 @@ two mice, the (L)'s and the (R)'s; the sensor reports how far the surface
 is). Its shoulder button clicks, its trigger right-clicks, its stick click
 middle-clicks and its stick scrolls: up / down scroll up / down, and left /
 right scroll sideways (with **Scroll sideways with left / right** off, left
-scrolls up and right down, as on a Switch 2); picked up, they are the
-controller's again. Turning Mouse Mode on or off
+scrolls up and right down, as on a Switch 2; **Invert up / down scrolling**
+and **Invert left / right scrolling** turn either the other way); picked up,
+they are the controller's again. Turning Mouse Mode on or off
 restarts the dongle.
 
 **Xbox 360 mode only.** Mouse Mode works only in profiles that emulate an
