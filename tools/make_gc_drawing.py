@@ -109,7 +109,7 @@ svg.append(t("A", A[0], A[1], 28))
 svg.append(t("B", B[0], B[1], 18))
 svg.append(t("Y", YK[0][0], YK[0][1], 15))
 svg.append(t("X", XK[0][0], XK[0][1], 15))
-svg.append(t("START/PAUSE", START[0], START[1] + 22, 8.5, 0.03))
+svg.append(t("START/PAUSE", START[0], START[1] - 22, 8.5, 0.03))
 # Sticks: the moving caps; the C-stick's carries its "C".
 svg.append(f'<circle class="dot" id="dot-l" cx="{f(LS[0])}" cy="{f(LS[1])}" r="{f(LS[2]*0.75)}"/>')
 svg.append(f'<g id="dot-r"><circle class="dot" cx="{f(CS[0])}" cy="{f(CS[1])}" r="{f(CS[2]*0.85)}"/>'
