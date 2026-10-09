@@ -72,6 +72,7 @@ typedef struct link {
     s2_input_t input;
     uint32_t input_seq;
     s2_stick_cal_t cal_l, cal_r;
+    bool cal_l_read, cal_r_read;   // the controller had a calibration there
     uint8_t gc_trigger_neutral[2];
     float gyro_lsb_per_dps;
     s2_link_info_t info;
@@ -883,14 +884,20 @@ static void init_step_cb(link_t *k, bool ok, const s2_response_t *rsp, uint32_t 
         if (s2_parse_memory_read(rsp, S2_ADDR_FACTORY_STICK_L, 0x40, &payload)) {
             s2_stick_cal_t c;
             s2_parse_stick_cal(payload + 0x28, &c);
-            if (c.valid) k->cal_l = c;
+            if (c.valid) {
+                k->cal_l = c;
+                k->cal_l_read = true;
+            }
         }
         break;
     case ST_READ_CAL_R:
         if (s2_parse_memory_read(rsp, S2_ADDR_FACTORY_STICK_R, 0x40, &payload)) {
             s2_stick_cal_t c;
             s2_parse_stick_cal(payload + 0x28, &c);
-            if (c.valid) k->cal_r = c;
+            if (c.valid) {
+                k->cal_r = c;
+                k->cal_r_read = true;
+            }
         }
         break;
     case ST_READ_USER_L:
@@ -898,7 +905,10 @@ static void init_step_cb(link_t *k, bool ok, const s2_response_t *rsp, uint32_t 
             payload[1] == 0xa1) {
             s2_stick_cal_t c;
             s2_parse_stick_cal(payload + 2, &c);
-            if (c.valid) k->cal_l = c;
+            if (c.valid) {
+                k->cal_l = c;
+                k->cal_l_read = true;
+            }
         }
         break;
     case ST_READ_USER_R:
@@ -906,7 +916,10 @@ static void init_step_cb(link_t *k, bool ok, const s2_response_t *rsp, uint32_t 
             payload[1] == 0xa1) {
             s2_stick_cal_t c;
             s2_parse_stick_cal(payload + 2, &c);
-            if (c.valid) k->cal_r = c;
+            if (c.valid) {
+                k->cal_r = c;
+                k->cal_r_read = true;
+            }
         }
         LOG("s2: stick cal L c=%u,%u +%u,%u -%u,%u  R c=%u,%u +%u,%u -%u,%u", k->cal_l.center[0],
             k->cal_l.center[1], k->cal_l.max[0], k->cal_l.max[1], k->cal_l.min[0], k->cal_l.min[1],
@@ -1016,33 +1029,18 @@ static void init_run(link_t *k) {
             init_submit(k, S2_CMD_FEATURE, S2_SUB_FEATURE_SET_MASK, d, sizeof d);
             return;
         }
+        // Both sticks' calibration, also on a Joy-Con 2 (which has one stick
+        // and may keep its calibration in either place; see after_init()).
         case ST_READ_CAL_L:
-            // A Joy-Con 2 (R) has only the right stick, an (L) only the left.
-            if (k->pid == S2_PID_JOYCON2_R) {
-                k->init_step = ST_READ_CAL_R;
-                continue;
-            }
             init_submit_read(k, S2_ADDR_FACTORY_STICK_L, 0x40);
             return;
         case ST_READ_CAL_R:
-            if (k->pid == S2_PID_JOYCON2_L) {
-                k->init_step++;
-                continue;
-            }
             init_submit_read(k, S2_ADDR_FACTORY_STICK_R, 0x40);
             return;
         case ST_READ_USER_L:
-            if (k->pid == S2_PID_JOYCON2_R) {
-                k->init_step++;
-                continue;
-            }
             init_submit_read(k, S2_ADDR_USER_STICK_L, 0x40);
             return;
         case ST_READ_USER_R:
-            if (k->pid == S2_PID_JOYCON2_L) {
-                k->init_step++;
-                continue;
-            }
             init_submit_read(k, S2_ADDR_USER_STICK_R, 0x40);
             return;
         case ST_READ_GC_TRIGGERS:
@@ -1081,6 +1079,17 @@ static void phase(link_t *k, link_phase_t p) {
 }
 
 static void after_init(link_t *k) {
+    // A Joy-Con 2's one stick: the calibration found, wherever it was (an
+    // (R) was seen with nothing at the right stick's address).
+    if (k->pid == S2_PID_JOYCON2_R && !k->cal_r_read && k->cal_l_read) {
+        k->cal_r = k->cal_l;
+        LOG("s2: link %u stick calibration from the left stick's place", k->idx);
+    } else if (k->pid == S2_PID_JOYCON2_L && !k->cal_l_read && k->cal_r_read) {
+        k->cal_l = k->cal_r;
+        LOG("s2: link %u stick calibration from the right stick's place", k->idx);
+    } else if (pid_is_joycon(k->pid) && !k->cal_l_read && !k->cal_r_read) {
+        LOG("s2: link %u has no stick calibration: using defaults", k->idx);
+    }
     // (The console also writes 0x85 0x00 to an undocumented "report rate"
     // descriptor; the working Linux implementation doesn't, so neither do we.)
     phase(k, PH_INPUT_ENABLE);
