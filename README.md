@@ -146,7 +146,7 @@ GameCube Controller).
   Pro Controller's. A single Joy-Con 2 has no shortcut: its profiles are
   numbered 1–8, and the one in use is chosen on the configuration page.
 
-**Mouse.** On the Joy-Con 2 tabs, a profile's **Mouse** tab turns one Joy-Con
+**Mouse.** On the Joy-Con 2 tabs, a profile's **Mouse** tab (Mouse Mode) turns one Joy-Con
 2 (either side of a pair, or the single one) into a USB mouse: lay it on its
 side on a surface and move it. Its shoulder button clicks, its trigger
 right-clicks, its stick click middle-clicks, and its stick scrolls (each
@@ -155,12 +155,13 @@ direction of each axis can be set (the sensor's axes haven't been checked
 on hardware yet). The mouse is a second USB device next to the controller,
 so turning it on or off restarts the dongle; some consoles may not accept it.
 
-**Mouse on Linux:** use **Xbox 360 Controller** (or GameCube adapter) as the
-profile's emulated controller. In the Switch Pro and DualSense modes the
-kernel's driver for that controller (`hid-nintendo`, `hid-playstation`)
-claims every interface of the device, the mouse's too, fails on it, and the
-mouse gets no driver; the dongle can't avoid that, as the USB ID belongs to
-the whole device. The Mouse tab warns about it.
+**Xbox 360 mode only.** Mouse Mode works only in profiles that emulate an
+Xbox 360 controller; elsewhere the setting is kept but does nothing (and the
+Joy-Con's buttons all stay the controller's). In the Switch Pro and
+DualSense modes, Linux's driver for that controller (`hid-nintendo`,
+`hid-playstation`) claims every interface of the device, the mouse's too,
+fails on it, and the mouse gets no driver; the dongle can't avoid that, as
+the USB ID belongs to the whole device.
 
 **Pairing only on request (Pico, on by default).** The Pico ignores
 controllers in pairing mode unless its pairing window is open: a short

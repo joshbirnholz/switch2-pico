@@ -318,7 +318,7 @@ static void neutral_input(s2_input_t *in) {
 static const profile_t *mouse_profile(joycon_mouse_buttons_t *mb) {
     ctrl_type_t t = mapping_ctrl_type(s2_link_mapping_ctx());
     const profile_t *p = settings_active(&g_settings, t);
-    if (!usb_mode_has_mouse() || !joycon_mouse_buttons(t, p->mouse_src, mb)) return NULL;
+    if (!usb_mode_has_mouse() || !settings_profile_mouse(p, t) || !joycon_mouse_buttons(t, p->mouse_src, mb)) return NULL;
     return p;
 }
 

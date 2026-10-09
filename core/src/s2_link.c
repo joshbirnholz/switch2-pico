@@ -757,8 +757,9 @@ static void led_task(link_t *k) {
 
 static uint8_t features_wanted(const link_t *k) {
     uint8_t f = FEATURE_FLAGS;
-    if (pid_is_joycon(k->pid) && ctrl_is_joycon(s_type)) {
-        uint8_t src = settings_active(&g_settings, s_type)->mouse_src;
+    const profile_t *p = settings_active(&g_settings, s_type);
+    if (pid_is_joycon(k->pid) && settings_profile_mouse(p, s_type)) {
+        uint8_t src = p->mouse_src;
         if ((src == MOUSE_JOYCON_L && k->pid == S2_PID_JOYCON2_L) ||
             (src == MOUSE_JOYCON_R && k->pid == S2_PID_JOYCON2_R)) {
             f |= S2_FEATURE_MOUSE;

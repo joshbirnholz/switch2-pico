@@ -325,9 +325,12 @@ static inline ctrl_type_t settings_boot_ctrl(const settings_t *s) {
 static inline uint8_t settings_boot_usb_mode(const settings_t *s) {
     return settings_active(s, settings_boot_ctrl(s))->usb_mode;
 }
-// Whether a profile adds the USB mouse (only Joy-Con 2 types have one).
+// Whether a profile adds the USB mouse: Joy-Con 2 types, emulating an Xbox
+// 360 controller only (in the Switch Pro and DualSense modes, Linux's
+// drivers for those controllers claim the mouse interface too and it gets
+// no driver). Otherwise the mouse setting is kept but does nothing.
 static inline bool settings_profile_mouse(const profile_t *p, ctrl_type_t t) {
-    return ctrl_is_joycon(t) && p->mouse_src != MOUSE_OFF;
+    return ctrl_is_joycon(t) && p->mouse_src != MOUSE_OFF && p->usb_mode == USB_MODE_XBOX360;
 }
 // ... for the profile the dongle starts with (the USB descriptors follow it).
 static inline bool settings_boot_mouse(const settings_t *s) {

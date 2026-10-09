@@ -297,6 +297,7 @@ body.offline #usb-help{display:flex}
         <p class="note" style="grid-column:1/-1">Try it under Tools → Haptics test.</p>
       </div>
       <div class="panel fields" data-panel="mouse" hidden>
+        <p class="note warn-note" id="mouse-x360" style="grid-column:1/-1" hidden>Mouse Mode is only available for emulated Xbox 360 controllers.</p>
         <label>Mouse <span class="hint">Lay the Joy-Con 2 on its side and move it like a mouse</span>
           <select id="pf-mouse" onchange="mouseFields()"><option value="0">Off</option><option value="1">Joy-Con 2 (R)</option><option value="2">Joy-Con 2 (L)</option></select></label>
         <label>Speed
@@ -306,7 +307,6 @@ body.offline #usb-help{display:flex}
         <label class="check"><input type="checkbox" id="pf-mouse-invx"><span>Invert left / right</span></label>
         <label class="check"><input type="checkbox" id="pf-mouse-invy"><span>Invert up / down</span></label>
         <label class="check"><input type="checkbox" id="pf-mouse-swap"><span>Swap the two directions</span></label>
-        <p class="note warn-note" id="mouse-linux" style="grid-column:1/-1" hidden>On Linux the mouse doesn't work with this emulated controller: the kernel's driver for it also claims the mouse. Use <b>Xbox 360 Controller</b> (or GameCube adapter) for profiles with the mouse.</p>
         <p class="note" style="grid-column:1/-1">The dongle adds a USB mouse next to the controller. Buttons and stick used by the mouse aren't sent to the controller. Turning the mouse on or off restarts the dongle; some consoles may not accept the extra device.</p>
       </div>
     </section>
@@ -726,10 +726,12 @@ function stashProfile(){
 }
 // The mouse's options apply once it is on; its buttons are that Joy-Con's.
 function mouseFields(){
-  const src=+$('pf-mouse').value,l=src===2,P=prof();
-  // Switch Pro / DualSense modes: Linux's hid-nintendo / hid-playstation
-  // claim every interface of the device, the mouse's too.
-  $('mouse-linux').hidden=!(src&&P&&P.mode<=2);
+  const P=prof(),x360=!!P&&P.mode===3;
+  // Xbox 360 mode only: in the other modes Linux's controller drivers claim
+  // the mouse interface too (the firmware ignores the setting there).
+  $('mouse-x360').hidden=x360;
+  $('pf-mouse').disabled=!x360;
+  const src=x360?+$('pf-mouse').value:0,l=+$('pf-mouse').value===2;
   $('pf-mouse-buttons-label').textContent=l?'L clicks, ZL right-clicks, stick click middle-clicks':'R clicks, ZR right-clicks, stick click middle-clicks';
   document.querySelectorAll('[data-panel="mouse"] input').forEach(e=>e.disabled=!src);
 }
@@ -927,7 +929,7 @@ function render(){
 }
 // The profile the dongle runs with: the one in use for the controller type
 // that connected last (its USB mode, and the mouse on Joy-Con 2 types).
-function bootOf(S){const t=S.last_ctrl||0,T=S.types[t],P=T.profiles[T.active]||{};return {mode:P.mode,mouse:t>=2&&P.mouse?1:0}}
+function bootOf(S){const t=S.last_ctrl||0,T=S.types[t],P=T.profiles[T.active]||{};return {mode:P.mode,mouse:t>=2&&P.mouse&&P.mode===3?1:0}}
 function detachNote(){$('usb-detach-note').hidden=!$('usb-detach').checked}
 async function loadSettings(){S=(await api('/api/settings')).json();render()}
 async function save(){

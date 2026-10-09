@@ -974,6 +974,9 @@ static void test_joycon_profiles(void) {
     c.p[0].mouse_speed_pct = 0;
     settings_sanitize_profiles(CTRL_JOYCON_L, &c);
     CHECK(c.p[0].mouse_src == MOUSE_JOYCON_L && c.p[0].mouse_speed_pct == 100);
+    // ... and only used when the profile emulates an Xbox 360 controller.
+    CHECK(!settings_profile_mouse(&c.p[0], CTRL_JOYCON_L));
+    c.p[0].usb_mode = USB_MODE_XBOX360;
     CHECK(settings_profile_mouse(&c.p[0], CTRL_JOYCON_L));
     settings_default_profiles(CTRL_PRO, &c);
     c.p[MODE_SLOT_Y].mouse_src = MOUSE_JOYCON_R;
