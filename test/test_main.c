@@ -633,6 +633,17 @@ static void test_battery(void) {
     // No reading (0 mV) is ignored.
     battery_update(&b, 0, 0x20, t);
     CHECK(b.pct == 100);
+    // The controller's own level replaces the estimate.
+    battery_reset(&b);
+    t = feed_battery(&b, 0, 8000, 3660, 3660, 0, 0);
+    battery_set_level(&b, 8, false, false);
+    CHECK(b.pct == 88 && !b.charging && !b.full);
+    t = feed_battery(&b, t, t + 120000, 3500, 3500, 0, 0);
+    CHECK(b.pct == 88);
+    battery_set_level(&b, 7, true, true);
+    CHECK(b.pct == 77 && b.charging && !b.full);
+    battery_set_level(&b, 9, true, false);
+    CHECK(b.pct == 100 && b.full);
 }
 
 static void test_gc_adapter(void) {

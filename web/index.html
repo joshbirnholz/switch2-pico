@@ -569,7 +569,7 @@ async function poll(){
     const su=$('st-usb');su.textContent=s.usb.mounted?(s.usb.report_mode?'USB streaming':'USB connected'):'USB not connected';su.className='pill '+(s.usb.mounted?'ok':'');
     kv($('ctrl'),[
       ['Type',PIDS[L.pid]||(L.pid?('0x'+L.pid.toString(16)):'—')],['Serial',L.serial||'—'],['Address',ready?L.addr:'—'],
-      ['Battery',L.battery_mv?`${L.battery_pct}%${L.charging?' (charging)':''} · ${(L.battery_mv/1000).toFixed(2)} V · charge state 0x${(L.charge_state||0).toString(16).padStart(2,'0')}`:'—'],
+      ['Battery',L.battery_mv?`${L.battery_pct}%${L.charging?' (charging)':''} · `+(L.power_level>=0?`controller level ${L.power_level}/9 · `:'estimated from voltage · ')+`${(L.battery_mv/1000).toFixed(2)} V · charge state 0x${(L.charge_state||0).toString(16).padStart(2,'0')}`:'—'],
       ['Report rate',ready?L.report_hz+' Hz ('+L.conn_interval_ms+' ms interval)':'—'],
       ['Gyro scale',['not detected','16.4','14.3'][L.gyro_range]||'—'],
       ['Dongle power',s.supply?`USB ${(s.supply.vbus/1000).toFixed(2)} V (lowest ${(s.supply.vbus_min/1000).toFixed(2)}), chip ${(s.supply.vdd/1000).toFixed(2)} V (lowest ${(s.supply.vdd_min/1000).toFixed(2)})`:'—'],

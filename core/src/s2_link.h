@@ -41,6 +41,8 @@ typedef struct {
     uint32_t reports;
     uint32_t rumble_packets;
     bool gyro_cal_busy;
+    int8_t power_level;         // controller's own battery level 0..9 (-1: unknown)
+    uint8_t power_info;         // raw Power Info byte
 } s2_link_info_t;
 
 void s2_link_init(void);

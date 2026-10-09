@@ -46,6 +46,11 @@ bool s2t_has_char(s2t_char_t ch);
 // Enable notifications on the input report characteristic; completes with
 // s2c_on_input_enabled().
 void s2t_enable_input(void);
+// Read the controller's Power Info byte: subscribe to its controller-specific
+// input report (S2_UUID_INPUT_PRO / _GC), take the first one, unsubscribe.
+// Completes with s2c_on_power_info(). False when that report doesn't exist
+// or the GATT channel is busy (try again later).
+bool s2t_poll_power(void);
 void s2t_local_address(uint8_t out[6]);     // big-endian
 uint16_t s2t_mtu(void);
 
@@ -60,6 +65,7 @@ void s2c_on_gatt_ready(bool ok, const char *error);
 void s2c_on_command_response(const uint8_t *data, uint16_t len);
 void s2c_on_input_report(const uint8_t *data, uint16_t len);
 void s2c_on_input_enabled(bool ok);
+void s2c_on_power_info(bool ok, uint8_t info);
 void s2c_on_conn_interval(uint16_t conn_interval);
 void s2c_on_disconnected(uint8_t reason);
 

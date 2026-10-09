@@ -188,6 +188,11 @@ static void battery_log(void) {
     if (!platform_time_reached(next)) return;
     next = platform_deadline_ms(60000);
     const battery_t *b = &g_battery;
+    if (b->has_level) {
+        LOG("battery: controller level %u/9 -> %u%%%s (%u mV, state 0x%02x)", b->level, b->pct,
+            b->full ? " full" : b->charging ? " charging" : "", b->last_mv, b->last_state);
+        return;
+    }
     LOG("battery: %u mV now (last window %u-%u), estimate %u mV, state 0x%02x, %u%%%s", b->last_mv, b->win_min,
         b->win_max, (unsigned)(b->mv + 0.5f), b->last_state, b->pct,
         b->full ? " full" : b->charging ? " charging" : "");

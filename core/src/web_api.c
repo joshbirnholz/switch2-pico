@@ -121,11 +121,11 @@ static void api_status(http_response_t *r) {
     jb_printf(&j,
               ",\"battery_mv\":%u,\"battery_pct\":%u,\"charging\":%s,\"charge_state\":%u,\"report_hz\":%.0f,\"conn_interval_ms\":%.2f,"
               "\"mtu\":%u,\"paired_now\":%s,\"pairing_ok\":%s,\"gyro_range\":%u,\"rssi\":%d,"
-              "\"reports\":%lu,\"rumble_packets\":%lu,\"gyro_cal_busy\":%s}",
+              "\"reports\":%lu,\"rumble_packets\":%lu,\"gyro_cal_busy\":%s,\"power_level\":%d}",
               li.battery_mv, battery_percent(), battery_charging() ? "true" : "false", li.charge_state, (double)li.report_rate_hz, li.conn_interval * 1.25, li.mtu,
               li.paired_this_session ? "true" : "false", li.pairing_ok ? "true" : "false",
               li.gyro_range_detected, li.last_rssi, (unsigned long)li.reports,
-              (unsigned long)li.rumble_packets, li.gyro_cal_busy ? "true" : "false");
+              (unsigned long)li.rumble_packets, li.gyro_cal_busy ? "true" : "false", li.power_level);
 
     addr_str(a, g_settings.ctrl_addr);
     jb_printf(&j, ",\"bond\":{\"bonded\":%s,\"addr\":\"%s\",\"pid\":%u,\"max\":%d,\"list\":[", g_settings.bonded ? "true" : "false", a,

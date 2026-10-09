@@ -33,6 +33,11 @@ extern const uint8_t S2_UUID_CMD_WRITE[16];        // 649d4ac9-... command outpu
 extern const uint8_t S2_UUID_CMD_RESPONSE[16];     // c765a961-... command response
 extern const uint8_t S2_UUID_VIB_PRO[16];          // cc483f51-...-b05 Pro Controller 2 rumble
 extern const uint8_t S2_UUID_VIB_GC[16];           // 3f8fb670-... GameCube rumble
+// Controller-specific input reports (0x09 Pro Controller 2, 0x0A GameCube);
+// byte 1 is Power Info: bit 0 external power, bit 1 charging, bits 2-5 the
+// controller's own battery level 0-9.
+extern const uint8_t S2_UUID_INPUT_PRO[16];        // 7492866c-...-0f8
+extern const uint8_t S2_UUID_INPUT_GC[16];         // 8261cba1-...-d8e4d
 extern const uint8_t S2_UUID_VIB_JOYCON_L[16];
 extern const uint8_t S2_UUID_VIB_JOYCON_R[16];
 extern const uint8_t S2_UUID_REPORT_RATE_DESC[16]; // 679d5510-... "set report rate?" descriptor

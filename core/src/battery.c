@@ -75,10 +75,21 @@ static void window_done(battery_t *b, uint16_t high, uint32_t now) {
     }
 }
 
+void battery_set_level(battery_t *b, uint8_t level, bool external_power, bool charging) {
+    if (level > 9) level = 9;
+    b->has_level = true;
+    b->level = level;
+    b->pct = (uint8_t)(level * 100 / 9);
+    b->charging = external_power;
+    b->full = external_power && !charging;
+    if (b->full) b->pct = 100;
+}
+
 void battery_update(battery_t *b, uint16_t mv, uint8_t state, uint32_t now) {
     b->last_state = state;
     if (mv < 2500 || mv > 5000) return;   // no reading
     b->last_mv = mv;
+    if (b->has_level) return;   // the controller's own level is better
 
     // Charger flag, debounced. A change steps the voltage (CHARGE_OFFSET):
     // start over with a new settling period.

@@ -6,6 +6,7 @@
 #include "btstack.h"
 
 #include "log.h"
+#include "platform.h"
 #include "s2_proto.h"
 #include "s2_transport.h"
 
@@ -21,6 +22,9 @@ typedef enum {
     GP_CMD_CCCD,
     GP_IDLE,
     GP_INPUT_CCCD,
+    GP_POWER_ON,      // subscribing to the controller-specific report
+    GP_POWER_WAIT,    // ... waiting for one
+    GP_POWER_OFF,     // ... unsubscribing
 } gatt_phase_t;
 
 static btstack_packet_callback_registration_t s_hci_cb;
@@ -33,6 +37,12 @@ static bool s_have_service;
 static gatt_client_characteristic_t s_ch_input, s_ch_cmd, s_ch_cmd_rsp, s_ch_vib;
 static bool s_have_input, s_have_cmd, s_have_cmd_rsp, s_have_vib;
 static gatt_client_notification_t s_notif_input, s_notif_cmd;
+// Controller-specific input report, read now and then for its Power Info byte.
+static gatt_client_characteristic_t s_ch_power;
+static bool s_have_power, s_power_got;
+static uint8_t s_power_info;
+static uint32_t s_power_deadline;
+static gatt_client_notification_t s_notif_power;
 
 // Commands go out as ATT Write Requests when the characteristic allows it
 // (the controller ignores Write Commands there). BTstack runs one request at a
@@ -53,12 +63,13 @@ static void reset_gatt(void) {
     if (s_con != HCI_CON_HANDLE_INVALID) {
         gatt_client_stop_listening_for_characteristic_value_updates(&s_notif_input);
         gatt_client_stop_listening_for_characteristic_value_updates(&s_notif_cmd);
+        gatt_client_stop_listening_for_characteristic_value_updates(&s_notif_power);
     }
     s_con = HCI_CON_HANDLE_INVALID;
     s_phase = GP_NONE;
     s_req_pending = false;
     s_input_cccd_wanted = false;
-    s_have_service = s_have_input = s_have_cmd = s_have_cmd_rsp = s_have_vib = false;
+    s_have_service = s_have_input = s_have_cmd = s_have_cmd_rsp = s_have_vib = s_have_power = false;
 }
 
 // Enable notifications by writing the CCCD with a Write Request at
@@ -67,10 +78,21 @@ static void reset_gatt(void) {
 // first looks the CCCD up with a Read By Type request, which the controller
 // never answers, so the write never happened.
 static uint8_t s_cccd_value[2] = {0x01, 0x00};   // notifications on
+static uint8_t s_cccd_off[2] = {0x00, 0x00};
 
 static uint8_t write_cccd(gatt_client_characteristic_t *c) {
     return gatt_client_write_value_of_characteristic(gatt_handler, s_con, (uint16_t)(c->value_handle + 1),
                                                      sizeof s_cccd_value, s_cccd_value);
+}
+
+static void power_unsubscribe(void) {
+    s_phase = GP_POWER_OFF;
+    if (gatt_client_write_value_of_characteristic(gatt_handler, s_con, (uint16_t)(s_ch_power.value_handle + 1),
+                                                  sizeof s_cccd_off, s_cccd_off) != ERROR_CODE_SUCCESS) {
+        s_phase = GP_IDLE;
+        gatt_client_stop_listening_for_characteristic_value_updates(&s_notif_power);
+        s2c_on_power_info(s_power_got, s_power_info);
+    }
 }
 
 static void gatt_fail(const char *why) {
@@ -89,6 +111,13 @@ static void gatt_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet,
         const uint8_t *v = gatt_event_notification_get_value(packet);
         uint16_t len = gatt_event_notification_get_value_length(packet);
         if (s_have_input && h == s_ch_input.value_handle) s2c_on_input_report(v, len);
+        else if (s_have_power && h == s_ch_power.value_handle) {
+            if (s_phase == GP_POWER_WAIT && len >= 2 && !s_power_got) {
+                s_power_got = true;
+                s_power_info = v[1];
+                power_unsubscribe();
+            }
+        }
         else if (s_have_cmd_rsp && h == s_ch_cmd_rsp.value_handle) s2c_on_command_response(v, len);
         return;
     }
@@ -106,6 +135,7 @@ static void gatt_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet,
         else if (uuid_eq(c.uuid128, S2_UUID_CMD_RESPONSE)) { s_ch_cmd_rsp = c; s_have_cmd_rsp = true; }
         else if (uuid_eq(c.uuid128, S2_UUID_VIB_PRO) || uuid_eq(c.uuid128, S2_UUID_VIB_JOYCON_L) ||
                  uuid_eq(c.uuid128, S2_UUID_VIB_JOYCON_R) || uuid_eq(c.uuid128, S2_UUID_VIB_GC)) { s_ch_vib = c; s_have_vib = true; }
+        else if (uuid_eq(c.uuid128, S2_UUID_INPUT_PRO) || uuid_eq(c.uuid128, S2_UUID_INPUT_GC)) { s_ch_power = c; s_have_power = true; }
         break;
     }
     case GATT_EVENT_QUERY_COMPLETE: {
@@ -154,6 +184,21 @@ static void gatt_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet,
         case GP_INPUT_CCCD:
             s_phase = GP_IDLE;
             s2c_on_input_enabled(status == ATT_ERROR_SUCCESS);
+            break;
+        case GP_POWER_ON:
+            if (status != ATT_ERROR_SUCCESS) {
+                s_phase = GP_IDLE;
+                gatt_client_stop_listening_for_characteristic_value_updates(&s_notif_power);
+                s2c_on_power_info(false, 0);
+                break;
+            }
+            s_phase = GP_POWER_WAIT;   // s2t_task() gives up after a second
+            s_power_deadline = platform_deadline_ms(1000);
+            break;
+        case GP_POWER_OFF:
+            s_phase = GP_IDLE;
+            gatt_client_stop_listening_for_characteristic_value_updates(&s_notif_power);
+            s2c_on_power_info(s_power_got, s_power_info);
             break;
         default:
             break;
@@ -246,6 +291,20 @@ void s2t_init(void) {
 
 void s2t_task(void) {
     // BTstack runs from cyw43_arch_poll() in the main loop.
+    if (s_phase == GP_POWER_WAIT && platform_time_reached(s_power_deadline)) power_unsubscribe();
+}
+
+bool s2t_poll_power(void) {
+    if (s_con == HCI_CON_HANDLE_INVALID || !s_have_power || s_phase != GP_IDLE || s_req_pending) return false;
+    s_power_got = false;
+    s_phase = GP_POWER_ON;
+    gatt_client_listen_for_characteristic_value_updates(&s_notif_power, gatt_handler, s_con, &s_ch_power);
+    if (write_cccd(&s_ch_power) != ERROR_CODE_SUCCESS) {
+        gatt_client_stop_listening_for_characteristic_value_updates(&s_notif_power);
+        s_phase = GP_IDLE;
+        return false;
+    }
+    return true;
 }
 
 bool s2t_ready(void) {

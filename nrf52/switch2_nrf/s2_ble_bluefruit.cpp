@@ -41,6 +41,7 @@ enum ev_type_t : uint8_t {
     EV_INPUT_ENABLED,
     EV_DISCONNECTED,
     EV_WRITE_FAILED,
+    EV_POWER,
 };
 
 #define EV_DATA_MAX 128
@@ -88,7 +89,7 @@ static void post_data(ev_type_t t, const uint8_t *data, uint16_t len) {
 // GATT objects. Bluefruit wants UUIDs least-significant byte first.
 // ---------------------------------------------------------------------------
 static uint8_t s_uuid_svc[16], s_uuid_input[16], s_uuid_cmd[16], s_uuid_rsp[16], s_uuid_vib_pro[16],
-    s_uuid_vib_jl[16], s_uuid_vib_jr[16], s_uuid_vib_gc[16];
+    s_uuid_vib_jl[16], s_uuid_vib_jr[16], s_uuid_vib_gc[16], s_uuid_in_pro[16], s_uuid_in_gc[16];
 
 static void reverse_uuid(uint8_t out[16], const uint8_t in[16]) {
     for (int i = 0; i < 16; i++) out[i] = in[15 - i];
@@ -98,6 +99,8 @@ static BLEClientService *s_svc;
 static BLEClientCharacteristic *s_ch_input, *s_ch_cmd, *s_ch_rsp, *s_ch_vib_pro, *s_ch_vib_jl, *s_ch_vib_jr,
     *s_ch_vib_gc;
 static BLEClientCharacteristic *s_ch_vib;   // whichever rumble characteristic exists
+// Controller-specific input report, read now and then for its Power Info byte.
+static BLEClientCharacteristic *s_ch_in_pro, *s_ch_in_gc, *s_ch_power;
 
 // One outstanding ATT Write Request per link (SoftDevice rule). Used for CCCD
 // writes from the Bluefruit task and, if the command characteristic only
@@ -175,6 +178,16 @@ static void input_notify_cb(BLEClientCharacteristic *chr, uint8_t *data, uint16_
     taskEXIT_CRITICAL();
 }
 
+static volatile bool s_power_got;
+static volatile uint8_t s_power_info;
+
+static void power_notify_cb(BLEClientCharacteristic *chr, uint8_t *data, uint16_t len) {
+    (void)chr;
+    if (len < 2 || s_power_got) return;
+    s_power_info = data[1];
+    s_power_got = true;
+}
+
 static void rsp_notify_cb(BLEClientCharacteristic *chr, uint8_t *data, uint16_t len) {
     (void)chr;
     post_data(EV_CMD_RSP, data, len);
@@ -234,8 +247,9 @@ static void connect_cb(uint16_t conn) {
         post_simple(EV_GATT_READY, 0, 0, "Switch 2 HID service not found");
         return;
     }
-    Bluefruit.Discovery.discoverCharacteristic(conn, *s_ch_input, *s_ch_cmd, *s_ch_rsp, *s_ch_vib_pro, *s_ch_vib_jl,
-                                               *s_ch_vib_jr, *s_ch_vib_gc);
+    BLEClientCharacteristic *chars[] = {s_ch_input, s_ch_cmd,    s_ch_rsp,    s_ch_vib_pro, s_ch_vib_jl,
+                                        s_ch_vib_jr, s_ch_vib_gc, s_ch_in_pro, s_ch_in_gc};
+    Bluefruit.Discovery.discoverCharacteristic(conn, chars, sizeof chars / sizeof chars[0]);
     if (!s_ch_input->discovered() || !s_ch_cmd->discovered() || !s_ch_rsp->discovered()) {
         post_simple(EV_GATT_READY, 0, 0, "required characteristics missing");
         return;
@@ -245,6 +259,7 @@ static void connect_cb(uint16_t conn) {
              : s_ch_vib_jr->discovered()  ? s_ch_vib_jr
              : s_ch_vib_gc->discovered()  ? s_ch_vib_gc
                                           : nullptr;
+    s_ch_power = s_ch_in_pro->discovered() ? s_ch_in_pro : s_ch_in_gc->discovered() ? s_ch_in_gc : nullptr;
     s_cmd_use_req = (s_ch_cmd->properties() & 0x08) != 0;   // "write" property
     // The CCCD directly follows the value attribute on these controllers.
     uint16_t st;
@@ -295,7 +310,27 @@ static void disconnect_cb(uint16_t conn, uint8_t reason) {
     s_conn = BLE_CONN_HANDLE_INVALID;
     s_connecting = false;
     s_ch_vib = nullptr;
+    s_ch_power = nullptr;
     post_simple(EV_DISCONNECTED, 0, reason);
+}
+
+// Subscribe to the controller-specific report, take one, unsubscribe.
+static void power_worker(void) {
+    uint16_t conn = s_conn, st = 0;
+    BLEClientCharacteristic *ch = s_ch_power;
+    if (conn == BLE_CONN_HANDLE_INVALID || !ch) {
+        post_simple(EV_POWER, 0);
+        return;
+    }
+    uint16_t cccd = ch->valueHandle() + 1;
+    s_power_got = false;
+    bool ok = write_cccd(conn, cccd, 0x0001, &st);
+    if (ok) {
+        uint32_t t0 = millis();
+        while (!s_power_got && millis() - t0 < 1000 && s_conn == conn) delay(2);
+    }
+    if (s_conn == conn) write_cccd(conn, cccd, 0x0000, &st);
+    post_simple(EV_POWER, ok && s_power_got, s_power_info);
 }
 
 static void enable_input_worker(void) {
@@ -321,6 +356,8 @@ void s2t_init(void) {
     reverse_uuid(s_uuid_vib_jl, S2_UUID_VIB_JOYCON_L);
     reverse_uuid(s_uuid_vib_jr, S2_UUID_VIB_JOYCON_R);
     reverse_uuid(s_uuid_vib_gc, S2_UUID_VIB_GC);
+    reverse_uuid(s_uuid_in_pro, S2_UUID_INPUT_PRO);
+    reverse_uuid(s_uuid_in_gc, S2_UUID_INPUT_GC);
     s_svc = new BLEClientService(BLEUuid(s_uuid_svc));
     s_ch_input = new BLEClientCharacteristic(BLEUuid(s_uuid_input));
     s_ch_cmd = new BLEClientCharacteristic(BLEUuid(s_uuid_cmd));
@@ -329,6 +366,8 @@ void s2t_init(void) {
     s_ch_vib_jl = new BLEClientCharacteristic(BLEUuid(s_uuid_vib_jl));
     s_ch_vib_jr = new BLEClientCharacteristic(BLEUuid(s_uuid_vib_jr));
     s_ch_vib_gc = new BLEClientCharacteristic(BLEUuid(s_uuid_vib_gc));
+    s_ch_in_pro = new BLEClientCharacteristic(BLEUuid(s_uuid_in_pro));
+    s_ch_in_gc = new BLEClientCharacteristic(BLEUuid(s_uuid_in_gc));
 
     // Large MTU and event length for the connection to the controller.
     Bluefruit.configCentralBandwidth(BANDWIDTH_MAX);
@@ -360,6 +399,10 @@ void s2t_init(void) {
     s_ch_vib_jl->begin(s_svc);
     s_ch_vib_jr->begin(s_svc);
     s_ch_vib_gc->begin(s_svc);
+    s_ch_in_pro->setNotifyCallback(power_notify_cb, false);
+    s_ch_in_pro->begin(s_svc);
+    s_ch_in_gc->setNotifyCallback(power_notify_cb, false);
+    s_ch_in_gc->begin(s_svc);
 
     Bluefruit.setEventCallback(ble_event_cb);
     Bluefruit.Central.setConnectCallback(connect_cb);
@@ -413,6 +456,7 @@ void s2t_task(void) {
         case EV_CMD_RSP: s2c_on_command_response(e.data, e.len); break;
         case EV_INPUT: break;
         case EV_INPUT_ENABLED: s2c_on_input_enabled(e.ok); break;
+        case EV_POWER: s2c_on_power_info(e.ok, (uint8_t)e.value); break;
         case EV_DISCONNECTED: s2c_on_disconnected((uint8_t)e.value); break;
         }
     }
@@ -521,6 +565,12 @@ void s2t_enable_input(void) {
     // enableNotify() blocks until the controller answers; run it in
     // Bluefruit's callback task instead of the loop.
     ada_callback(NULL, 0, enable_input_worker);
+}
+
+bool s2t_poll_power(void) {
+    if (s_conn == BLE_CONN_HANDLE_INVALID || !s_ch_power || s_cccd_busy) return false;
+    ada_callback(NULL, 0, power_worker);
+    return true;
 }
 
 void s2t_local_address(uint8_t out[6]) {

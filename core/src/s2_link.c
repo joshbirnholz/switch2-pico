@@ -8,7 +8,10 @@
 #include "platform.h"
 #include "s2_transport.h"
 #include "app.h"
+#include "battery.h"
 #include "settings.h"
+
+static void power_start(void);
 
 // ---------------------------------------------------------------------------
 // Tunables
@@ -1079,6 +1082,7 @@ void s2c_on_input_enabled(bool ok) {
     s_rate_window = platform_deadline_ms(1000);
     s_rate_count = 0;
     set_state(S2_LINK_READY);
+    power_start();
     // Normally done before connecting; after pairing, this may restart into
     // the controller type's mode (the controller then reconnects).
     app_controller_type(mapping_ctrl_type(&s_map));
@@ -1123,6 +1127,76 @@ void s2_link_init(void) {
     s2t_init();
 }
 
+// ---------------------------------------------------------------------------
+// Controller's own battery level. Report 0x05 (the one we use) only has the
+// battery voltage, which doesn't map well to a level; the controller-specific
+// report has the level the console shows (Power Info). Subscribing to it
+// for good would double the radio traffic, so it is read once right after
+// connecting and then once a minute: subscribe, take one report, unsubscribe.
+// If input reports stop meanwhile, or it keeps failing, polling stops for
+// this connection and the voltage estimate (battery.c) stays.
+// ---------------------------------------------------------------------------
+#define POWER_FIRST_MS  3000
+#define POWER_EVERY_MS  60000
+#define POWER_CHECK_MS  500
+
+static bool s_power_off, s_power_busy, s_power_check;
+static uint8_t s_power_fails;
+static uint32_t s_power_next, s_power_check_at, s_power_reports;
+
+static void power_start(void) {
+    s_power_off = s_power_busy = s_power_check = false;
+    s_power_fails = 0;
+    s_power_next = platform_deadline_ms(POWER_FIRST_MS);
+    s_info.power_level = -1;
+    s_info.power_info = 0;
+}
+
+static void power_give_up(const char *why) {
+    s_power_off = true;
+    LOG("s2: controller battery level unavailable (%s): using the voltage estimate", why);
+}
+
+static void power_task(void) {
+    if (s_power_check && platform_time_reached(s_power_check_at)) {
+        // Input reports must still be arriving after the poll.
+        s_power_check = false;
+        if (s_info.reports == s_power_reports) {
+            power_give_up("input reports stopped");
+            s2t_enable_input();
+        }
+    }
+    if (s_power_off || s_power_busy || !platform_time_reached(s_power_next)) return;
+    if (!s2t_poll_power()) {
+        s_power_next = platform_deadline_ms(5000);
+        if (++s_power_fails >= 5) power_give_up("no such report");
+        return;
+    }
+    s_power_busy = true;
+}
+
+void s2c_on_power_info(bool ok, uint8_t info) {
+    if (!s_power_busy) return;
+    s_power_busy = false;
+    s_power_next = platform_deadline_ms(POWER_EVERY_MS);
+    s_power_check = true;
+    s_power_check_at = platform_deadline_ms(POWER_CHECK_MS);
+    s_power_reports = s_info.reports;
+    if (!ok) {
+        if (++s_power_fails >= 3) power_give_up("no answer");
+        return;
+    }
+    s_power_fails = 0;
+    int8_t level = (int8_t)((info >> 2) & 0x0F);
+    if (level != s_info.power_level || info != s_info.power_info) {
+        LOG("s2: controller battery level %d/9%s%s (power info 0x%02x)", level, info & 1 ? ", external power" : "",
+            info & 2 ? ", charging" : "", info);
+    }
+    s_info.power_level = level;
+    s_info.power_info = info;
+    battery_set_level(&g_battery, (uint8_t)level, (info & 1) != 0, (info & 2) != 0);
+}
+
 void s2_link_task(void) {
     s2t_task();
 
@@ -1162,6 +1236,7 @@ void s2_link_task(void) {
     if (s_state == S2_LINK_READY) {
         led_task();
         rumble_task();
+        power_task();
     }
 }
 

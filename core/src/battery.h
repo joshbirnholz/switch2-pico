@@ -37,6 +37,8 @@ typedef struct {
     bool full;            // on external power and charged
     uint16_t last_mv;     // last raw reading
     uint8_t last_state;   // last raw charge state
+    bool has_level;       // the controller reported its own level (preferred)
+    uint8_t level;        // ... 0..9
 } battery_t;
 
 // Typical lithium-ion level for a resting cell voltage, 0..100.
@@ -45,6 +47,10 @@ uint8_t battery_mv_to_percent(uint16_t mv);
 void battery_reset(battery_t *b);
 // Feed every report: raw voltage and charge state byte.
 void battery_update(battery_t *b, uint16_t mv, uint8_t charge_state, uint32_t now_ms);
+
+// The controller's own level (Power Info: 0..9, external power, charging).
+// Once given, it replaces the voltage estimate until battery_reset().
+void battery_set_level(battery_t *b, uint8_t level, bool external_power, bool charging);
 
 // Shared instance fed by app_core.c; 100 / not charging until data arrives.
 extern battery_t g_battery;
