@@ -370,6 +370,14 @@ static void mouse_task(void) {
         acc_x = acc_y = 0;
         acc_wheel = 0.0f;
     }
+    // Not sent yet (endpoint busy, host asleep): never more than a few reports' worth.
+    const int32_t lim = 4 * 127 * 100;
+    if (acc_x > lim) acc_x = lim;
+    if (acc_x < -lim) acc_x = -lim;
+    if (acc_y > lim) acc_y = lim;
+    if (acc_y < -lim) acc_y = -lim;
+    if (acc_wheel > 127.0f) acc_wheel = 127.0f;
+    if (acc_wheel < -127.0f) acc_wheel = -127.0f;
     int32_t x = acc_x / 100, y = acc_y / 100, w = (int32_t)acc_wheel;
     if (x > 127) x = 127;
     if (x < -127) x = -127;
@@ -551,7 +559,8 @@ static void maintenance_task(void) {
 }
 
 void app_core_init(void) {
-    LOG("usb: mode %s", usb_mode_name(usb_mode_active()));
+    // Latch what the USB descriptors are made of before anything can change it.
+    LOG("usb: mode %s%s", usb_mode_name(usb_mode_active()), usb_mode_has_mouse() ? " with the mouse" : "");
     mode_select_init(&s_msel);
     battery_reset(&g_battery);
     procon_init();

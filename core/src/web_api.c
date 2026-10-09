@@ -328,16 +328,27 @@ static bool parse_profile(const char *v, profile_t *p) {
     p->rumble_enabled = num[5];
     p->rumble_strength_pct = num[6];
     memcpy(p->map, num + 7, IN_COUNT);
-    if (*v == 'm') {
-        // Mouse fields (marked, so an older page's name never reads as them).
-        v++;
-        uint8_t mo[3];
-        for (size_t k = 0; k < sizeof mo; k++) {
-            long n = strtol(v, &end, 10);
-            if (end == v || *end != ',') return false;
-            mo[k] = (uint8_t)(n < 0 ? 0 : n > 255 ? 255 : n);
-            v = end + 1;
+    // Mouse fields: "m<n>,<n>,<n>," exactly (an older page's name such as
+    // "mario" is still a name).
+    uint8_t mo[3];
+    const char *w = v;
+    bool group = *w == 'm';
+    if (group) w++;
+    for (size_t k = 0; group && k < sizeof mo; k++) {
+        if (!isdigit((unsigned char)*w)) {
+            group = false;
+            break;
         }
+        long n = strtol(w, &end, 10);
+        if (*end != ',') {
+            group = false;
+            break;
+        }
+        mo[k] = (uint8_t)(n > 255 ? 255 : n);
+        w = end + 1;
+    }
+    if (group) {
+        v = w;
         p->mouse_src = mo[0];
         p->mouse_speed_pct = mo[1];
         p->mouse_flags = mo[2];

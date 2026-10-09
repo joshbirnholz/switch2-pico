@@ -237,7 +237,9 @@ static void scan_cb(ble_gap_evt_adv_report_t *report) {
         if (d[i + 1] == 0xFF && l >= 3 && d[i + 2] == 0x53 && d[i + 3] == 0x05) nintendo = true;
         i = (uint16_t)(i + 1 + l);
     }
-    if (nintendo) {
+    // Adverts are the only events that can flood the queue: keep room for
+    // the ones that must not be lost (connections, power polls).
+    if (nintendo && uxQueueSpacesAvailable(s_queue) > 8) {
         ev_t e;
         memset(&e, 0, offsetof(ev_t, data));
         e.type = EV_ADV;
@@ -558,6 +560,9 @@ bool s2t_connect(uint8_t l, const uint8_t addr[6], uint8_t addr_type) {
     a.addr_type = addr_type;
     for (int i = 0; i < 6; i++) a.addr[i] = addr[5 - i];
     Bluefruit.Scanner.stop();
+    // The connection attempt uses the scan timing: full duty for it, even
+    // when scanning for the other Joy-Con 2 ran at low duty.
+    Bluefruit.Scanner.setInterval(96, 96);
     s_connect_link = l;
     if (!Bluefruit.Central.connect(&a)) {
         s_connect_link = -1;

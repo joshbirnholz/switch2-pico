@@ -494,6 +494,8 @@ where it stopped. Please include it in bug reports.
   2 (L) together with a Joy-Con 2 (R).
 * A single sideways Joy-Con 2's motion isn't turned to match how it's held.
 * No drawing of the Joy-Con 2 on the configuration page yet.
+* Going back to firmware older than 0.10.0 resets the settings (pairings
+  included): the older firmware doesn't read the larger settings.
 * The Switch 1 report carries three IMU samples per report. The controller
   provides one per BLE report, so the latest sample is repeated.
 * The connection interval requested is 7.5 ms (the Bluetooth minimum). The

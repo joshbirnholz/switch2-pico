@@ -108,7 +108,7 @@ typedef struct link {
     // Controller's own battery level
     bool power_off, power_busy, power_check;
     uint8_t power_fails;
-    uint32_t power_next, power_check_at, power_reports;
+    uint32_t power_next, power_check_at, power_reports, power_busy_until;
 
     // Joy-Con 2 optical sensor
     joycon_mouse_track_t mouse;
@@ -135,6 +135,7 @@ static uint32_t s_unbonded_log;
 static bool s_sleep_quiet;
 static uint32_t s_seen_hook_next;
 static int8_t s_last_rssi;
+static s2_link_info_t s_last_info;     // the last controller's, once none is connected
 
 // The controller as the rest of the firmware sees it.
 static s2_input_t s_merged;
@@ -1340,18 +1341,34 @@ static link_t *link_at(uint8_t link) {
     return link < S2T_LINKS ? &s_links[link] : NULL;
 }
 
+// A second Joy-Con 2 didn't make it: the first carries on as it was (and
+// the dongle starts as that next time, not as the pair).
+static void revert_type(void) {
+    set_type(s_type_before);
+    if (g_settings.last_ctrl != s_type_before) {
+        g_settings.last_ctrl = (uint8_t)s_type_before;
+        settings_save_later();
+    }
+}
+
 // A connection attempt ended without a link.
 static void connect_ended(link_t *k) {
     bool second = links_used() > 1;
     reset_link(k);
     if (s_connecting == k->idx) s_connecting = -1;
-    if (second) set_type(s_type_before);   // the first one carries on as before
+    if (second) revert_type();
     update_scan();
 }
 
 void s2c_on_link_up(uint8_t link, uint16_t conn_interval) {
     link_t *k = link_at(link);
-    if (!k || k->state != S2_LINK_CONNECTING) return;
+    if (!k || k->state != S2_LINK_CONNECTING) {
+        // A connection that completed after we gave up on it (timeout,
+        // pause, pairing window): let it go, or it would hold a link.
+        LOG("s2: link %u connected after it was given up: disconnecting", link);
+        s2t_disconnect(link);
+        return;
+    }
     s_connecting = -1;
     k->connected = true;
     k->info.conn_interval = conn_interval;
@@ -1439,9 +1456,10 @@ void s2c_on_disconnected(uint8_t link, uint8_t reason) {
     if (s_connecting == k->idx) s_connecting = -1;
     // A second Joy-Con 2 that never got ready: the first carries on as before.
     bool second_failed = !was_ready && links_used() > 1 && links_ready() >= 1;
+    s_last_info = k->info;
     set_state(k, S2_LINK_OFF);
     reset_link(k);
-    if (second_failed) set_type(s_type_before);
+    if (second_failed) revert_type();
     if (!links_used()) {
         s_pair_complete = false;
         s_half_since = 0;
@@ -1487,9 +1505,15 @@ static void power_task(link_t *k) {
         }
     }
     if (k->power_off || k->power_busy || !platform_time_reached(k->power_next)) return;
-    // One poll at a time across links (they share the radio).
+    // One poll at a time across links (they share the radio). A poll whose
+    // answer never came (a lost event) doesn't block the others for good.
     for (int i = 0; i < S2T_LINKS; i++) {
-        if (s_links[i].power_busy) return;
+        link_t *o = &s_links[i];
+        if (o->power_busy && platform_time_reached(o->power_busy_until)) {
+            o->power_busy = false;
+            o->power_next = platform_deadline_ms(POWER_EVERY_MS);
+        }
+        if (o->power_busy) return;
     }
     if (!s2t_poll_power(k->idx)) {
         k->power_next = platform_deadline_ms(5000);
@@ -1497,6 +1521,7 @@ static void power_task(link_t *k) {
         return;
     }
     k->power_busy = true;
+    k->power_busy_until = platform_deadline_ms(5000);
 }
 
 // The battery shown is the lower one of a Joy-Con 2 pair.
@@ -1602,6 +1627,7 @@ void s2_link_init(void) {
         reset_link(&s_links[i]);
     }
     s_type = settings_boot_ctrl(&g_settings);
+    s_last_info.power_level = -1;
     refresh_merged();
     s2t_init();
 }
@@ -1700,8 +1726,10 @@ void s2_link_get_info(s2_link_info_t *out) {
     if (k) {
         fill_info(k, out);
     } else {
-        memset(out, 0, sizeof *out);
+        // Nothing connected: the last controller's details, as before.
+        *out = s_last_info;
         out->power_level = -1;
+        out->report_rate_hz = 0;
         out->last_rssi = s_last_rssi;
     }
     out->state = s2_link_state();

@@ -260,6 +260,13 @@ static void hci_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, 
         break;
     }
     case HCI_EVENT_META_GAP:
+        if (hci_event_gap_meta_get_subevent_code(packet) == GAP_SUBEVENT_LE_CONNECTION_COMPLETE && s_connecting < 0) {
+            // Completed after the attempt was cancelled: nobody owns it.
+            if (gap_subevent_le_connection_complete_get_status(packet) == ERROR_CODE_SUCCESS) {
+                gap_disconnect(gap_subevent_le_connection_complete_get_connection_handle(packet));
+            }
+            break;
+        }
         if (hci_event_gap_meta_get_subevent_code(packet) == GAP_SUBEVENT_LE_CONNECTION_COMPLETE && s_connecting >= 0) {
             uint8_t l = (uint8_t)s_connecting;
             s_connecting = -1;
