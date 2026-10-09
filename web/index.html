@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Switch2-Pico</title>
 <style>
-:root{--bg:#f3f4f6;--card:#fff;--fg:#16191d;--muted:#59616b;--line:#dee1e6;--soft:#eceef1;--field:#fff;--fieldline:#cdd1d7;--acc:#c8102e;--acc-ink:#a50d25;--ok:#1f7a3a;--ok-bg:#e7f4ea;--ok-ink:#1f6b34;--warn:#9a5b00;--on:#c8102e;--off:#c9cdd3;--seg:#e6e8ec;--danger-bg:#fceef0;--danger-ink:#6b0a19;--logbg:#16191d;--logfg:#d9dde3}
-@media (prefers-color-scheme:dark){:root{--bg:#15171a;--card:#1f2227;--fg:#e8eaed;--muted:#a0a6ad;--line:#30343a;--soft:#2a2e34;--field:#16191d;--fieldline:#3a3f46;--acc:#e0233f;--acc-ink:#ff7a8c;--ok:#3fb766;--ok-bg:#1d3324;--ok-ink:#7fd99a;--warn:#e0a54a;--off:#3a3f46;--seg:#2a2e34;--danger-bg:#3a1d22;--danger-ink:#ffb3be;--logbg:#0d0f11}}
+:root{--bg:#f3f4f6;--card:#fff;--fg:#16191d;--muted:#59616b;--line:#dee1e6;--soft:#eceef1;--field:#fff;--fieldline:#cdd1d7;--acc:#c8102e;--acc-ink:#a50d25;--ok:#1f7a3a;--ok-bg:#e7f4ea;--ok-ink:#1f6b34;--warn:#9a5b00;--on:#c8102e;--off:#c9cdd3;--seg:#e6e8ec;--danger-bg:#fceef0;--danger-ink:#6b0a19;--logbg:#16191d;--logfg:#d9dde3;--pick-bg:#fff4e0;--pick-ink:#5c3a00}
+@media (prefers-color-scheme:dark){:root{--bg:#15171a;--card:#1f2227;--fg:#e8eaed;--muted:#a0a6ad;--line:#30343a;--soft:#2a2e34;--field:#16191d;--fieldline:#3a3f46;--acc:#e0233f;--acc-ink:#ff7a8c;--ok:#3fb766;--ok-bg:#1d3324;--ok-ink:#7fd99a;--warn:#e0a54a;--off:#3a3f46;--seg:#2a2e34;--danger-bg:#3a1d22;--danger-ink:#ffb3be;--logbg:#0d0f11;--pick-bg:#3a2e14;--pick-ink:#f0c987}}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
@@ -44,19 +44,43 @@ main.wrap{padding-top:20px;padding-bottom:40px;display:flex;flex-direction:colum
 .seg .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-left:8px;vertical-align:middle}
 .seg.small button{padding:6px 12px;min-height:32px;font-size:13px}
 [data-tab].tab-hidden{display:none!important}
-/* Profiles: numbered chips, then the chosen profile's name and mode. */
-.chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.chips .lead{font-weight:600;margin-right:4px}
-.pchip{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;min-height:38px;border-radius:8px;border:1px solid var(--fieldline);background:var(--field)}
-.pchip.sel{border:2px solid var(--fg);font-weight:600;padding:5px 11px}
-.pchip.add{border-style:dashed;background:transparent;color:var(--muted)}
-.num{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;border-radius:5px;background:var(--seg);color:var(--fg);font:700 12px ui-monospace,Menlo,Consolas,monospace}
-.pchip.sel .num{background:var(--fg);color:var(--card)}
-.badge{font-size:11px;font-weight:700;padding:2px 6px;border-radius:4px;background:var(--acc);color:#fff;letter-spacing:.02em}
-.count{margin-left:auto;font-size:12px;color:var(--muted)}
-.profrow{display:flex;flex-wrap:wrap;gap:12px 16px;align-items:flex-end;padding-top:14px;margin-top:14px;border-top:1px solid var(--soft)}
-.profrow>label{flex:1 1 200px;max-width:280px}
+/* Profiles: one per button, laid out as the D-pad and face buttons. */
+.pgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}
+@media (max-width:760px){.pgrid{grid-template-columns:minmax(0,1fr)}}
+.pdia{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.ptile{display:flex;align-items:center;gap:12px;padding:10px 12px;min-height:68px;min-width:0;border-radius:10px;text-align:left;border:1px solid var(--fieldline);background:var(--field);cursor:grab;color:var(--fg)}
+.ptile.empty{border-style:dashed;background:var(--bg)}
+.ptile.sel{border:2px solid var(--fg);padding:9px 11px}
+.ptile.target{border:2px dashed var(--warn);padding:9px 11px;cursor:pointer}
+.ptile.over{border:2px dashed var(--acc);padding:9px 11px;background:var(--danger-bg)}
+.ptile.dragging{opacity:.45}
+.ptile .pico{position:relative;flex:none;width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center}
+.ptile .pico svg{display:block}
+.ptile .pcheck{position:absolute;right:-4px;bottom:-4px}
+.ptile .ptext{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.ptile .pname{font-weight:600;line-height:1.25;overflow-wrap:anywhere}
+.ptile.empty .pname{font-weight:400;color:var(--muted)}
+.ptile .pmode{font-size:12px;line-height:1.3;color:var(--muted)}
+.ptile .pmode b{color:var(--ok-ink);font-weight:600}
+/* Phones: icon above the name, whole words only; the emulated controller is
+   in the editor below, so the tile keeps just the name (and In use). */
+@media (max-width:560px){
+  .pdia{gap:6px}
+  .ptile{flex-direction:column;align-items:center;justify-content:flex-start;gap:6px;padding:8px 6px;text-align:center}
+  .ptile.sel,.ptile.target,.ptile.over{padding:7px 5px}
+  .ptile .ptext{align-items:center;width:100%}
+  .ptile .pname{font-size:13px;overflow-wrap:break-word;hyphens:auto}
+  .ptile .pemu,.ptile .psep{display:none}
+}
+.pbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 12px;border-radius:10px;background:var(--pick-bg);color:var(--pick-ink)}
+.pbar>span{flex:1 1 260px}
+.pbar.danger{background:var(--danger-bg);color:var(--danger-ink)}
+.pbar .ovr{border-color:var(--acc-ink);color:var(--acc-ink);font-weight:600}
+.profrow{display:flex;flex-wrap:wrap;gap:12px 16px;align-items:flex-end;padding-top:14px;border-top:1px solid var(--soft)}
+.profrow>label{flex:1 1 220px;max-width:300px}
 .profrow .acts{display:flex;flex-wrap:wrap;gap:8px;margin-left:auto}
+/* No profile on the chosen button: its settings are off. */
+.wide.off{opacity:.45;pointer-events:none;filter:grayscale(1)}
 /* Sub-tabs of the profile */
 .card.flush{padding:0}
 .subtabs{display:flex;gap:4px;padding:0 12px;border-bottom:1px solid var(--soft);overflow-x:auto}
@@ -201,25 +225,32 @@ body.offline #usb-help{display:flex}
 <!-- ======================= Controller ======================= -->
 <div data-page="ctrl" class="stack" style="gap:16px">
   <div class="seg" role="tablist" aria-label="Controller type">
-    <button role="tab" data-tabbtn="0" onclick="setTab(0)">Pro Controller</button>
-    <button role="tab" data-tabbtn="1" onclick="setTab(1)">GameCube controller</button>
+    <button role="tab" data-tabbtn="0" onclick="setTab(0)">Nintendo Switch 2 Pro Controller</button>
+    <button role="tab" data-tabbtn="1" onclick="setTab(1)">Nintendo GameCube Controller</button>
   </div>
 
-  <section class="card" aria-label="Profiles">
-    <div class="chips" id="prof-chips"></div>
+  <section class="card stack" aria-label="Profiles">
+    <div class="row" style="align-items:baseline;gap:6px 12px"><h2>Profiles</h2><span class="note">Hold C + Home until you hear a click, then press a button to activate its profile. Drag a profile onto another button to swap them.</span></div>
+    <div class="pbar" id="dup-bar" role="status" hidden><span>Click the button to copy <b id="dup-name"></b> to.</span><button onclick="dupCancel()">Cancel</button></div>
+    <div class="pbar danger" id="ovr-bar" role="alertdialog" aria-label="Overwrite profile" hidden><span id="ovr-text"></span><button class="ovr" onclick="dupOverwrite()">Overwrite</button><button onclick="dupCancel()">Cancel</button></div>
+    <div class="pgrid">
+      <div class="pdia" id="dia-dpad" aria-label="D-pad profiles"></div>
+      <div class="pdia" id="dia-face" aria-label="Face button profiles"></div>
+    </div>
     <div class="profrow">
+      <label>Emulated Controller<select id="pf-mode" onchange="profMode(+this.value)"><option value="-1">None</option><option value="0">Nintendo Switch Pro Controller</option><option value="1">DualSense Edge Wireless Controller</option><option value="2">DualSense Wireless Controller</option><option value="3">Xbox 360 Controller</option><option value="4">Nintendo GameCube Controller Adapter</option></select></label>
       <label>Name<input type="text" id="pf-name" maxlength="19" oninput="profName(this.value)"></label>
-      <label>Emulated Controller<select id="pf-mode" onchange="profMode(+this.value)"><option value="0">Switch Pro Controller</option><option value="1">DualSense Edge</option><option value="2">DualSense</option><option value="3">Xbox 360 controller</option><option value="4">GameCube adapter</option></select></label>
       <div class="acts">
         <button id="prof-use" onclick="profUse()">Use this profile</button>
-        <button onclick="profDup()">Duplicate</button>
-        <button class="danger" onclick="profDel()">Delete</button>
+        <button id="prof-dup" onclick="dupStart()">Duplicate…</button>
+        <button id="prof-del" class="danger" onclick="profDel()">Delete</button>
       </div>
+      <p class="note" id="prof-note" style="flex:1 1 100%" hidden></p>
     </div>
   </section>
 
   <div class="split">
-    <section class="card flush wide" aria-label="Profile settings">
+    <section class="card flush wide" id="prof-settings" aria-label="Profile settings">
       <div class="subtabs" role="tablist" aria-label="Profile settings">
         <button role="tab" data-sub="buttons" onclick="showSub('buttons')">Buttons</button>
         <button role="tab" data-sub="sticks" onclick="showSub('sticks')">Sticks &amp; triggers</button>
@@ -231,9 +262,9 @@ body.offline #usb-help{display:flex}
         <div class="panel-foot">
           <button id="preset-reset" onclick="presetIdentity()">Reset to labels</button>
           <button id="preset-swap" onclick="presetSwapFace()">Swap A/B and X/Y</button>
-          <div class="row" data-tab="0" style="margin-left:auto;gap:6px">
+          <div class="row" id="remap-row" style="margin-left:auto;gap:6px">
             <label class="check"><input type="checkbox" data-k="quick_remap">Remap GL/GR from the controller</label>
-            <span class="help"><button type="button" aria-label="About remapping GL/GR from the controller">?</button><span class="tipbox" role="tooltip">Hold <b>C + GL</b> (or GR) and press another button: GL then sends what that button sends. Do it again to clear. It changes the profile in use. Not in DualSense Edge mode, where GL/GR are paddles the host remaps.</span></span>
+            <span class="help"><button type="button" aria-label="About remapping GL/GR from the controller">?</button><span class="tipbox" role="tooltip">Hold <b>C</b> and either <b>GL</b> or <b>GR</b>, and then press another button to map it to the back buttons. Do it again to clear the mapping.</span></span>
           </div>
         </div>
       </div>
@@ -255,13 +286,8 @@ body.offline #usb-help{display:flex}
     </section>
 
     <aside class="narrow">
-      <section class="card stack" aria-label="Quick switch">
-        <h2>Quick switch</h2>
-        <p class="note">Hold <b style="color:var(--fg)">C + Home</b> until the lights blink, then press a button. A profile in the same mode switches at once; another mode restarts the dongle. Buttons set to – do nothing.</p>
-        <div class="diamonds" id="slots"></div>
-      </section>
       <section class="card stack" data-tab="0" aria-label="Motion">
-        <div><h2>Motion</h2><p class="note" style="margin-top:2px">Shared by every Pro Controller profile.</p></div>
+        <div><h2>Motion</h2><p class="note" style="margin-top:2px">Shared by every Nintendo Switch 2 Pro Controller profile.</p></div>
         <label class="kvrow">Gyro scale<select data-k="gyro_range"><option value="0">Auto-detect</option><option value="1">16.4 LSB/°/s</option><option value="2">14.3 LSB/°/s</option></select></label>
         <label class="kvrow">Gyro sensitivity<span class="slider" style="width:170px"><input type="range" min="10" max="400" data-k="gyro_scale"><b><span id="v-gyro_scale"></span>%</b></span></label>
         <label class="kvrow">Accelerometer<span class="slider" style="width:170px"><input type="range" min="10" max="400" data-k="accel_scale"><b><span id="v-accel_scale"></span>%</b></span></label>
@@ -591,14 +617,25 @@ const PAD_GROUPS={
   face:['Face buttons',[['X','X','n'],['Y','Y','w'],['A','A','e'],['B','B','s']],'diamond'],
   rs:['Right stick',[['RStick','Pressed']]],
 };
-// Profiles (S.types[t]: profiles[] (null: unused), active, slots, defaults).
-// The tab (MAP_CTRL) picks the controller type, CUR[t] the profile edited;
+// Profiles: one per button (S.types[t].profiles[i], i in BTN order as the
+// firmware's mode_slot_t; null: none), the one in use, every mode's defaults.
+// The tab (MAP_CTRL) picks the controller type, CUR[t] the button edited;
 // edits stay in S until saved, which sends every profile of both types.
 let MAP_CTRL=0;
 const CUR=[0,0];
 const TYPE=()=>S.types[MAP_CTRL];
 const prof=()=>TYPE().profiles[CUR[MAP_CTRL]];
-const MODE_NAMES=['Switch Pro Controller','DualSense Edge','DualSense','Xbox 360 controller','GameCube adapter'];
+const EMU=['Nintendo Switch Pro Controller','DualSense Edge Wireless Controller','DualSense Wireless Controller','Xbox 360 Controller','Nintendo GameCube Controller Adapter'];
+const SHORT=['Switch Pro','DualSense Edge','DualSense','Xbox 360','GameCube adapter'];
+const BTN=['A','B','X','Y','Up','Down','Left','Right'];
+const BTN_LABEL={A:'A',B:'B',X:'X',Y:'Y',Up:'D-pad up',Down:'D-pad down',Left:'D-pad left',Right:'D-pad right'};
+// Where each button's tile sits (column, row): the D-pad, and the face
+// buttons as on that controller (GameCube: Y on top, then B, A, X).
+const DPAD_POS={Up:[2,1],Left:[1,2],Right:[3,2],Down:[2,3]};
+const FACE_POS=[{X:[2,1],Y:[1,2],A:[3,2],B:[2,3]},{Y:[2,1],B:[1,2],A:[2,2],X:[3,2]}];
+const FACE_SHAPE=[{},{A:'big',B:'small',X:'kidneyV',Y:'kidneyH'}];
+// Who takes over when the profile in use is removed (as the firmware does).
+const FALLBACK=['Y','A','X','B','Up','Right','Down','Left'];
 function mapMode(){const P=prof();return {...S.modes[P.mode],map:P.map,default_map:TYPE().defaults[P.mode]}}
 function renderMap(mode){
   MAP_MODE=+mode;
@@ -612,7 +649,7 @@ function renderMap(mode){
     `<div class="col g-lsh">${cell('L','L')}${cell('ZL','ZL')}${cell('GL','GL')}</div>`+
     `<div class="cen g-cen">${[['Minus','minus'],['Plus','plus'],['Capture','cap'],['Home','home'],['C','c']].map(([n,a])=>cell(n,n,a)).join('')}</div>`+
     `<div class="col g-rsh">${cell('R','R')}${cell('ZR','ZR')}${cell('GR','GR')}</div>`+
-    `<div class="g-img">${MAP_CTRL===1?GC_SVG:PAD_SVG}<div class="mono note" id="imu" style="text-align:center;min-height:2.6em"></div></div>`;
+    `<div class="g-img">${MAP_CTRL===1?GC_SVG:PAD_SVG}</div>`;
   // Light up the drawing for the button being edited.
   m.querySelectorAll('select[data-map]').forEach(sel=>{
     const lit=on=>{const b=m.querySelector(`svg [data-b="${sel.dataset.map}"]`);if(b)b.classList.toggle('sel',on)};
@@ -633,75 +670,135 @@ function renderMap(mode){
 }
 // Editor values -> the profile in S.
 function stashMap(){
-  if(!S||!$('map').querySelector('[data-map]'))return;
+  if(!S||!prof()||!$('map').querySelector('[data-map]'))return;
   const P=prof();IN.forEach((n,i)=>P.map[i]=+$('map').querySelector(`[data-map="${n}"]`).value);
 }
 function stashProfile(){
-  if(!S)return;
+  if(!S||!prof())return;   // an empty button: the editor shows nothing of its own
   stashMap();
   const P=prof();
   P.deadzone=+$('pf-deadzone').value;P.outer=+$('pf-outer').value;P.swap=$('pf-swap').checked?1:0;
   P.threshold=+$('pf-threshold').value;P.rumble=$('pf-rumble').checked?1:0;P.strength=+$('pf-strength').value;
-  stashSlots();
 }
-function stashSlots(){
-  if(!S||!$('slots').querySelector('[data-slot]'))return;
-  const v=TYPE().slots;
-  $('slots').querySelectorAll('[data-slot]').forEach(el=>v[el.dataset.slot]=+el.value);
+// Button icons for the profile tiles.
+function btnIcon(key){
+  if(DPAD_POS[key]){
+    const f=k=>k===key?'currentColor':'var(--off)';
+    return `<svg width="34" height="34" viewBox="0 0 30 30" aria-hidden="true"><rect x="11" y="1" width="8" height="11" rx="2" fill="${f('Up')}"/><rect x="11" y="18" width="8" height="11" rx="2" fill="${f('Down')}"/><rect x="1" y="11" width="11" height="8" rx="2" fill="${f('Left')}"/><rect x="18" y="11" width="11" height="8" rx="2" fill="${f('Right')}"/><rect x="11" y="11" width="8" height="8" fill="var(--off)"/></svg>`;
+  }
+  const t=(x,y,sz)=>`<text x="${x}" y="${y}" fill="var(--card)" font-size="${sz}" font-weight="700" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif">${key}</text>`;
+  const shape=FACE_SHAPE[MAP_CTRL][key]||'circle';
+  const body={circle:'<circle cx="18" cy="18" r="16" fill="currentColor"/>'+t(18,18.5,15),
+    big:'<circle cx="18" cy="18" r="17.5" fill="currentColor"/>'+t(18,18.5,17),
+    small:'<circle cx="18" cy="18" r="12" fill="currentColor"/>'+t(18,18.5,12),
+    kidneyV:'<path d="M14 1.5 C25 0.5 29 9 28 18 C27 28.5 22 35 13 34.5 C6 34 7 26.5 10.5 18 C13 10.5 7 2.5 14 1.5 Z" fill="currentColor"/>'+t(19,18.5,14),
+    kidneyH:'<path d="M1.5 22 C0.5 12 9 8.5 18 9.5 C28.5 10.5 35.5 15 34.5 23 C34 29.5 26.5 28 18 26 C10 24 2.5 30 1.5 22 Z" fill="currentColor"/>'+t(18,18,14)}[shape];
+  return `<svg width="36" height="36" viewBox="0 0 36 36" aria-hidden="true">${body}</svg>`;
 }
-// The profile editor for the current tab and profile.
+const IN_USE_MARK='<svg class="pcheck" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7.5" fill="var(--ok)" stroke="var(--card)" stroke-width="1.5"/><path d="M4.5 8.2 L7 10.6 L11.5 5.6" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+// Duplicate…: DUP is the button copied from while the user picks a target;
+// OVR the target that already has a profile (waiting for Overwrite).
+let DUP=-1,OVR=-1,DRAG=-1,PNOTE='';
+function tileHTML(key,pos){
+  const T=TYPE(),i=BTN.indexOf(key),q=T.profiles[i],cur=CUR[MAP_CTRL];
+  const cls=['ptile',q?'':'empty',i===cur&&DUP<0?'sel':'',DUP>=0&&i!==DUP?'target':''].filter(Boolean).join(' ');
+  const inUse=q&&i===T.active;
+  return `<button class="${cls}" draggable="${q?'true':'false'}" data-i="${i}" style="grid-column:${pos[0]};grid-row:${pos[1]}"
+    aria-pressed="${i===cur}" aria-label="${BTN_LABEL[key]}: ${q?esc(q.name):'empty'}${inUse?', in use':''}">
+    <span class="pico">${btnIcon(key)}${inUse?IN_USE_MARK:''}</span>
+    <span class="ptext"><span class="pname">${q?esc(q.name):'Empty'}</span>
+    <span class="pmode">${inUse?'<b>In use<span class="psep"> · </span></b>':''}<span class="pemu">${q?EMU[q.mode]:'No profile'}</span></span></span></button>`;
+}
+// The profile editor for the current tab and button.
 function renderProfile(){
-  const T=TYPE(),P=prof(),cur=CUR[MAP_CTRL];
-  $('prof-chips').innerHTML='<span class="lead">Profiles</span>'+T.profiles.map((q,i)=>q?
-    `<button class="pchip${i===cur?' sel':''}" onclick="pickProfile(${i})"><span class="num">${i+1}</span><span>${esc(q.name)}</span>${i===T.active?'<span class="badge">IN USE</span>':''}</button>`:'').join('')+
-    (T.profiles.some(q=>!q)?'<button class="pchip add" onclick="profNew()">+ New profile</button>':'')+
-    `<span class="count">${T.profiles.filter(q=>q).length} of ${S.profile_max}</span>`;
-  $('pf-name').value=P.name;
-  $('pf-mode').value=P.mode;
-  const pu=$('prof-use');pu.disabled=cur===T.active;pu.textContent=cur===T.active?'In use':'Use this profile';
+  const T=TYPE(),cur=CUR[MAP_CTRL],P=T.profiles[cur];
+  $('dia-dpad').innerHTML=Object.entries(DPAD_POS).map(([k,pos])=>tileHTML(k,pos)).join('');
+  $('dia-face').innerHTML=Object.entries(FACE_POS[MAP_CTRL]).map(([k,pos])=>tileHTML(k,pos)).join('');
+  $('dup-bar').hidden=DUP<0||OVR>=0;
+  if(DUP>=0&&T.profiles[DUP])$('dup-name').textContent=T.profiles[DUP].name;
+  $('ovr-bar').hidden=OVR<0;
+  if(OVR>=0)$('ovr-text').textContent=`${BTN_LABEL[BTN[OVR]]} already has “${T.profiles[OVR].name}”. Overwrite it with a copy of “${T.profiles[DUP].name}”?`;
+  $('pf-mode').value=P?P.mode:-1;
+  const nm=$('pf-name');nm.value=P?P.name:'';nm.disabled=!P;
+  const pu=$('prof-use'),inUse=P&&cur===T.active;pu.disabled=!P||inUse;pu.textContent=inUse?'In use':'Use this profile';
+  $('prof-dup').disabled=!P;$('prof-del').disabled=!P;
+  const note=PNOTE||(P?'':'No profile on this button: pick an emulated controller to make one.');
+  $('prof-note').hidden=!note;$('prof-note').textContent=note;
+  $('prof-settings').classList.toggle('off',!P);
+  // GL / GR remap from the controller: only where GL / GR exist and the host
+  // doesn't remap them itself (DualSense Edge paddles).
+  $('remap-row').hidden=!(MAP_CTRL===0&&P&&P.mode!==1);
+  if(!P)return;
   const set=(id,v)=>{$(id).value=v;const l=$('v-'+id);if(l)l.textContent=v;$(id).oninput=()=>{if(l)l.textContent=$(id).value}};
   set('pf-deadzone',P.deadzone);set('pf-outer',P.outer);set('pf-threshold',P.threshold);set('pf-strength',P.strength);
   $('pf-swap').checked=!!P.swap;$('pf-rumble').checked=!!P.rumble;
   $('pf-swap-label').textContent=MAP_CTRL===1?'Swap main stick and C-stick':'Swap left and right sticks';
   renderMap(P.mode);
-  renderSlots();
 }
 function esc(t){return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
-function pickProfile(i){stashProfile();CUR[MAP_CTRL]=i;renderProfile()}
-function profUse(){stashProfile();TYPE().active=CUR[MAP_CTRL];renderProfile();setDirty(true)}
-function freeSlot(){const i=TYPE().profiles.findIndex(q=>!q);if(i<0)alert('Each controller type can have up to '+S.profile_max+' profiles.');return i}
-// The name is edited in place (chips follow as you type).
+function pickProfile(i){stashProfile();CUR[MAP_CTRL]=i;PNOTE='';renderProfile()}
+function profUse(){stashProfile();TYPE().active=CUR[MAP_CTRL];PNOTE='';renderProfile();setDirty(true)}
+// The name is edited in place (the tile follows as you type).
 function profName(v){
-  const P=prof();P.name=v.slice(0,19);setDirty(true);
-  const chip=$('prof-chips').querySelector('.pchip.sel span:nth-child(2)');if(chip)chip.textContent=P.name||' ';
+  const P=prof();if(!P)return;P.name=v.slice(0,19);setDirty(true);
+  const t=document.querySelector(`.ptile[data-i="${CUR[MAP_CTRL]}"] .pname`);if(t)t.textContent=P.name||' ';
 }
-function focusName(){const n=$('pf-name');n.focus();n.select()}
-function profNew(){
-  stashProfile();const i=freeSlot();if(i<0)return;
-  const m=prof().mode;
-  TYPE().profiles[i]={name:MODE_NAMES[m].replace(' controller',''),mode:m,deadzone:6,outer:95,swap:0,threshold:120,rumble:1,strength:100,map:TYPE().defaults[m].slice()};
-  CUR[MAP_CTRL]=i;renderProfile();setDirty(true);focusName();
+function newProfile(m){return {name:SHORT[m],mode:m,deadzone:6,outer:95,swap:0,threshold:120,rumble:1,strength:100,map:TYPE().defaults[m].slice()}}
+// Emulated Controller: None clears the button; on an empty button a mode makes
+// a profile; another mode starts the mapping over from that mode's defaults.
+function profMode(m){
+  stashProfile();const T=TYPE(),i=CUR[MAP_CTRL],P=T.profiles[i];
+  if(m<0){if(P)profDel();return}
+  if(!P){T.profiles[i]=newProfile(m);PNOTE='';renderProfile();setDirty(true);$('pf-name').focus();return}
+  if(P.mode===m)return;
+  if(!confirm('Change this profile to '+EMU[m]+'? Its button mapping starts over from that mode\'s defaults.')){$('pf-mode').value=P.mode;return}
+  P.mode=m;P.map=T.defaults[m].slice();renderProfile();setDirty(true);
 }
-function profDup(){
-  stashProfile();const i=freeSlot();if(i<0)return;
-  const P=prof();
-  TYPE().profiles[i]={...P,name:(P.name+' copy').slice(0,19),map:P.map.slice()};CUR[MAP_CTRL]=i;renderProfile();setDirty(true);focusName();
-}
+// Delete (or None): the button is empty. If it held the profile in use,
+// another takes over (the same one the firmware would pick).
 function profDel(){
   stashProfile();const T=TYPE(),i=CUR[MAP_CTRL];
-  if(i===T.active){alert('This profile is in use. Pick another one with "Use this profile" first.');return}
-  if(!confirm('Delete profile '+(i+1)+', "'+prof().name+'"?'))return;
-  T.profiles[i]=null;
-  for(const k in T.slots)if(T.slots[k]===i+1)T.slots[k]=0;
-  CUR[MAP_CTRL]=T.active;renderProfile();setDirty(true);
+  if(!T.profiles[i])return;
+  T.profiles[i]=null;PNOTE='';
+  if(T.active===i){
+    const k=FALLBACK.map(b=>BTN.indexOf(b)).find(j=>T.profiles[j]);
+    if(k!==undefined){T.active=k;PNOTE=`That was the profile in use: when you save, “${T.profiles[k].name}” on ${BTN_LABEL[BTN[k]]} takes over.`}
+  }
+  renderProfile();setDirty(true);
 }
-// Changing a profile's mode starts its mapping from that mode's defaults
-// (outputs differ between modes).
-function profMode(m){
-  stashProfile();const P=prof();if(P.mode===m)return;
-  if(!confirm('Change this profile to '+MODE_NAMES[m]+'? Its button mapping starts over from that mode\'s defaults.')){$('pf-mode').value=P.mode;return}
-  P.mode=m;P.map=TYPE().defaults[m].slice();renderProfile();setDirty(true);
+function dupStart(){if(!prof())return;stashProfile();DUP=CUR[MAP_CTRL];OVR=-1;PNOTE='';renderProfile()}
+function dupCancel(){DUP=-1;OVR=-1;renderProfile()}
+function dupTo(i){
+  const T=TYPE(),P=T.profiles[DUP];
+  T.profiles[i]={...P,name:/ copy$/.test(P.name)?P.name:(P.name+' copy').slice(0,19),map:P.map.slice()};
+  CUR[MAP_CTRL]=i;DUP=-1;OVR=-1;renderProfile();setDirty(true);$('pf-name').focus();$('pf-name').select();
 }
+function dupOverwrite(){if(DUP>=0&&OVR>=0)dupTo(OVR)}
+// Drag a profile onto another button: the two swap (an empty button: it moves).
+function swapProfiles(a,b){
+  if(a<0||b<0||a===b)return;
+  stashProfile();
+  const T=TYPE(),t=T.profiles[a];T.profiles[a]=T.profiles[b];T.profiles[b]=t;
+  if(T.active===a)T.active=b;else if(T.active===b)T.active=a;
+  CUR[MAP_CTRL]=b;PNOTE='';renderProfile();setDirty(true);
+}
+function tileClick(i){
+  if(DUP>=0){
+    if(i===DUP){dupCancel();return}
+    if(TYPE().profiles[i]){OVR=i;renderProfile();return}
+    dupTo(i);return;
+  }
+  pickProfile(i);
+}
+['dia-dpad','dia-face'].forEach(id=>{
+  const d=$(id),tile=e=>e.target.closest('.ptile');
+  d.addEventListener('click',e=>{const t=tile(e);if(t)tileClick(+t.dataset.i)});
+  d.addEventListener('dragstart',e=>{const t=tile(e);if(!t)return;DRAG=+t.dataset.i;e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',t.dataset.i);t.classList.add('dragging')});
+  d.addEventListener('dragover',e=>{const t=tile(e);if(!t||DRAG<0)return;e.preventDefault();document.querySelectorAll('.ptile.over').forEach(x=>x!==t&&x.classList.remove('over'));if(+t.dataset.i!==DRAG)t.classList.add('over')});
+  d.addEventListener('dragleave',e=>{const t=tile(e);if(t&&!t.contains(e.relatedTarget))t.classList.remove('over')});
+  d.addEventListener('drop',e=>{const t=tile(e);if(!t||DRAG<0)return;e.preventDefault();const a=DRAG;DRAG=-1;swapProfiles(a,+t.dataset.i)});
+  d.addEventListener('dragend',()=>{DRAG=-1;document.querySelectorAll('.ptile.over,.ptile.dragging').forEach(x=>x.classList.remove('over','dragging'))});
+});
 // Controller tabs: sections only for one controller type (data-tab) show / hide.
 function showTab(t){
   document.querySelectorAll('[data-tab]').forEach(e=>e.classList.toggle('tab-hidden',+e.dataset.tab!==t));
@@ -713,16 +810,7 @@ function showTab(t){
 }
 function setTab(t){
   if(!S)return;
-  stashProfile();MAP_CTRL=t;showTab(t);renderProfile();
-}
-const SLOTS=['A','B','X','Y','Up','Down','Left','Right'];
-function renderSlots(){
-  const T=TYPE();
-  // Numbered, so a profile is easy to tell apart when its name is cut off.
-  const opts='<option value="0">–</option>'+T.profiles.map((q,i)=>q?`<option value="${i+1}">${i+1} - ${esc(q.name)}</option>`:'').join('');
-  const dia=(cells)=>'<div class="diamond">'+cells.map(([n,a])=>`<label style="--a:${a}">${n}<select data-slot="${n}">${opts}</select></label>`).join('')+'</div>';
-  $('slots').innerHTML=dia([['Up','n'],['Left','w'],['Right','e'],['Down','s']])+dia([['X','n'],['Y','w'],['A','e'],['B','s']]);
-  SLOTS.forEach(n=>$('slots').querySelector(`[data-slot="${n}"]`).value=T.slots[n]||0);
+  stashProfile();DUP=-1;OVR=-1;PNOTE="";MAP_CTRL=t;showTab(t);renderProfile();
 }
 function render(){
   // A report interval the menu doesn't list (set by older firmware) still shows.
@@ -753,12 +841,11 @@ async function loadSettings(){S=(await api('/api/settings')).json();render()}
 async function save(){
   stashProfile();
   const p=new URLSearchParams();
-  // Every profile of both controller types (empty: none), the one in use and
-  // the shortcut buttons.
+  // Every profile of both controller types (one per button; empty: none) and
+  // the one in use.
   S.types.forEach((T,t)=>{
     T.profiles.forEach((P,i)=>p.append(`prof_${t}_${i}`,P?[P.mode,P.deadzone,P.outer,P.swap,P.threshold,P.rumble,P.strength,...P.map,P.name].join(','):''));
     p.append(`active_${t}`,T.active);
-    SLOTS.forEach(n=>p.append(`slot_${t}_${n}`,T.slots[n]||0));
   });
   document.querySelectorAll('[data-k]').forEach(el=>p.append(el.dataset.k,el.type==='checkbox'?(el.checked?1:0):el.value));
   const pw=$('wifi_pass').value;if(pw)p.append('wifi_pass',pw);
@@ -768,7 +855,7 @@ async function save(){
   const lt=S.last_ctrl||0,T=S.types[lt];
   if(T.profiles[T.active].mode!==S.boot_mode&&!confirm('The profile in use for the '+T.name+' has another USB mode: the dongle restarts. Continue?'))return;
   const r=await api('/api/settings',{method:'POST',body:p.toString()});
-  if(r.ok){const keep=MAP_CTRL,cur=CUR.slice();S=r.json();render();
+  if(r.ok){const keep=MAP_CTRL,cur=CUR.slice();S=r.json();PNOTE='';render();
     // Stay where the user was.
     MAP_CTRL=keep;CUR[0]=S.types[0].profiles[cur[0]]?cur[0]:S.types[0].active;CUR[1]=S.types[1].profiles[cur[1]]?cur[1]:S.types[1].active;
     showTab(MAP_CTRL);renderProfile();$('wifi_pass').value='';toast('Saved')}
@@ -779,7 +866,7 @@ function presetSwapFace(){const M=mapMode(),sw={A:'B',B:'A',X:'Y',Y:'X'};for(con
 function kv(el,rows){el.innerHTML=rows.map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join('')}
 // Stick head in the drawing, moved by the stick output (12-bit, y up).
 function stick(el,x,y){if(el)el.setAttribute('transform',`translate(${((x-2048)/2048*50).toFixed(1)} ${(-(y-2048)/2048*50).toFixed(1)})`)}
-const PIDS={8297:'Pro Controller 2',8307:'NSO GameCube Controller'};
+const PIDS={8297:'Nintendo Switch 2 Pro Controller',8307:'Nintendo GameCube Controller'};
 async function poll(){
   try{
     if(!USE_HTTP && !usbDev) return;
@@ -790,11 +877,11 @@ async function poll(){
     pbtn.title=P.required?'':(S&&S.sync_button?'Turn on "Pair only after pressing Sync" first':'Not available on this board');
     pbtn.textContent=P.open?'Stop pairing ('+Math.ceil(P.left_ms/1000)+' s)':'Pair a controller';
     const L=s.link,ready=L.state==='ready';
-    const MODES={switch_pro:'Switch Pro Controller',dualsense_edge:'DualSense Edge',dualsense:'DualSense',xbox360:'Xbox 360 controller',gc_adapter:'GameCube adapter'};
+    const MODES={switch_pro:EMU[0],dualsense_edge:EMU[1],dualsense:EMU[2],xbox360:EMU[3],gc_adapter:EMU[4]};
     const sl=$('st-link');sl.textContent=ready?(PIDS[L.pid]||'Controller')+' connected':L.state==='scanning'?(s.bond.bonded?'Waiting for controller':'Waiting for pairing'):L.state;
     sl.className='chip '+(ready?'ok':'warn');
     const sb=$('st-batt');sb.hidden=!(ready&&L.battery_mv);
-    if(!sb.hidden)sb.textContent=`${L.battery_pct}%`+(L.power_level>=0?` · level ${L.power_level}/9`:' (estimate)')+(L.charging?' · charging':'');
+    if(!sb.hidden)sb.textContent=`${L.battery_pct}%`+(L.charging?' · charging':'');
     const su=$('st-usb');su.textContent=s.usb.mounted?'USB: '+(MODES[s.usb_mode]||s.usb_mode):'USB not connected';su.className='chip'+(s.usb.mounted?'':' warn');
     kv($('ctrl'),[
       ['Type',PIDS[L.pid]||(L.pid?('0x'+L.pid.toString(16)):'—')],['Serial',L.serial||'—'],['Address',ready?L.addr:'—'],

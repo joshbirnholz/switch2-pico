@@ -124,7 +124,8 @@ static void mode_select_step(uint32_t raw) {
     uint32_t now = platform_millis();
     ctrl_type_t type = mapping_ctrl_type(s2_link_mapping_ctx());
     ctrl_profiles_t *profiles = settings_profiles(&g_settings, type);
-    const uint8_t *slots = profiles->slot;
+    uint8_t slots[MODE_SLOT_COUNT];
+    settings_profile_slots(&g_settings, type, slots);
     switch (mode_select_update(&s_msel, slots, raw, now, &chosen)) {
     case MODE_SELECT_ENTER:
         LOG("profile select: press a button with a profile (C + Home again to leave)");
@@ -239,7 +240,8 @@ static uint32_t host_buttons(uint32_t raw) {
     // C + Home is a shortcut (mode selection; on Wi-Fi boards also the access
     // point): keep Home from the host while C is held, so holding it doesn't
     // open the host's home menu first.
-    const uint8_t *slots = settings_mode_slots(&g_settings, mapping_ctrl_type(s2_link_mapping_ctx()));
+    uint8_t slots[MODE_SLOT_COUNT];
+    settings_profile_slots(&g_settings, mapping_ctrl_type(s2_link_mapping_ctx()), slots);
     bool shortcut = mode_select_enabled(slots) || (g_settings.hotkey_enabled && platform_has_wifi());
     if (shortcut && (raw & S2_BTN_C)) raw &= ~S2_BTN_HOME;
     return raw;

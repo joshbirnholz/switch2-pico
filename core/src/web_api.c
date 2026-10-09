@@ -188,9 +188,10 @@ static void api_settings_get(http_response_t *r) {
         }
         jb_printf(&j, "]}");
     }
-    // Per controller type: its profiles (see profile_t), the active one, the
-    // shortcut buttons (profile index + 1) and every mode's default map.
-    static const char *const CTRL_NAMES[CTRL_TYPE_COUNT] = {"Pro Controller", "GameCube controller"};
+    // Per controller type: its profiles, one per button in mode_slot_t order
+    // (A, B, X, Y, Up, Down, Left, Right; null: none), the one in use and
+    // every mode's default map.
+    static const char *const CTRL_NAMES[CTRL_TYPE_COUNT] = {"Nintendo Switch 2 Pro Controller", "Nintendo GameCube Controller"};
     jb_printf(&j, "],\"ctrl_type\":%u,\"last_ctrl\":%u,\"profile_max\":%d,\"types\":[",
               mapping_ctrl_type(s2_link_mapping_ctx()), s->last_ctrl, PROFILE_MAX);
     for (int t = 0; t < CTRL_TYPE_COUNT; t++) {
@@ -222,13 +223,7 @@ static void api_settings_get(http_response_t *r) {
             for (int k = 0; k < IN_COUNT; k++) jb_printf(&j, "%s%u", k ? "," : "", d.map[k]);
             jb_printf(&j, "]");
         }
-        jb_printf(&j, "],\"slots\":{");
-        for (int i = 0; i < MODE_SLOT_COUNT; i++) {
-            jb_printf(&j, "%s", i ? "," : "");
-            jb_str(&j, mode_select_slot_name((mode_slot_t)i));
-            jb_printf(&j, ":%u", c->slot[i]);
-        }
-        jb_printf(&j, "}}");
+        jb_printf(&j, "]}");
     }
     jb_printf(&j, "]");
     jb_printf(&j, ",\"inputs\":[");
@@ -286,7 +281,8 @@ typedef struct {
 // Profile keys (controller type t, profile i, slot name n):
 //   prof_<t>_<i>=<mode>,<deadzone>,<outer>,<swap>,<threshold>,<rumble>,<strength>,<map x IN_COUNT>,<name>
 //                (empty: no profile there)
-//   active_<t>=<i>        slot_<t>_<n>=<i + 1, 0: none>
+//   active_<t>=<i>        (i: the button, mode_slot_t; a cleared profile in
+//                          use is replaced by another, see profiles.c)
 static bool parse_profile(const char *v, profile_t *p) {
     memset(p, 0, sizeof *p);
     if (!*v) return true;   // unused
@@ -321,16 +317,6 @@ static bool apply_kv(settings_t *s, const char *k, const char *v, bool *usb_reco
         if (t < 0 || t >= CTRL_TYPE_COUNT) return false;
         settings_profiles(s, (ctrl_type_t)t)->active = (uint8_t)atoi(v);
         return true;
-    }
-    if (sscanf(k, "slot_%d_%n", &t, &n) == 1 && n > 0) {
-        if (t < 0 || t >= CTRL_TYPE_COUNT) return false;
-        for (int m = 0; m < MODE_SLOT_COUNT; m++) {
-            if (strcmp(k + n, mode_select_slot_name((mode_slot_t)m)) == 0) {
-                settings_mode_slots(s, (ctrl_type_t)t)[m] = (uint8_t)atoi(v);
-                return true;
-            }
-        }
-        return false;
     }
     if (strcmp(k, "quick_remap") == 0) {
         s->quick_remap_off = atoi(v) ? 0 : 1;

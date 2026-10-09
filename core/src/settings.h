@@ -81,9 +81,9 @@ typedef enum {
     MODE_SLOT_COUNT
 } mode_slot_t;
 #define MODE_SLOT_EMPTY 0
-#define SETTINGS_EXT_REV 10  // 1: mode_map; 2: mode_slot; 3: ble_tx_power; 4: idle_*; 5: pair_button;
+#define SETTINGS_EXT_REV 11  // 1: mode_map; 2: mode_slot; 3: ble_tx_power; 4: idle_*; 5: pair_button;
                              // 6: gc_profile; 7: gc_profile sticks / rumble; 8: bonds;
-                             // 9: gc_usb_mode, last_ctrl; 10: profiles
+                             // 9: gc_usb_mode, last_ctrl; 10: profiles; 11: one profile per button
 
 // Remembered (paired) controllers. Any of them can connect, one at a time;
 // pairing one more when the list is full forgets the oldest pairing.
@@ -104,9 +104,10 @@ typedef enum {
 } ctrl_type_t;
 
 // Profiles: a USB mode with a button map and the options that go with it.
-// Each controller type has its own (up to PROFILE_MAX); one is active, and
-// the mode shortcut buttons (C + Home, then a button) pick among them.
-#define PROFILE_MAX      8
+// Each controller type has one per shortcut button (p[] is indexed by
+// mode_slot_t: A, B, X, Y, D-pad up / down / left / right); one is in use,
+// and C + Home, then a button, switches to that button's profile.
+#define PROFILE_MAX      MODE_SLOT_COUNT
 #define PROFILE_NAME_LEN 20
 typedef struct {
     uint8_t used;
@@ -124,7 +125,7 @@ typedef struct {
 
 typedef struct {
     profile_t p[PROFILE_MAX];
-    uint8_t slot[MODE_SLOT_COUNT];      // profile index + 1 per mode_slot_t (MODE_SLOT_EMPTY: none)
+    uint8_t slot[MODE_SLOT_COUNT];      // ext_rev 10 only (profile index + 1 per button); now unused
     uint8_t active;                     // profile in use
     uint8_t reserved[3];
 } ctrl_profiles_t;
@@ -264,6 +265,9 @@ void settings_default_profiles(ctrl_type_t type, ctrl_profiles_t *c);
 void settings_default_profile_for(ctrl_type_t type, usb_mode_t mode, profile_t *p);   // default name / map / options
 const char *settings_mode_profile_name(usb_mode_t mode);
 void settings_sanitize_profiles(ctrl_type_t type, ctrl_profiles_t *c);
+// ext_rev 10 -> 11: put each profile on the button(s) that selected it,
+// the others on free buttons.
+void settings_profiles_to_buttons(ctrl_profiles_t *c);
 
 static inline ctrl_profiles_t *settings_profiles(const settings_t *s, ctrl_type_t t) {
     return (ctrl_profiles_t *)&s->prof[t < CTRL_TYPE_COUNT ? t : CTRL_PRO];
@@ -276,8 +280,10 @@ static inline profile_t *settings_active(const settings_t *s, ctrl_type_t t) {
 static inline uint8_t *settings_active_map(const settings_t *s, ctrl_type_t t) {
     return settings_active(s, t)->map;
 }
-static inline uint8_t *settings_mode_slots(const settings_t *s, ctrl_type_t t) {
-    return settings_profiles(s, t)->slot;
+// The buttons with a profile, as mode_select.h takes them (index + 1, 0: none).
+static inline void settings_profile_slots(const settings_t *s, ctrl_type_t t, uint8_t out[MODE_SLOT_COUNT]) {
+    const ctrl_profiles_t *c = settings_profiles(s, t);
+    for (int i = 0; i < MODE_SLOT_COUNT; i++) out[i] = c->p[i].used ? (uint8_t)(i + 1) : MODE_SLOT_EMPTY;
 }
 // The USB mode the dongle starts in: the active profile of the controller
 // type that connected last.

@@ -37,13 +37,55 @@ void settings_default_profile_for(ctrl_type_t type, usb_mode_t mode, profile_t *
     p->rumble_strength_pct = 100;
 }
 
-// One profile per mode, in mode order, so the default shortcut buttons
-// (mode + 1) point at the profile of that mode.
+// One profile per mode, on the buttons the shortcut used before profiles:
+// Y Switch Pro, A DualSense Edge, X DualSense, B Xbox 360, D-pad up GameCube
+// adapter; the rest empty.
 void settings_default_profiles(ctrl_type_t type, ctrl_profiles_t *c) {
+    static const uint8_t BUTTON_OF_MODE[USB_MODE_COUNT] = {
+        [USB_MODE_SWITCH_PRO] = MODE_SLOT_Y, [USB_MODE_DUALSENSE_EDGE] = MODE_SLOT_A,
+        [USB_MODE_DUALSENSE] = MODE_SLOT_X,  [USB_MODE_XBOX360] = MODE_SLOT_B,
+        [USB_MODE_GC_ADAPTER] = MODE_SLOT_UP,
+    };
     memset(c, 0, sizeof *c);
-    for (int m = 0; m < USB_MODE_COUNT; m++) settings_default_profile_for(type, (usb_mode_t)m, &c->p[m]);
-    settings_default_mode_slots(c->slot);
-    c->active = type == CTRL_GAMECUBE ? USB_MODE_GC_ADAPTER : USB_MODE_SWITCH_PRO;
+    for (int m = 0; m < USB_MODE_COUNT; m++) settings_default_profile_for(type, (usb_mode_t)m, &c->p[BUTTON_OF_MODE[m]]);
+    c->active = BUTTON_OF_MODE[type == CTRL_GAMECUBE ? USB_MODE_GC_ADAPTER : USB_MODE_SWITCH_PRO];
+}
+
+// When the profile in use is gone, the first of these takes over.
+static const uint8_t FALLBACK_ORDER[PROFILE_MAX] = {
+    MODE_SLOT_Y, MODE_SLOT_A, MODE_SLOT_X, MODE_SLOT_B, MODE_SLOT_UP, MODE_SLOT_RIGHT, MODE_SLOT_DOWN, MODE_SLOT_LEFT,
+};
+// Free buttons for profiles no button selected (D-pad first).
+static const uint8_t FREE_ORDER[PROFILE_MAX] = {
+    MODE_SLOT_UP, MODE_SLOT_RIGHT, MODE_SLOT_DOWN, MODE_SLOT_LEFT, MODE_SLOT_X, MODE_SLOT_A, MODE_SLOT_B, MODE_SLOT_Y,
+};
+
+void settings_profiles_to_buttons(ctrl_profiles_t *c) {
+    ctrl_profiles_t old = *c;
+    memset(c, 0, sizeof *c);
+    bool placed[PROFILE_MAX] = {false};
+    int active = -1;
+    // Each button gets the profile it selected (one picked by two buttons is
+    // copied, so both keep working).
+    for (int b = 0; b < PROFILE_MAX; b++) {
+        uint8_t v = old.slot[b];
+        if (v == MODE_SLOT_EMPTY || v > PROFILE_MAX || !old.p[v - 1].used) continue;
+        c->p[b] = old.p[v - 1];
+        if (v - 1 == old.active && (!placed[v - 1] || active < 0)) active = b;
+        placed[v - 1] = true;
+    }
+    // Profiles no button selected: the next free buttons (dropped if none left).
+    for (int i = 0; i < PROFILE_MAX; i++) {
+        if (!old.p[i].used || placed[i]) continue;
+        for (int k = 0; k < PROFILE_MAX; k++) {
+            uint8_t b = FREE_ORDER[k];
+            if (c->p[b].used) continue;
+            c->p[b] = old.p[i];
+            if (i == old.active) active = b;
+            break;
+        }
+    }
+    c->active = active >= 0 ? (uint8_t)active : PROFILE_MAX;   // sanitize picks one
 }
 
 static uint8_t clamp(uint8_t v, uint8_t lo, uint8_t hi) {
@@ -81,17 +123,14 @@ void settings_sanitize_profiles(ctrl_type_t type, ctrl_profiles_t *c) {
         settings_default_profiles(type, c);
         return;
     }
+    // The profile in use was cleared (or never set): another one takes over.
     if (c->active >= PROFILE_MAX || !c->p[c->active].used) {
-        for (int i = 0; i < PROFILE_MAX; i++) {
-            if (c->p[i].used) {
-                c->active = (uint8_t)i;
+        for (int k = 0; k < PROFILE_MAX; k++) {
+            if (c->p[FALLBACK_ORDER[k]].used) {
+                c->active = FALLBACK_ORDER[k];
                 break;
             }
         }
     }
-    for (int i = 0; i < MODE_SLOT_COUNT; i++) {
-        uint8_t v = c->slot[i];
-        if (v == MODE_SLOT_EMPTY) continue;
-        if (v > PROFILE_MAX || !c->p[v - 1].used) c->slot[i] = MODE_SLOT_EMPTY;
-    }
+    memset(c->slot, 0, sizeof c->slot);
 }

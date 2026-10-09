@@ -238,6 +238,10 @@ void settings_init(void) {
             // above, which bring the per-mode fields up to date).
             for (int t = 0; t < CTRL_TYPE_COUNT; t++) profiles_from_legacy(&g_settings, (ctrl_type_t)t);
         }
+        if (rev < 11) {
+            // One profile per button (after the step above made profiles).
+            for (int t = 0; t < CTRL_TYPE_COUNT; t++) settings_profiles_to_buttons(&g_settings.prof[t]);
+        }
         g_settings.ext_rev = SETTINGS_EXT_REV;
         settings_sanitize(&g_settings);
         LOG("settings: loaded from flash (bonded=%d%s)", g_settings.bonded,

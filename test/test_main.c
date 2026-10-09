@@ -55,6 +55,7 @@ static void test_defaults(settings_t *s) {
         settings_default_profiles((ctrl_type_t)t, &s->prof[t]);
         s->prof[t].active = 0;
         profile_t *p = &s->prof[t].p[0];
+        p->usb_mode = USB_MODE_SWITCH_PRO;
         for (int i = 0; i < IN_COUNT; i++) p->map[i] = OUT_NONE;
         for (int i = IN_A; i <= IN_RIGHT; i++) p->map[i] = (uint8_t)(OUT_A + i);
         p->stick_deadzone_pct = 0;
@@ -708,44 +709,62 @@ static void test_gc_adapter(void) {
 static void test_profiles(void) {
     static settings_t st;
     memset(&st, 0, sizeof st);
-    // Defaults: one profile per mode, the shortcut buttons on the same modes as before.
+    // Defaults: one profile per mode on the buttons the shortcut used before.
     for (int t = 0; t < CTRL_TYPE_COUNT; t++) settings_default_profiles((ctrl_type_t)t, &st.prof[t]);
     ctrl_profiles_t *pro = settings_profiles(&st, CTRL_PRO), *gc = settings_profiles(&st, CTRL_GAMECUBE);
-    CHECK(pro->p[USB_MODE_XBOX360].used && pro->p[USB_MODE_XBOX360].usb_mode == USB_MODE_XBOX360);
-    CHECK(strcmp(pro->p[USB_MODE_GC_ADAPTER].name, "GameCube adapter") == 0 && !pro->p[USB_MODE_COUNT].used);
-    CHECK(pro->slot[MODE_SLOT_A] == USB_MODE_DUALSENSE_EDGE + 1 && pro->slot[MODE_SLOT_Y] == USB_MODE_SWITCH_PRO + 1);
-    CHECK(pro->active == USB_MODE_SWITCH_PRO && gc->active == USB_MODE_GC_ADAPTER);
+    CHECK(pro->p[MODE_SLOT_Y].usb_mode == USB_MODE_SWITCH_PRO && pro->p[MODE_SLOT_A].usb_mode == USB_MODE_DUALSENSE_EDGE);
+    CHECK(pro->p[MODE_SLOT_X].usb_mode == USB_MODE_DUALSENSE && pro->p[MODE_SLOT_B].usb_mode == USB_MODE_XBOX360);
+    CHECK(pro->p[MODE_SLOT_UP].usb_mode == USB_MODE_GC_ADAPTER && strcmp(pro->p[MODE_SLOT_UP].name, "GameCube adapter") == 0);
+    CHECK(!pro->p[MODE_SLOT_DOWN].used && !pro->p[MODE_SLOT_LEFT].used && !pro->p[MODE_SLOT_RIGHT].used);
+    CHECK(pro->active == MODE_SLOT_Y && gc->active == MODE_SLOT_UP);
+    // The shortcut sees the buttons that have a profile.
+    uint8_t slots[MODE_SLOT_COUNT];
+    settings_profile_slots(&st, CTRL_PRO, slots);
+    CHECK(slots[MODE_SLOT_A] == MODE_SLOT_A + 1 && slots[MODE_SLOT_DOWN] == MODE_SLOT_EMPTY && mode_select_enabled(slots));
     // Per controller type: the GameCube controller's Xbox map has its triggers on L / R.
-    CHECK(gc->p[USB_MODE_XBOX360].map[IN_L] == GP_L2 && pro->p[USB_MODE_XBOX360].map[IN_L] == GP_L1);
-    // The active profile gives the map, options and the boot mode.
-    pro->p[USB_MODE_SWITCH_PRO].stick_deadzone_pct = 12;
-    gc->p[USB_MODE_GC_ADAPTER].rumble_strength_pct = 40;
+    CHECK(gc->p[MODE_SLOT_B].map[IN_L] == GP_L2 && pro->p[MODE_SLOT_B].map[IN_L] == GP_L1);
+    // The profile in use gives the map, options and the boot mode.
+    pro->p[MODE_SLOT_Y].stick_deadzone_pct = 12;
+    gc->p[MODE_SLOT_UP].rumble_strength_pct = 40;
     CHECK(settings_tuning(&st, CTRL_PRO).deadzone == 12 && settings_tuning(&st, CTRL_GAMECUBE).rumble_strength == 40);
-    CHECK(settings_active_map(&st, CTRL_GAMECUBE) == gc->p[USB_MODE_GC_ADAPTER].map);
+    CHECK(settings_active_map(&st, CTRL_GAMECUBE) == gc->p[MODE_SLOT_UP].map);
     st.last_ctrl = CTRL_PRO;
     CHECK(settings_boot_usb_mode(&st) == USB_MODE_SWITCH_PRO);
     st.last_ctrl = CTRL_GAMECUBE;
     CHECK(settings_boot_usb_mode(&st) == USB_MODE_GC_ADAPTER);
-    // Two profiles in the same mode, e.g. a second Xbox map.
-    pro->p[6] = pro->p[USB_MODE_XBOX360];
-    snprintf(pro->p[6].name, PROFILE_NAME_LEN, "Xbox swapped");
-    pro->p[6].map[IN_A] = GP_SOUTH;
-    pro->slot[MODE_SLOT_UP] = 7;
-    pro->active = 6;
-    CHECK(settings_active_map(&st, CTRL_PRO)[IN_A] == GP_SOUTH && pro->p[USB_MODE_XBOX360].map[IN_A] == GP_EAST);
-    // Sanitize: a deleted active profile falls back to the first one; slots
-    // to deleted profiles empty; bad maps reset; names filled in.
-    memset(&pro->p[6], 0, sizeof pro->p[6]);
-    pro->p[2].map[IN_B] = 200;
-    pro->p[3].name[0] = 0;
-    pro->p[1].stick_outer_pct = 10;
+    // Sanitize: the profile in use cleared -> the first of Y, A, X, B, ... takes
+    // over; bad maps reset; names filled in; ranges clamped.
+    memset(&pro->p[MODE_SLOT_Y], 0, sizeof pro->p[0]);
+    pro->p[MODE_SLOT_X].map[IN_B] = 200;
+    pro->p[MODE_SLOT_B].name[0] = 0;
+    pro->p[MODE_SLOT_A].stick_outer_pct = 10;
     settings_sanitize_profiles(CTRL_PRO, pro);
-    CHECK(pro->active == 0 && pro->slot[MODE_SLOT_UP] == MODE_SLOT_EMPTY);
-    CHECK(pro->p[2].map[IN_B] == GP_SOUTH && strcmp(pro->p[3].name, "Profile 4") == 0 && pro->p[1].stick_outer_pct == 50);
+    CHECK(pro->active == MODE_SLOT_A);
+    CHECK(pro->p[MODE_SLOT_X].map[IN_B] == GP_SOUTH && strcmp(pro->p[MODE_SLOT_B].name, "Profile 2") == 0);
+    CHECK(pro->p[MODE_SLOT_A].stick_outer_pct == 50);
     // No profiles at all: defaults again.
     memset(pro, 0, sizeof *pro);
     settings_sanitize_profiles(CTRL_PRO, pro);
-    CHECK(pro->p[0].used && pro->active == USB_MODE_SWITCH_PRO);
+    CHECK(pro->p[MODE_SLOT_Y].used && pro->active == MODE_SLOT_Y);
+
+    // ext_rev 10 -> 11: profiles move to the buttons that selected them.
+    ctrl_profiles_t c;
+    memset(&c, 0, sizeof c);
+    for (int i = 0; i < 6; i++) settings_default_profile_for(CTRL_PRO, (usb_mode_t)(i % USB_MODE_COUNT), &c.p[i]);
+    snprintf(c.p[5].name, PROFILE_NAME_LEN, "Extra");
+    c.slot[MODE_SLOT_A] = 2;   // profile 1 (DualSense Edge)
+    c.slot[MODE_SLOT_B] = 4;   // profile 3 (Xbox 360)
+    c.slot[MODE_SLOT_Y] = 1;   // profile 0 (Switch Pro)
+    c.slot[MODE_SLOT_DOWN] = 2;   // profile 1 again: copied
+    c.active = 3;
+    settings_profiles_to_buttons(&c);
+    settings_sanitize_profiles(CTRL_PRO, &c);
+    CHECK(c.p[MODE_SLOT_A].usb_mode == USB_MODE_DUALSENSE_EDGE && c.p[MODE_SLOT_DOWN].usb_mode == USB_MODE_DUALSENSE_EDGE);
+    CHECK(c.p[MODE_SLOT_B].usb_mode == USB_MODE_XBOX360 && c.p[MODE_SLOT_Y].usb_mode == USB_MODE_SWITCH_PRO);
+    CHECK(c.active == MODE_SLOT_B);
+    // Unselected ones (2 DualSense, 4 GameCube adapter, 5 Extra) on free buttons, D-pad first.
+    CHECK(c.p[MODE_SLOT_UP].usb_mode == USB_MODE_DUALSENSE && c.p[MODE_SLOT_RIGHT].usb_mode == USB_MODE_GC_ADAPTER);
+    CHECK(strcmp(c.p[MODE_SLOT_LEFT].name, "Extra") == 0 && !c.p[MODE_SLOT_X].used);
 }
 
 static void test_bonds(void) {

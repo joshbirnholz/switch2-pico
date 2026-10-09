@@ -34,7 +34,7 @@ Switch 2 Pro Controller  ──BLE──▶  dongle    ──USB──▶  PC / 
 | Player LEDs | Follow the player number the host assigns. |
 | Battery | Reported to the host. |
 | USB modes | **Switch Pro Controller** (default; Switch consoles and PCs), **DualSense Edge** (GL, GR and C become its back paddles and Fn button, so Steam Input can map them), **DualSense**, or **Xbox 360 controller**. Each mode has its own button map. |
-| NSO GameCube controller | Basic support: buttons, sticks, analog triggers acting as L/R past a threshold, and rumble on its motor (strength by switching it on and off every 12 ms, as SDL does). |
+| Nintendo GameCube Controller | Basic support: buttons, sticks, analog triggers acting as L/R past a threshold, and rumble on its motor (strength by switching it on and off every 12 ms, as SDL does). |
 | Configuration page | Over **WebUSB** in Chrome/Edge with the dongle plugged in, or (Pico 2 W only) over the dongle's own Wi-Fi from any phone or computer. |
 
 ## Hardware
@@ -184,7 +184,7 @@ Under **Mode** (on each controller tab) the dongle can present itself as:
 
 **GameCube adapter mode** presents the dongle as Nintendo's Wii U / Switch
 GameCube controller adapter (WUP-028) with the controller in port 1 (ports
-2–4 empty). Made for the NSO GameCube controller: its analog triggers come
+2–4 empty). Made for the Nintendo GameCube Controller: its analog triggers come
 through as analog L / R, Z (its ZR) as Z, Start (its Plus) as Start, the
 C-stick as the C-stick. Sticks are scaled to a real GameCube stick's range
 (128 ± 100). Other controllers work too: by default L / R give a full L / R
@@ -203,31 +203,48 @@ the real adapter. Notes:
 
 **Profiles.** A profile is a USB mode together with its button mapping, stick
 settings (inner deadzone, full deflection, swap), trigger threshold and rumble
-(on/off, strength). The Pro Controller and the NSO GameCube controller each
-have their own profiles, up to 8. One profile per controller type is **in
-use**, and it applies whenever that controller connects. Several profiles can
-share a mode, for example two Xbox 360 profiles with different mappings.
+(on/off, strength). Each profile sits on a button: a face button (A, B, X, Y)
+or a D-pad direction, so each controller type has up to 8. The Nintendo
+Switch 2 Pro Controller and the Nintendo GameCube Controller have their own
+profiles. One profile per controller type is **in use**, and it applies
+whenever that controller connects. Several profiles can share a mode, for
+example two Xbox 360 Controller profiles with different mappings.
 
-The configuration page's **Controller** section has a **Pro Controller** tab
-and a **GameCube controller** tab. It opens on the connected controller's tab,
-marked with a green dot. Each tab lists that type's profiles as numbered chips
-(**IN USE** marks the active one; **+ New profile** adds one). Below them are
-the chosen profile's **Name** (edited in place), **Emulated Controller** (its
-USB mode), **Use this profile**, **Duplicate** and **Delete**. Then come its
-**Buttons**, **Sticks & triggers** and **Rumble** tabs. Beside them are
-**Quick switch** (the C + Home buttons) and, on the Pro Controller tab,
-**Motion**, which is shared by every Pro Controller profile. Changing a
-profile's mode starts its mapping over from that mode's defaults. The profile
-in use can't be deleted. Edits stay unsaved until **Save** in the header; the
-header says when there are unsaved changes.
+The configuration page's **Controller** section has a tab per controller type.
+It opens on the connected controller's tab, marked with a green dot. Each tab
+shows its profiles as two diamonds of tiles, the D-pad and the face buttons
+(laid out as on that controller), each with the button's icon, the profile's
+name and its emulated controller. A green check and **In use** mark the
+profile in use. Below the diamonds are the chosen button's **Emulated
+Controller** (its USB mode, or **None**), **Name**, **Use this profile**,
+**Duplicate…** and **Delete**. Then come its **Buttons**, **Sticks &
+triggers** and **Rumble** tabs and, on the Nintendo Switch 2 Pro Controller
+tab, **Motion**, which is shared by every profile of that controller.
 
-New dongles, and settings from before profiles, start with one profile per
-mode, named after it, holding that mode's mapping. In use: Switch Pro for the
-Pro Controller, GameCube adapter for the GameCube controller (or the mode each
-used before). Defaults differ where it helps: a GameCube controller's analog
-L / R are the triggers (LT / RT, L2 / R2) and Z the right bumper in the
-gamepad modes; a Pro Controller in GameCube adapter mode uses ZL / ZR as L / R
-and R as Z.
+* Pick an emulated controller on an empty button to make a profile there.
+* **None** or **Delete** empties the button. If that was the profile in use,
+  another one takes over (Y, A, X, B, then the D-pad), and the page says which.
+* **Duplicate…** asks for the button to copy to; a button that already has a
+  profile asks before it is overwritten.
+* Drag a profile onto another button to swap the two (or move it to an empty
+  one).
+* Changing a profile's emulated controller starts its mapping over from that
+  mode's defaults.
+* The GL / GR remap option shows only where it applies (not in DualSense Edge
+  mode, whose back paddles are remapped by the host).
+
+Edits stay unsaved until **Save** in the header; the header says when there
+are unsaved changes.
+
+New dongles start with one profile per mode, named after it, holding that
+mode's mapping, on the buttons below. In use: Switch Pro for the Nintendo
+Switch 2 Pro Controller, GameCube adapter for the Nintendo GameCube
+Controller. Settings from earlier versions keep their profiles: each moves to
+the button that selected it in the old Quick switch (one selected by two
+buttons is copied to both), and the rest go to free buttons. Defaults differ
+where it helps: a GameCube controller's analog L / R are the triggers (LT /
+RT, L2 / R2) and Z the right bumper in the gamepad modes; a Pro Controller in
+GameCube adapter mode uses ZL / ZR as L / R and R as Z.
 
 **Mode per controller.** The dongle starts in the mode of the profile in use
 for the controller that connected last. When a controller of the other type
@@ -235,29 +252,26 @@ connects and its profile's mode differs, the dongle restarts in that mode
 first and the controller connects right after. A controller being paired is
 paired first; then the dongle switches and the controller reconnects.
 
-**Switching from the controller:** hold **C + Home** for 1.5 seconds. The
-controller gives a "ba-thump" and all four of its lights blink. Then press the
-button for the profile you want; the controller thumps. A profile in the same
-USB mode applies at once; one in another mode restarts the dongle in that
-mode. Defaults (the per-mode profiles):
+**Switching from the controller:** hold **C + Home** until you hear a click
+(1.5 seconds; a "ba-thump", and all four of the controller's lights blink).
+Then press the button of the profile you want; the controller thumps. A
+profile in the same USB mode applies at once; one in another mode restarts the
+dongle in that mode. Default profiles:
 
 | Button | Profile |
 | --- | --- |
-| A | DualSense Edge |
-| B | Xbox 360 |
-| X | DualSense |
-| Y | Switch Pro |
-| D-pad | – (empty) |
+| A | DualSense Edge (DualSense Edge Wireless Controller) |
+| B | Xbox 360 (Xbox 360 Controller) |
+| X | DualSense (DualSense Wireless Controller) |
+| Y | Switch Pro (Nintendo Switch Pro Controller) |
+| D-pad up | GameCube adapter (Nintendo GameCube Controller Adapter) |
+| Other D-pad directions | empty |
 
-**Quick switch** assigns a profile, or – (empty), to
-each face button and D-pad direction, per controller type. Empty buttons are
-ignored. Press C + Home again, or wait 5 seconds without pressing anything, to
-leave without a change. While choosing, the host sees no buttons pressed.
-While C is held, Home doesn't reach the host, so the hold doesn't open the
-host's home menu. Setting every button to – turns off both the shortcut and
-this Home blocking, except on the Pico 2 W while the Wi-Fi hotkey is on. The
-**Tools → Haptics test** plays these effects, and the controller's built-in
-vibration samples.
+Empty buttons are ignored. Press C + Home again, or wait 5 seconds without
+pressing anything, to leave without a change. While choosing, the host sees no
+buttons pressed. While C is held, Home doesn't reach the host, so the hold
+doesn't open the host's home menu. The **Tools → Haptics test** plays these
+effects, and the controller's built-in vibration samples.
 
 A change of mode restarts the dongle, which then has that controller's USB
 IDs; the configuration page still finds it (Linux: install the current
@@ -306,7 +320,7 @@ Communication**, then plug the dongle into the dock or the console.
 ## Configuration page
 
 Until it finds a dongle, the page shows only how to connect. Then it has three sections: **Controller** (profiles, button mapping,
-sticks, rumble, quick switch, motion), **Device** (paired controllers, power
+sticks, rumble, motion), **Device** (paired controllers, power
 and radio, USB, Wi-Fi on the Pico 2 W, connection details) and **Tools**
 (firmware, restart and reset, haptics test, log). The header always shows the
 controller, battery and USB mode, and **Save**.
