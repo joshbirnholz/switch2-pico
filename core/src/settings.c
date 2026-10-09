@@ -120,6 +120,7 @@ static uint16_t clamp_u16(uint16_t v, uint16_t lo, uint16_t hi) {
 }
 
 void settings_sanitize(settings_t *s) {
+    s->webusb_enabled = 1;   // always on (the configuration page needs it)
     for (int t = 0; t < CTRL_TYPE_COUNT; t++) settings_sanitize_profiles((ctrl_type_t)t, &s->prof[t]);
     // Paired controllers: no gaps; the single-controller fields follow the newest.
     int n = 0;

@@ -106,6 +106,10 @@ static void api_status(http_response_t *r) {
     jb_str(&j, S2P_VERSION);
     jb_printf(&j, ",\"platform\":\"%s\",\"wifi\":%s,\"usb_mode\":\"%s\"", platform_name(),
               platform_has_wifi() ? "true" : "false", usb_mode_name(usb_mode_active()));
+    // The profile running now: the one in use for the controller type the
+    // dongle started for (or switched to).
+    jb_printf(&j, ",\"profile\":");
+    jb_str(&j, settings_active(&g_settings, (ctrl_type_t)g_settings.last_ctrl)->name);
     platform_supply_t sup;
     if (platform_supply(&sup)) {
         jb_printf(&j, ",\"supply\":{\"vdd\":%u,\"vbus\":%u,\"vdd_min\":%u,\"vbus_min\":%u}", sup.vdd, sup.vbus,
@@ -345,7 +349,6 @@ static bool apply_kv(settings_t *s, const char *k, const char *v, bool *usb_reco
         {"led_follow_host", &s->led_follow_host, 1, false},
         {"usb_detach", &s->usb_detach_when_idle, 1, false},
         {"usb_wakeup", &s->usb_remote_wakeup, 1, false},
-        {"webusb", &s->webusb_enabled, 1, true},
         {"hotkey", &s->hotkey_enabled, 1, false},
         {"ble_tx_power", &s->ble_tx_power, 1, false},
         {"idle_minutes", &s->idle_minutes, 1, false},

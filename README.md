@@ -192,9 +192,8 @@ press and ZR is Z; remap under **Button mapping**. Rumble is on / off, as on
 the real adapter. Notes:
 
 * On a Switch, use it where a GameCube adapter works (e.g. Smash Bros.
-  Ultimate). If a console doesn't accept it, turn off *WebUSB configuration
-  interface* so the dongle matches a real adapter exactly (the mode shortcut
-  and, on the Pico, the Wi-Fi page still work).
+  Ultimate). The dongle also has its configuration (WebUSB) interface, which
+  a real adapter lacks.
 * Dolphin / Slippi: Linux needs the current udev rule (above); Windows needs
   the WinUSB driver on the adapter, as with a real one (Zadig, "WUP-028",
   interface 0).
@@ -214,12 +213,12 @@ The configuration page's **Controller** section has a tab per controller type.
 It opens on the connected controller's tab, marked with a green dot. Each tab
 shows its profiles as two diamonds of tiles, the D-pad and the face buttons
 (laid out as on that controller), each with the button's icon, the profile's
-name and its emulated controller. A green check and **In use** mark the
-profile in use. Below the diamonds are the chosen button's **Emulated
-Controller** (its USB mode, or **None**), **Name**, **Use this profile**,
+name and its emulated controller. A green check marks the profile in use. Tiles keep their size and place: a long name is cut off with
+"…". Below the diamonds are the chosen button's **Name**, **Emulated
+Controller** (its USB mode, or **None**), **Use this profile**,
 **Duplicate…** and **Delete**. Then come its **Buttons**, **Sticks &
-triggers** and **Rumble** tabs and, on the Nintendo Switch 2 Pro Controller
-tab, **Motion**, which is shared by every profile of that controller.
+triggers** and **Rumble** tabs and **Motion**, which is shared by every
+profile of both controllers (both report motion).
 
 * Pick an emulated controller on an empty button to make a profile there.
 * **None** or **Delete** empties the button. If that was the profile in use,
@@ -323,7 +322,8 @@ Until it finds a dongle, the page shows only how to connect. Then it has three s
 sticks, rumble, motion), **Device** (paired controllers, power
 and radio, USB, Wi-Fi on the Pico 2 W, connection details) and **Tools**
 (firmware, restart and reset, haptics test, log). The header always shows the
-controller, battery and USB mode, and **Save**.
+controller, its battery, the profile the dongle is running (its USB mode on
+hover), and **Save**.
 
 ### Over USB (WebUSB)
 
@@ -345,10 +345,10 @@ enable it once under **Settings → Pages → Source: GitHub Actions**.
   then replug the dongle.
 * **Windows:** no driver needed; the dongle tells Windows to use WinUSB for
   the configuration interface.
-* The WebUSB interface adds a second USB interface next to the controller. If
-  a Switch 1 console doesn't accept the dongle, turn off *Configuration over USB
-  (WebUSB)* under **Device → USB** (via Wi-Fi if needed) so it matches a genuine Pro Controller
-  exactly.
+* The WebUSB interface is a second USB interface next to the controller, and
+  is always on.
+* With *Only appear on USB while a controller is connected* (**Device →
+  USB**), connect a controller before opening the page.
 
 ### Over Wi-Fi
 
