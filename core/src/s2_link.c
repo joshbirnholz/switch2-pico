@@ -408,9 +408,10 @@ static void update_scan(void) {
             want = k->state == S2_LINK_READY && pid_is_joycon(k->pid) && !s_paused;
         }
     }
-    // Looking for the second Joy-Con 2 shares the radio with the first: scan
-    // less often then.
-    bool low = s_low_duty_scan || used > 0;
+    // (Looking for the second Joy-Con 2 runs alongside the first one's
+    // connection; the radio fits the scan around its connection events.
+    // The other half's reconnection adverts are short, so no lower duty.)
+    bool low = s_low_duty_scan;
     static bool scan_low;
     if (want && (!s_scanning || scan_low != low)) {
         s2t_start_scan(low);
@@ -1238,7 +1239,16 @@ void s2c_on_advertisement(const uint8_t addr[6], uint8_t addr_type, int8_t rssi,
     const link_t *other = first_used();
     if (used >= S2T_LINKS) return;
     if (used == 1) {
-        if (!pid_is_joycon(adv.pid) || !pid_is_joycon(other->pid) || adv.pid == other->pid) return;
+        if (!pid_is_joycon(adv.pid) || !pid_is_joycon(other->pid) || adv.pid == other->pid) {
+            // Asked to pair (the window is open) and this isn't the other
+            // half: the kept Joy-Con 2 makes room for it.
+            if (adv.pairing_mode && s_pair_open && g_settings.pair_button && !platform_time_reached(s_pair_until) &&
+                memcmp(other->peer, addr, 6) != 0) {
+                LOG("s2: %s in pairing mode: letting the %s go", pid_name(adv.pid), pid_name(other->pid));
+                disconnect_all();
+            }
+            return;
+        }
         if (other->state != S2_LINK_READY || memcmp(other->peer, addr, 6) == 0) return;
     }
 
@@ -1249,7 +1259,9 @@ void s2c_on_advertisement(const uint8_t addr[6], uint8_t addr_type, int8_t rssi,
         LOG("s2: pairing window closed (timed out)");
     }
     if (g_settings.pair_button) {
-        if (s_pair_open && !adv.pairing_mode) return;
+        // (Completing a Joy-Con 2 pair is always fine: the other half
+        // reconnecting while the window is open, e.g. after pairing one side.)
+        if (s_pair_open && !adv.pairing_mode && used == 0) return;
         if (!s_pair_open && adv.pairing_mode) {
             if (platform_time_reached(s_pair_ignored_log)) {
                 s_pair_ignored_log = platform_deadline_ms(10000);
@@ -1785,7 +1797,15 @@ void s2_link_start_pairing(uint32_t ms) {
     s_sleep_quiet = false;
     LOG("s2: pairing window open for %lu s: hold Sync on the controller", (unsigned long)(ms / 1000));
     // A connected controller would keep the radio busy: let the new one in.
-    disconnect_all();
+    // A single Joy-Con 2 stays, as the new one may be its other half (if
+    // another controller turns up in pairing mode instead, the Joy-Con is
+    // let go then; see s2c_on_advertisement).
+    const link_t *one = links_used() == 1 ? first_used() : NULL;
+    if (one && one->state == S2_LINK_READY && pid_is_joycon(one->pid)) {
+        LOG("s2: keeping the %s connected: pair the other side", pid_name(one->pid));
+    } else {
+        disconnect_all();
+    }
     update_scan();
 }
 

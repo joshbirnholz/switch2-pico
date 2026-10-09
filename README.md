@@ -117,7 +117,10 @@ again.
 
 ### Joy-Con 2
 
-Pair each Joy-Con 2 like any controller (hold its Sync button). Only one
+Pair each Joy-Con 2 like any controller (hold its Sync button), one after the
+other: the first stays connected while the pairing window is open again for
+the second (on the Pico, a Joy-Con 2 kept this way is only let go if another
+kind of controller shows up in pairing mode). Only one
 controller connects at a time, with one exception: a **Joy-Con 2 (L)** and a
 **Joy-Con 2 (R)** connect together. Once one Joy-Con 2 is connected, the
 dongle keeps looking for the other side and connects it when it wakes up;
