@@ -446,6 +446,14 @@ On the page you can:
 * change the Wi-Fi name and password, reboot, enter firmware update mode, factory reset
 * read the firmware log (useful for bug reports)
 
+### Steam Deck / SteamOS: Decky plugin
+
+`decky-plugin/` is a [Decky Loader](https://decky.xyz) plugin with quick
+controls in the Quick Access menu: pairing, the profile, the extra buttons
+(C, Capture, GL / GR, SL / SR), Joy-Con 2 Mouse Mode, paired controllers,
+reboot and firmware updates. It talks to the dongle over USB like the
+configuration page. See [decky-plugin/README.md](decky-plugin/README.md).
+
 ## Troubleshooting
 
 **The controller connects briefly, then turns off.** After a failed attempt the

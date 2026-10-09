@@ -1,0 +1,11 @@
+{
+  "name": "Switch2-Pico",
+  "author": "switch2-pico contributors",
+  "flags": ["_root"],
+  "api_version": 1,
+  "publish": {
+    "tags": ["controller", "hardware"],
+    "description": "Quick controls for the Switch2-Pico dongle: pairing, profiles, extra buttons, Joy-Con 2 Mouse Mode and firmware updates.",
+    "image": ""
+  }
+}
