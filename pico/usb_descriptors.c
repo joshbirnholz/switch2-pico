@@ -39,7 +39,12 @@ uint8_t const *tud_descriptor_device_cb(void) {
     const usb_identity_t *id = usb_mode_identity();
     s_device.idVendor = id->vid;
     s_device.idProduct = id->pid;
-    s_device.bDeviceClass = s_device.bDeviceSubClass = s_device.bDeviceProtocol = id->device_class;
+    // Xbox 360 mode is vendor class at device level, like a real one. Linux
+    // then doesn't match class-only interface drivers (usbhid) to any of its
+    // interfaces, so with the Joy-Con 2 mouse the class is per interface
+    // (xpad still matches: it names the vendor too).
+    uint8_t cls = usb_mode_has_mouse() ? 0x00 : id->device_class;
+    s_device.bDeviceClass = s_device.bDeviceSubClass = s_device.bDeviceProtocol = cls;
     // A distinct bcdDevice keeps Windows from reusing a cached "no MS OS
     // descriptor" answer from a genuine controller.
     s_device.bcdUSB = g_settings.webusb_enabled ? 0x0210 : 0x0200;
