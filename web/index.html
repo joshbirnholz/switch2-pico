@@ -455,8 +455,15 @@ function renderMap(mode){
   IN.forEach((n,i)=>m.querySelector(`[data-map="${n}"]`).value=M.map[i]);
   $('preset-swap').style.display=M.family==='switch'?'':'none';
   $('preset-reset').textContent=M.family==='switch'?'Reset to labels':'Reset to defaults';
+  // GameCube controller: no Minus, stick clicks or GL / GR (their maps stay
+  // stored, just not shown); Z and Start are its names for ZR and Plus.
+  if(MAP_CTRL===1){
+    ['Minus','LStick','RStick','GL','GR'].forEach(n=>m.querySelector(`[data-map="${n}"]`).parentElement.style.display='none');
+    m.querySelectorAll('.g-ls,.g-rs').forEach(g=>g.style.display='none');
+    [['ZR','Z'],['Plus','Start']].forEach(([n,lab])=>m.querySelector(`[data-map="${n}"]`).parentElement.firstChild.textContent=lab);
+  }
   $('map-sel').value=MAP_MODE;
-  $('map-ctrl-note').textContent=MAP_CTRL===1?'GameCube controller buttons are shown at their Switch places: Z = ZR, Start = +, analog L / R = L / R (fully pressed past the trigger threshold), C-stick = right stick.':'';
+  $('map-ctrl-note').textContent=MAP_CTRL===1?'Analog L / R count as pressed past the trigger threshold (GameCube tab, Sticks and triggers); the C-stick is the right stick.':'';
 }
 // Grid values -> S.modes (unsaved edits survive switching between modes).
 let MAP_DIRTY=new Set();
@@ -569,7 +576,8 @@ async function poll(){
       ['USB mode',{switch_pro:'Switch Pro Controller',dualsense_edge:'DualSense Edge',dualsense:'DualSense',xbox360:'Xbox 360 controller',gc_adapter:'GameCube adapter'}[s.usb_mode]||s.usb_mode],
       ['Host',s.usb.mounted?`handshake ${s.usb.handshake?'yes':'no'}, mode 0x${s.usb.report_mode.toString(16)}, IMU ${s.usb.imu?'on':'off'}, ${s.usb.subcommands} subcommands, ${s.usb.reports} reports sent, rumble frames ${s.usb.rumble_frames}`:'—'],
     ]);
-    if(s.input){
+    // Live input only on the tab of the controller type that is connected.
+    if(s.input&&ready&&(L.pid===8307?1:0)===MAP_CTRL){
       for(const n of IN){const d=document.querySelector(`#map svg [data-b="${n}"]`);if(d)d.classList.toggle('on',!!(s.input.raw_buttons>>>S2BIT[n]&1))}
       stick($('dot-l'),s.input.out_l[0],s.input.out_l[1]);stick($('dot-r'),s.input.out_r[0],s.input.out_r[1]);
       if($('imu'))$('imu').innerHTML='accel '+s.input.out_accel.join(' / ')+'<br>gyro '+s.input.out_gyro.join(' / ')+(s.input.triggers[0]||s.input.triggers[1]?'<br>triggers '+s.input.triggers.join(' / '):'');
