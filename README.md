@@ -25,7 +25,7 @@ Switch 2 Pro Controller  ──BLE──▶  dongle    ──USB──▶  PC / 
 
 | Feature | Notes |
 | --- | --- |
-| Pairing | Hold **Sync** on the controller. Uses Nintendo's own key-exchange commands; standard Bluetooth pairing would make the controller disconnect. The dongle remembers the controller. |
+| Pairing | Hold **Sync** on the controller. Uses Nintendo's own key-exchange commands; standard Bluetooth pairing would make the controller disconnect. The dongle remembers up to 8 controllers. |
 | Reconnect / wake | After pairing, pressing any button reconnects. While the PC sleeps, the controller is let go so it can sleep too; a button press can wake the PC (USB remote wakeup; on Linux see [Waking the PC](#on-a-pc)). |
 | Buttons and sticks | Uses the controller's own calibration, with a configurable radial deadzone. |
 | GL / GR / C | Each can be mapped to any Pro Controller button (all other buttons can be remapped too), on the configuration page or from the controller (hold C + GL/GR and press a button). Defaults: GL → left stick click, GR → right stick click, C → unassigned. |
@@ -45,7 +45,7 @@ Two boards are supported; they share all of the controller logic.
 | --- | --- | --- |
 | Bluetooth | CYW43439 (BTstack), shares its radio with Wi-Fi | Nordic SoftDevice S140, Bluetooth only |
 | Configuration | WebUSB or Wi-Fi page | WebUSB |
-| Buttons on the board | BOOTSEL: tap = Sync (pairing window), hold 1–5 s = Wi-Fi page, hold 5 s = forget controller | none (use the configuration page) |
+| Buttons on the board | BOOTSEL: tap = Sync (pairing window), hold 1–5 s = Wi-Fi page, hold 5 s = forget all controllers | none (use the configuration page) |
 | Firmware file | `switch2_pico.uf2` | `switch2_nrf52840.uf2` |
 
 A Pico W (RP2040) build also works: configure with `-DPICO_BOARD=pico_w`.
@@ -101,11 +101,16 @@ for a different board is refused.
    rumble. The LED stays on.
 4. Next time, just press any button on the controller.
 
-To pair a different controller, hold Sync on the new one (on the Pico, press
-BOOTSEL first). It replaces the old pairing. To forget the paired controller,
-hold the Pico's BOOTSEL button for 5 seconds, or use the configuration page. After
-that the controller no longer reconnects by itself (it still remembers the
-dongle, but the dongle ignores it); hold Sync on it to pair it again.
+**Several controllers.** The dongle remembers up to 8 paired controllers;
+any of them can connect by pressing a button, one at a time (while one is
+connected, the others wait). To add one, hold Sync on it (on the Pico, press
+BOOTSEL first). Pairing a ninth forgets the oldest pairing; pairing a known
+controller again makes it the newest. The configuration page lists the paired
+controllers (**Controller → Paired controllers**) with a **Forget** button for
+each and **Forget all**; holding the Pico's BOOTSEL button for 5 seconds also
+forgets all. A forgotten controller no longer reconnects by itself (it still
+remembers the dongle, but the dongle ignores it); hold Sync on it to pair it
+again.
 
 **Pairing only on request (Pico, on by default).** The Pico ignores
 controllers in pairing mode unless its pairing window is open: a short
@@ -390,7 +395,7 @@ where it stopped. Please include it in bug reports.
 * **No amiibo.** The Switch doesn't use a Pro Controller's NFC reader over a
   wired USB connection, so the dongle doesn't read tags. It answers the
   NFC/IR chip setup commands like an idle controller.
-* One controller per dongle.
+* One controller connected at a time (up to 8 remembered).
 * Joy-Con 2 are not supported yet.
 * The Switch 1 report carries three IMU samples per report. The controller
   provides one per BLE report, so the latest sample is repeated.

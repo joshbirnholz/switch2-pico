@@ -671,6 +671,35 @@ static void test_gc_adapter(void) {
     CHECK(settings_tuning(&st, CTRL_GAMECUBE).deadzone == 12 && settings_tuning(&st, CTRL_GAMECUBE).rumble_strength == 40);
 }
 
+static void test_bonds(void) {
+    static settings_t st;
+    memset(&st, 0, sizeof st);
+    uint8_t a[BOND_MAX + 1][6];
+    for (int i = 0; i <= BOND_MAX; i++) {
+        memset(a[i], 0, 6);
+        a[i][5] = (uint8_t)(i + 1);
+    }
+    bond_t old;
+    for (int i = 0; i < BOND_MAX; i++) CHECK(!settings_bond_add(&st, a[i], 0, 0x2069, &old));
+    CHECK(settings_bond_count(&st) == BOND_MAX);
+    // All remembered, newest first; the single-controller fields follow the newest.
+    for (int i = 0; i < BOND_MAX; i++) CHECK(settings_bond_find(&st, a[i]) == BOND_MAX - 1 - i);
+    CHECK(st.bonded && memcmp(st.ctrl_addr, a[BOND_MAX - 1], 6) == 0);
+    // Re-pairing a known one moves it to the front without dropping anything.
+    CHECK(!settings_bond_add(&st, a[0], 0, 0x2073, &old));
+    CHECK(settings_bond_find(&st, a[0]) == 0 && st.ctrl_pid == 0x2073 && settings_bond_count(&st) == BOND_MAX);
+    // One more when full forgets the oldest pairing (a[1] now).
+    CHECK(settings_bond_add(&st, a[BOND_MAX], 0, 0x2069, &old));
+    CHECK(memcmp(old.addr, a[1], 6) == 0 && settings_bond_find(&st, a[1]) < 0);
+    CHECK(settings_bond_find(&st, a[0]) == 1 && settings_bond_count(&st) == BOND_MAX);
+    // Forget one, then all.
+    CHECK(settings_bond_remove(&st, a[BOND_MAX]) && !settings_bond_remove(&st, a[BOND_MAX]));
+    CHECK(settings_bond_find(&st, a[0]) == 0 && memcmp(st.ctrl_addr, a[0], 6) == 0);
+    CHECK(settings_bond_count(&st) == BOND_MAX - 1 && !st.bonds[BOND_MAX - 1].used);
+    settings_bond_clear(&st);
+    CHECK(!st.bonded && settings_bond_count(&st) == 0);
+}
+
 int main(void) {
     test_s1_rumble_classic();
     test_s1_rumble_packed();
@@ -689,6 +718,7 @@ int main(void) {
     test_classic_rumble();
     test_battery();
     test_gc_adapter();
+    test_bonds();
     printf("%d passed, %d failed\n", g_pass, g_fail);
     return g_fail ? 1 : 0;
 }

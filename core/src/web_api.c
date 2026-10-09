@@ -95,7 +95,7 @@ static void addr_str(char *out, const uint8_t a[6]) {
 // ---------------------------------------------------------------------------
 static void api_status(http_response_t *r) {
     jbuf_t j;
-    if (!jb_init(&j, 3072)) return respond_text(r, 500, "oom");
+    if (!jb_init(&j, 4096)) return respond_text(r, 500, "oom");
     s2_link_info_t li;
     s2_link_get_info(&li);
     procon_status_t ps;
@@ -128,8 +128,13 @@ static void api_status(http_response_t *r) {
               (unsigned long)li.rumble_packets, li.gyro_cal_busy ? "true" : "false");
 
     addr_str(a, g_settings.ctrl_addr);
-    jb_printf(&j, ",\"bond\":{\"bonded\":%s,\"addr\":\"%s\",\"pid\":%u}", g_settings.bonded ? "true" : "false", a,
-              g_settings.ctrl_pid);
+    jb_printf(&j, ",\"bond\":{\"bonded\":%s,\"addr\":\"%s\",\"pid\":%u,\"max\":%d,\"list\":[", g_settings.bonded ? "true" : "false", a,
+              g_settings.ctrl_pid, BOND_MAX);
+    for (int i = 0; i < BOND_MAX && g_settings.bonds[i].used; i++) {
+        addr_str(a, g_settings.bonds[i].addr);
+        jb_printf(&j, "%s{\"addr\":\"%s\",\"pid\":%u}", i ? "," : "", a, g_settings.bonds[i].pid);
+    }
+    jb_printf(&j, "]}");
 
     jb_printf(&j,
               ",\"usb\":{\"mounted\":%s,\"handshake\":%s,\"report_mode\":%u,\"imu\":%s,\"vibration\":%s,"
@@ -429,11 +434,38 @@ static bool query_get(const char *q, const char *key, char *out, size_t out_len)
     return false;
 }
 
+// "AA:BB:CC:DD:EE:FF" (as addr_str prints it) to bytes.
+static bool parse_addr(const char *v, uint8_t out[6]) {
+    for (int i = 0; i < 6; i++) {
+        char h[3] = {v[0], v[0] ? v[1] : 0, 0};
+        char *end;
+        if (!h[0] || !h[1]) return false;
+        out[i] = (uint8_t)strtoul(h, &end, 16);
+        if (*end) return false;
+        v += 2;
+        if (i < 5) {
+            if (*v != ':' && strncmp(v, "%3A", 3) != 0 && strncmp(v, "%3a", 3) != 0) return false;
+            v += *v == ':' ? 1 : 3;
+        }
+    }
+    return *v == 0;
+}
+
 static void api_action(const http_request_t *req, http_response_t *r) {
     char what[24];
     if (!query_get(req->query, "do", what, sizeof what)) return respond_text(r, 400, "missing do=");
     LOG("web: action %s", what);
-    if (!strcmp(what, "forget")) s2_link_forget();
+    if (!strcmp(what, "forget")) {
+        // addr=AA:BB:CC:DD:EE:FF forgets that controller; without it, all of them.
+        char v[24];
+        uint8_t addr[6];
+        if (query_get(req->query, "addr", v, sizeof v)) {
+            if (!parse_addr(v, addr)) return respond_text(r, 400, "bad addr");
+            s2_link_forget(addr);
+        } else {
+            s2_link_forget(NULL);
+        }
+    }
     else if (!strcmp(what, "disconnect")) s2_link_disconnect();
     else if (!strcmp(what, "rumble")) s2_link_test_rumble();
     else if (!strcmp(what, "pair")) {

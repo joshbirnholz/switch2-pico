@@ -75,6 +75,9 @@ button.primary{background:var(--acc);border-color:var(--acc);color:#fff}
 button.danger{color:var(--acc)}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .kv{display:grid;grid-template-columns:max-content 1fr;gap:4px 14px;font-size:14px}
+.bonds{display:grid;gap:6px;font-size:14px}
+.bonds .b{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:6px 10px;border:1px solid var(--line);border-radius:8px}
+.bonds .b code{color:var(--muted)}.bonds .b button{margin-left:auto}
 .kv dt{color:var(--muted)}.kv dd{margin:0;font-variant-numeric:tabular-nums}
 .mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
 pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radius:8px;margin:8px 0 0;white-space:pre-wrap;word-break:break-all}
@@ -108,8 +111,10 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
   <div class="row" style="margin-top:12px">
     <button id="pair-btn" onclick="act('pair')" disabled>Pair a controller</button>
     <button onclick="act('disconnect')">Disconnect</button>
-    <button class="danger" onclick="if(confirm('Forget the paired controller? Hold Sync on a controller to pair again.'))act('forget')">Forget pairing</button>
+    <button class="danger" onclick="if(confirm('Forget all paired controllers? Hold Sync on a controller to pair it again.'))act('forget')">Forget all</button>
   </div>
+  <h3 style="margin:16px 0 6px;font-size:14px">Paired controllers <span class="note" id="bond-count"></span></h3>
+  <div id="bonds" class="bonds"></div>
   <div class="row" style="margin-top:12px;align-items:center;gap:8px">
     <label class="check"><input type="checkbox" data-k="idle_disconnect">Disconnect the controller after</label>
     <input type="number" min="1" max="240" data-k="idle_minutes" style="width:5em" aria-label="Minutes">
@@ -118,7 +123,7 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
   <p class="note" style="margin-top:4px">The controller then sleeps to save its battery; press any button to reconnect.</p>
   <label class="check" style="margin-top:12px" id="pair-button-row"><input type="checkbox" data-k="pair_button"><span>Pair only after pressing Sync (on by default on the Pico): a short press of the Pico's BOOTSEL button, or <i>Pair a controller</i> above, opens a 60 s pairing window (the LED blinks fast). Controllers in pairing mode are ignored otherwise.</span></label>
   <p class="note" id="pair-button-note" style="margin-top:4px"></p>
-  <p class="note">To pair: hold the small Sync button on the Switch 2 controller until the lights sweep. The dongle pairs automatically and remembers it; afterwards any button press wakes and reconnects it.</p>
+  <p class="note">To pair: hold the small Sync button on the Switch 2 controller until the lights sweep. The dongle pairs automatically and remembers it; afterwards any button press wakes and reconnects it. Any of the paired controllers can connect, one at a time. Pairing one more when the list is full forgets the oldest pairing.</p>
 </section>
 
 <section class="card">
@@ -363,6 +368,24 @@ function toast(t){const e=$('toast');e.textContent=t;e.classList.add('show');cle
 async function haptic(e){try{const r=await api('/api/action?do=haptic&effect='+e,{method:'POST'});if(!r.ok)toast(r.text()||'Failed')}catch(x){toast('Failed')}}
 async function playSample(step){const el=$('sample-n');const n=Math.max(1,Math.min(7,(+el.value||1)+step));el.value=n;
   try{const r=await api('/api/action?do=sample&n='+n,{method:'POST'});toast(r.ok?'Sample '+n:(r.text()||'Failed'))}catch(x){toast('Failed')}}
+// Paired controllers (newest pairing first); redrawn only when something changes.
+let BONDS_KEY='';
+function renderBonds(s){
+  const list=(s.bond&&s.bond.list)||[],L=s.link||{},cur=L.state==='ready'?L.addr:'';
+  const key=JSON.stringify(list)+cur;if(key===BONDS_KEY)return;BONDS_KEY=key;
+  $('bond-count').textContent=list.length?`(${list.length} of ${s.bond.max||list.length}; oldest is forgotten when full)`:'';
+  const el=$('bonds');el.innerHTML='';
+  if(!list.length){el.innerHTML='<p class="note" style="margin:0">None yet.</p>';return}
+  list.forEach((b,i)=>{
+    const row=document.createElement('div');row.className='b';
+    const conn=b.addr===cur;
+    row.innerHTML=`<b>${PIDS[b.pid]||('Controller 0x'+b.pid.toString(16))}</b><code>${b.addr}</code>`+
+      (conn?'<span class="pill ok">connected</span>':'')+(i===0?'<span class="note">newest</span>':i===list.length-1&&list.length>1?'<span class="note">oldest</span>':'');
+    const btn=document.createElement('button');btn.className='danger';btn.textContent='Forget';
+    btn.onclick=()=>{if(confirm('Forget '+b.addr+'? Hold Sync on it to pair it again.'))act('forget&addr='+b.addr)};
+    row.appendChild(btn);el.appendChild(row);
+  });
+}
 async function act(what){try{const r=await api('/api/action?do='+what,{method:'POST'});toast(r.ok?'Done':'Failed');setTimeout(loadSettings,700)}catch(e){toast('Failed')}}
 function buildStatic(){
 }
@@ -531,7 +554,6 @@ async function poll(){
     const su=$('st-usb');su.textContent=s.usb.mounted?(s.usb.report_mode?'USB streaming':'USB connected'):'USB not connected';su.className='pill '+(s.usb.mounted?'ok':'');
     kv($('ctrl'),[
       ['Type',PIDS[L.pid]||(L.pid?('0x'+L.pid.toString(16)):'—')],['Serial',L.serial||'—'],['Address',ready?L.addr:'—'],
-      ['Paired controller',s.bond.bonded?s.bond.addr:'none'],
       ['Battery',L.battery_mv?`${L.battery_pct}%${L.charging?' (charging)':''} · ${(L.battery_mv/1000).toFixed(2)} V · charge state 0x${(L.charge_state||0).toString(16).padStart(2,'0')}`:'—'],
       ['Report rate',ready?L.report_hz+' Hz ('+L.conn_interval_ms+' ms interval)':'—'],
       ['Gyro scale',['not detected','16.4','14.3'][L.gyro_range]||'—'],
@@ -545,6 +567,7 @@ async function poll(){
       if($('imu'))$('imu').innerHTML='accel '+s.input.out_accel.join(' / ')+'<br>gyro '+s.input.out_gyro.join(' / ')+(s.input.triggers[0]||s.input.triggers[1]?'<br>triggers '+s.input.triggers.join(' / '):'');
     }else{document.querySelectorAll('#map svg .on').forEach(e=>e.classList.remove('on'));stick($('dot-l'),2048,2048);stick($('dot-r'),2048,2048);if($('imu'))$('imu').textContent='';}
     if(S)showTab(MAP_CTRL);
+    renderBonds(s);
     document.querySelectorAll('.wifi-only').forEach(e=>e.style.display=s.wifi===false?'none':'');
     $('st-ver').textContent='v'+s.version+(s.platform?' · '+s.platform:'');
     if(S&&L.gyro_cal_busy===false)$('bias').textContent='bias: '+S.gyro_bias.join(', ');

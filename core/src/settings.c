@@ -118,6 +118,13 @@ static uint16_t clamp_u16(uint16_t v, uint16_t lo, uint16_t hi) {
 }
 
 void settings_sanitize(settings_t *s) {
+    // Paired controllers: no gaps; the single-controller fields follow the newest.
+    int n = 0;
+    for (int i = 0; i < BOND_MAX; i++) {
+        if (s->bonds[i].used) s->bonds[n++] = s->bonds[i];
+    }
+    for (int i = n; i < BOND_MAX; i++) memset(&s->bonds[i], 0, sizeof s->bonds[i]);
+    settings_bond_sync(s);
     for (int t = 0; t < CTRL_TYPE_COUNT; t++) {
         uint8_t *bm = settings_button_map(s, (ctrl_type_t)t);
         for (int i = 0; i < IN_COUNT; i++)
@@ -195,6 +202,15 @@ void settings_init(void) {
             // adapter map (new, GameCube-controller defaults) gets the Pro's.
             settings_default_profile(CTRL_GAMECUBE, &g_settings.gc_profile);
             settings_default_mode_map(CTRL_PRO, USB_MODE_GC_ADAPTER, g_settings.mode_map[USB_MODE_GC_ADAPTER]);
+        }
+        if (rev < 8) {
+            // One remembered controller before: it becomes the list.
+            uint8_t addr[6];
+            memcpy(addr, g_settings.ctrl_addr, 6);
+            uint8_t had = g_settings.bonded, type = g_settings.ctrl_addr_type;
+            uint16_t pid = g_settings.ctrl_pid;
+            settings_bond_clear(&g_settings);
+            if (had) settings_bond_add(&g_settings, addr, type, pid, NULL);
         }
         if (rev < 7) {
             // GameCube controller sticks / rumble: start from the shared values.

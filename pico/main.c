@@ -60,7 +60,7 @@ static void hotkey_task(void) {
     }
 }
 
-// BOOTSEL: a 5 s hold forgets the paired controller. A short press toggles
+// BOOTSEL: a 5 s hold forgets the paired controllers. A short press toggles
 // the access point, or, with "pair only after Sync" on, acts as the Sync
 // button (opens / closes the pairing window); the access point is then a
 // 1-5 s hold.
@@ -81,8 +81,8 @@ static void bootsel_task(void) {
     }
     if (now && !long_done && absolute_time_diff_us(since, get_absolute_time()) > BOOTSEL_FORGET_MS * 1000) {
         long_done = true;
-        LOG("bootsel: forgetting paired controller");
-        s2_link_forget();
+        LOG("bootsel: forgetting paired controllers");
+        s2_link_forget(NULL);
     }
     if (!now && down && !long_done) {
         bool short_press = absolute_time_diff_us(since, get_absolute_time()) < BOOTSEL_SHORT_MS * 1000;

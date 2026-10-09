@@ -81,8 +81,19 @@ typedef enum {
     MODE_SLOT_COUNT
 } mode_slot_t;
 #define MODE_SLOT_EMPTY 0
-#define SETTINGS_EXT_REV 7   // 1: mode_map; 2: mode_slot; 3: ble_tx_power; 4: idle_*; 5: pair_button;
-                             // 6: gc_profile; 7: gc_profile sticks / rumble
+#define SETTINGS_EXT_REV 8   // 1: mode_map; 2: mode_slot; 3: ble_tx_power; 4: idle_*; 5: pair_button;
+                             // 6: gc_profile; 7: gc_profile sticks / rumble; 8: bonds
+
+// Remembered (paired) controllers. Any of them can connect, one at a time;
+// pairing one more when the list is full forgets the oldest pairing.
+#define BOND_MAX 8
+typedef struct {
+    uint8_t addr[6];                    // BD_ADDR, big-endian (as printed)
+    uint8_t addr_type;
+    uint8_t used;
+    uint16_t pid;
+    uint16_t reserved;
+} bond_t;
 
 // Controller types with their own button maps and mode shortcut buttons.
 typedef enum {
@@ -149,6 +160,8 @@ typedef struct {
     char wifi_pass[65];
 
     // ---- pairing (written by the firmware) ----
+    // The newest of `bonds` (kept in step by the settings_bond_* functions);
+    // `bonded`: any controller paired.
     uint8_t bonded;
     uint8_t ctrl_addr[6];               // controller BD_ADDR, big-endian (as printed)
     uint8_t ctrl_addr_type;
@@ -174,6 +187,7 @@ typedef struct {
     uint8_t pair_button;                // pair only during a window opened by Sync / the page
                                         // (default on for boards with a button: Pico BOOTSEL)
     ctrl_profile_t gc_profile;          // NSO GameCube controller (the Pro uses the fields above)
+    bond_t bonds[BOND_MAX];             // paired controllers, newest pairing first
 
     uint32_t crc;
 } settings_t;
@@ -189,6 +203,18 @@ void settings_save_later(void);
 void settings_save_now(void);
 void settings_task(void);
 void settings_factory_reset(void);
+
+// Paired controllers (see bond_t).
+int settings_bond_find(const settings_t *s, const uint8_t addr[6]);   // index or -1
+int settings_bond_count(const settings_t *s);
+// Remember a newly paired controller as the newest. Pairing one that is
+// already known moves it to the front. Returns true and fills *dropped (if
+// given) when the list was full and the oldest pairing was forgotten.
+bool settings_bond_add(settings_t *s, const uint8_t addr[6], uint8_t addr_type, uint16_t pid, bond_t *dropped);
+bool settings_bond_remove(settings_t *s, const uint8_t addr[6]);
+void settings_bond_clear(settings_t *s);
+// Point the single-controller fields (bonded, ctrl_*) at the newest pairing.
+void settings_bond_sync(settings_t *s);
 
 // Default maps and mode shortcut buttons, per controller type.
 void settings_default_button_map(ctrl_type_t type, uint8_t map[IN_COUNT]);              // Switch Pro mode

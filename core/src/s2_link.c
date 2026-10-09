@@ -660,10 +660,13 @@ static void init_step_cb(bool ok, const s2_response_t *rsp, uint32_t step) {
         LOG("s2: pairing complete");
         s_info.pairing_ok = true;
         s_info.paired_this_session = true;
-        g_settings.bonded = 1;
-        memcpy(g_settings.ctrl_addr, s_peer, 6);
-        g_settings.ctrl_addr_type = s_peer_type;
-        g_settings.ctrl_pid = s_peer_pid;
+        {
+            bond_t old;
+            if (settings_bond_add(&g_settings, s_peer, s_peer_type, s_peer_pid, &old)) {
+                LOG("s2: %d controllers paired already: forgot the oldest, %s", BOND_MAX, addr_str(old.addr));
+            }
+            LOG("s2: %d paired controller(s)", settings_bond_count(&g_settings));
+        }
         settings_save_later();
         break;
     case ST_READ_CAL_L:
@@ -942,14 +945,14 @@ void s2c_on_advertisement(const uint8_t addr[6], uint8_t addr_type, int8_t rssi,
     for (int i = 0; i < 6; i++) {
         if (adv.host_addr_le[i] != local[5 - i]) for_us = false;
     }
-    bool is_bonded = g_settings.bonded && memcmp(addr, g_settings.ctrl_addr, 6) == 0;
+    bool is_bonded = settings_bond_find(&g_settings, addr) >= 0;
 
     if (s_paused) {
         // While the USB host sleeps we only watch for the bonded controller
         // waking up (a button press) so the host can be woken. Right after we
         // dropped the link the controller keeps advertising on its own for a
         // while, so those adverts are ignored.
-        if (for_us && platform_time_reached(s_pause_quiet_until) && platform_time_reached(s_seen_hook_next)) {
+        if (for_us && is_bonded && platform_time_reached(s_pause_quiet_until) && platform_time_reached(s_seen_hook_next)) {
             s_seen_hook_next = platform_deadline_ms(1000);
             s2_link_hook_controller_seen();
         }
@@ -986,7 +989,7 @@ void s2c_on_advertisement(const uint8_t addr[6], uint8_t addr_type, int8_t rssi,
         s_need_pairing = true;
     } else if (for_us) {
         // A controller that still remembers us but that we don't (pairing
-        // forgotten, or another controller paired since) must be paired
+        // forgotten, or dropped as the oldest of too many) must be paired
         // again with Sync, like a new one.
         if (!is_bonded) {
             if (platform_time_reached(s_unbonded_log)) {
@@ -1219,12 +1222,18 @@ void s2_link_let_controller_sleep(void) {
     s2t_disconnect();
 }
 
-void s2_link_forget(void) {
-    g_settings.bonded = 0;
-    memset(g_settings.ctrl_addr, 0, sizeof g_settings.ctrl_addr);
+void s2_link_forget(const uint8_t *addr) {
+    if (!addr) {
+        settings_bond_clear(&g_settings);
+        settings_save_later();
+        s2_link_disconnect();
+        LOG("s2: all pairings forgotten");
+        return;
+    }
+    if (!settings_bond_remove(&g_settings, addr)) return;
     settings_save_later();
-    s2_link_disconnect();
-    LOG("s2: pairing forgotten");
+    if (s_connected && memcmp(s_peer, addr, 6) == 0) s2_link_disconnect();
+    LOG("s2: pairing with %s forgotten", addr_str(addr));
 }
 
 void s2_link_set_paused(bool paused) {

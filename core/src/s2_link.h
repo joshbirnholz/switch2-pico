@@ -94,7 +94,8 @@ void s2_link_start_pairing(uint32_t ms);
 void s2_link_stop_pairing(void);
 bool s2_link_pairing_open(void);
 uint32_t s2_link_pairing_left_ms(void);
-void s2_link_forget(void);
+// Forget one paired controller (BD_ADDR as printed, big-endian), or all with NULL.
+void s2_link_forget(const uint8_t *addr);
 // Pause/resume scanning and connecting (e.g. while the USB host is asleep).
 void s2_link_set_paused(bool paused);
 
