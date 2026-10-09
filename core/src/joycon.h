@@ -61,6 +61,12 @@ typedef struct {
 } joycon_mouse_buttons_t;
 void joycon_mouse_buttons(ctrl_type_t type, bool left, joycon_mouse_buttons_t *out);
 
+// Scrolling from the mouse Joy-Con's stick (`left`: an (L)), its axes
+// -1..1 as s2_stick_axis() gives them. The stronger direction counts: up /
+// down scroll up / down (`wheel`, up positive); left / right scroll sideways
+// (`pan`, right positive), or with `up_down_only` up (left) / down (right).
+void joycon_mouse_scroll(bool left, float x, float y, bool up_down_only, float *wheel, float *pan);
+
 // Scale a movement by the profile's speed. The result is in hundredths of a
 // count (the caller keeps the remainder).
 void joycon_mouse_apply(const profile_t *p, int32_t dx, int32_t dy, int32_t *ox, int32_t *oy);

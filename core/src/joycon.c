@@ -1,5 +1,6 @@
 #include "joycon.h"
 
+#include <math.h>
 #include <string.h>
 
 static uint16_t clamp12(int v) {
@@ -118,6 +119,16 @@ void joycon_mouse_buttons(ctrl_type_t type, bool left, joycon_mouse_buttons_t *o
     else *out = (joycon_mouse_buttons_t){S2_BTN_R, S2_BTN_ZR, S2_BTN_RSTICK, false};
     // A single (sideways) Joy-Con 2's stick is the left stick.
     if (type != CTRL_JOYCON_PAIR) out->stick_left = true;
+}
+
+void joycon_mouse_scroll(bool left, float x, float y, bool up_down_only, float *wheel, float *pan) {
+    *wheel = *pan = 0.0f;
+    // The (R)'s horizontal axis runs the other way round as a mouse
+    // (checked on hardware).
+    float right = left ? x : -x;
+    if (fabsf(y) >= fabsf(x)) *wheel = y;
+    else if (up_down_only) *wheel = -right;
+    else *pan = right;
 }
 
 void joycon_mouse_apply(const profile_t *p, int32_t dx, int32_t dy, int32_t *ox, int32_t *oy) {

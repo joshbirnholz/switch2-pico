@@ -928,6 +928,20 @@ static void test_joycon(void) {
     joycon_mouse_apply(&p, 10, -7, &ox, &oy);
     CHECK(ox == 1500 && oy == -1050);
 
+    // Scrolling: the stronger direction; left / right sideways (the (R)'s
+    // horizontal axis runs the other way), or up / down with the option.
+    float wv, pv;
+    joycon_mouse_scroll(true, 0.2f, 0.9f, false, &wv, &pv);
+    CHECK(wv == 0.9f && pv == 0.0f);
+    joycon_mouse_scroll(true, 0.8f, 0.1f, false, &wv, &pv);
+    CHECK(wv == 0.0f && pv == 0.8f);
+    joycon_mouse_scroll(false, 0.8f, 0.1f, false, &wv, &pv);
+    CHECK(wv == 0.0f && pv == -0.8f);
+    joycon_mouse_scroll(true, -0.8f, 0.1f, true, &wv, &pv);   // (L) left: up
+    CHECK(wv == 0.8f && pv == 0.0f);
+    joycon_mouse_scroll(false, 0.8f, 0.1f, true, &wv, &pv);   // (R) left: up
+    CHECK(wv == 0.8f && pv == 0.0f);
+
     // Mouse buttons and wheel: that Joy-Con's shoulder, trigger, stick click
     // and stick (a single one's stick is the left stick).
     joycon_mouse_buttons_t mb;
@@ -981,14 +995,14 @@ static void test_joycon_profiles(void) {
     CHECK(c.p[0].usb_mode == USB_MODE_XBOX360 && c.p[1].usb_mode == USB_MODE_DUALSENSE && !c.p[2].used);
     CHECK(c.active == 1);
 
-    // Mouse fields: on / off and speed on Joy-Con types (an older side
-    // value is "on"), cleared on the others.
+    // Mouse fields: on / off, speed and the scroll option on Joy-Con types
+    // (an older side value is "on", other flag bits go), cleared on the others.
     settings_default_profiles(CTRL_JOYCON_L, &c);
     c.p[0].mouse_src = 2;
     c.p[0].mouse_speed_pct = 0;
     c.p[0].mouse_flags = 0x0F;
     settings_sanitize_profiles(CTRL_JOYCON_L, &c);
-    CHECK(c.p[0].mouse_src == MOUSE_ON && c.p[0].mouse_speed_pct == 100 && c.p[0].mouse_flags == 0);
+    CHECK(c.p[0].mouse_src == MOUSE_ON && c.p[0].mouse_speed_pct == 100 && c.p[0].mouse_flags == MOUSE_FLAG_SCROLL_UP_DOWN_ONLY);
     // ... and only used when the profile emulates an Xbox 360 controller.
     CHECK(!settings_profile_mouse(&c.p[0], CTRL_JOYCON_L));
     c.p[0].usb_mode = USB_MODE_XBOX360;

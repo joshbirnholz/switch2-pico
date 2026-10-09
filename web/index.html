@@ -302,7 +302,8 @@ body.offline #usb-help{display:flex}
         <label class="check"><input type="checkbox" id="pf-mouse" onchange="mouseFields()"><span>Mouse Mode</span></label>
         <label>Speed
           <span class="slider"><input type="range" min="10" max="250" id="pf-mouse-speed"><b><span id="v-pf-mouse-speed"></span>%</b></span></label>
-        <p class="note" style="grid-column:1/-1">Lay a Joy-Con 2 on its side on a surface and move it: it's a mouse while it lies there, and each Joy-Con is its own mouse. Its shoulder button clicks, its trigger right-clicks, its stick click middle-clicks and its stick scrolls (up or left: up; down or right: down); picked up, they're the controller's again. The dongle adds two USB mice next to the controller, so turning Mouse Mode on or off restarts it.</p>
+        <label class="check top" style="grid-column:1/-1"><input type="checkbox" id="pf-mouse-hscroll"><span>Scroll sideways with left / right<span class="hint" style="display:block">Off: left scrolls up and right scrolls down, as on a Switch 2.</span></span></label>
+        <p class="note" style="grid-column:1/-1">Lay a Joy-Con 2 on its side on a surface and move it: it's a mouse while it lies there, and each Joy-Con is its own mouse. Its shoulder button clicks, its trigger right-clicks, its stick click middle-clicks and its stick scrolls; picked up, they're the controller's again. The dongle adds two USB mice next to the controller, so turning Mouse Mode on or off restarts it.</p>
       </div>
     </section>
 
@@ -726,7 +727,7 @@ function stashProfile(){
   P.deadzone=+$('pf-deadzone').value;P.outer=+$('pf-outer').value;P.swap=$('pf-swap').checked?1:0;
   P.threshold=+$('pf-threshold').value;P.rumble=$('pf-rumble').checked?1:0;P.strength=+$('pf-strength').value;
   if(isJC()){
-    P.mouse=$('pf-mouse').checked?1:0;P.mouse_speed=+$('pf-mouse-speed').value;P.mouse_flags=0;
+    P.mouse=$('pf-mouse').checked?1:0;P.mouse_speed=+$('pf-mouse-speed').value;P.mouse_flags=$('pf-mouse-hscroll').checked?0:1;
   }
 }
 // Mouse Mode: Xbox 360 mode only (in the other modes Linux's controller
@@ -735,7 +736,7 @@ function mouseFields(){
   const P=prof(),x360=!!P&&P.mode===3;
   $('mouse-x360').hidden=x360;
   $('pf-mouse').disabled=!x360;
-  $('pf-mouse-speed').disabled=!x360||!$('pf-mouse').checked;
+  $('pf-mouse-speed').disabled=$('pf-mouse-hscroll').disabled=!x360||!$('pf-mouse').checked;
 }
 // Button icons for the profile tiles.
 function btnIcon(key){
@@ -822,6 +823,7 @@ function renderProfile(){
   if(isJC()){
     $('pf-mouse').checked=!!P.mouse;
     set('pf-mouse-speed',P.mouse_speed||100);
+    $('pf-mouse-hscroll').checked=!((P.mouse_flags|0)&1);
     mouseFields();
   }
   renderMap(P.mode);
@@ -952,7 +954,7 @@ async function save(){
   const prof=[];
   S.types.forEach((T,t)=>{
     T.profiles.forEach((P,i)=>prof.push(`prof_${t}_${i}=`+(P?[P.mode,P.deadzone,P.outer,P.swap,P.threshold,P.rumble,P.strength,...P.map].join(',')+
-      (S.profile_mouse?`,m${P.mouse?1:0},${P.mouse_speed||100},0`:'')+','+encodeURIComponent(P.name):'')));
+      (S.profile_mouse?`,m${P.mouse?1:0},${P.mouse_speed||100},${(P.mouse_flags|0)&1}`:'')+','+encodeURIComponent(P.name):'')));
     p.append(`active_${t}`,T.active);
   });
   document.querySelectorAll('[data-k]').forEach(el=>p.append(el.dataset.k,el.type==='checkbox'?(el.checked?1:0):el.value));

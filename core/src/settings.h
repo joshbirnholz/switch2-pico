@@ -87,11 +87,11 @@ typedef enum {
     MODE_SLOT_COUNT
 } mode_slot_t;
 #define MODE_SLOT_EMPTY 0
-#define SETTINGS_EXT_REV 14  // 1: mode_map; 2: mode_slot; 3: ble_tx_power; 4: idle_*; 5: pair_button;
+#define SETTINGS_EXT_REV 15  // 1: mode_map; 2: mode_slot; 3: ble_tx_power; 4: idle_*; 5: pair_button;
                              // 6: gc_profile; 7: gc_profile sticks / rumble; 8: bonds;
                              // 9: gc_usb_mode, last_ctrl; 10: profiles; 11: one profile per button;
                              // 12: Joy-Con 2 types; 13: single Joy-Con 2 profiles numbered;
-                             // 14: maps include IN_SL_R / IN_SR_R
+                             // 14: maps include IN_SL_R / IN_SR_R; 15: mouse_flags (MOUSE_FLAG_*)
 
 // Remembered (paired) controllers. Any of them can connect, one at a time
 // (or a Joy-Con 2 (L) together with a Joy-Con 2 (R)); pairing one more when
@@ -128,6 +128,10 @@ typedef enum {
     MOUSE_OFF = 0,
     MOUSE_ON = 1,
 } mouse_src_t;
+// profile_t.mouse_flags. Off (the default): the stick's up / down scroll up /
+// down and its left / right sideways; on: left / right scroll up / down too
+// (as on a Switch 2).
+#define MOUSE_FLAG_SCROLL_UP_DOWN_ONLY 0x01
 
 // Profiles: a USB mode with a button map and the options that go with it.
 // Each controller type has one per shortcut button (p[] is indexed by
@@ -149,7 +153,7 @@ typedef struct {
     // Joy-Con 2 types only (zero elsewhere): the USB mouse.
     uint8_t mouse_src;                  // mouse_src_t
     uint8_t mouse_speed_pct;            // 10..250
-    uint8_t mouse_flags;                // unused (0; once inverts and options)
+    uint8_t mouse_flags;                // MOUSE_FLAG_* (before ext_rev 15: older options, cleared)
     uint8_t reserved[5];
 } profile_t;
 

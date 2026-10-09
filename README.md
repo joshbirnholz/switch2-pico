@@ -159,8 +159,10 @@ switch, Mouse Mode, and the pointer speed. With it on, each Joy-Con 2 laid on
 its side on a surface is its own USB mouse, as on a Switch 2 (the dongle adds
 two mice, the (L)'s and the (R)'s; the sensor reports how far the surface
 is). Its shoulder button clicks, its trigger right-clicks, its stick click
-middle-clicks and its stick scrolls (up or left: up; down or right: down);
-picked up, they are the controller's again. Turning Mouse Mode on or off
+middle-clicks and its stick scrolls: up / down scroll up / down, and left /
+right scroll sideways (with **Scroll sideways with left / right** off, left
+scrolls up and right down, as on a Switch 2); picked up, they are the
+controller's again. Turning Mouse Mode on or off
 restarts the dongle.
 
 **Xbox 360 mode only.** Mouse Mode works only in profiles that emulate an

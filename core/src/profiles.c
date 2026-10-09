@@ -194,7 +194,7 @@ void settings_sanitize_profiles(ctrl_type_t type, ctrl_profiles_t *c) {
             // On or off (earlier versions named a side: either is on).
             p->mouse_src = p->mouse_src ? MOUSE_ON : MOUSE_OFF;
             p->mouse_speed_pct = clamp(p->mouse_speed_pct ? p->mouse_speed_pct : 100, 10, 250);
-            p->mouse_flags = 0;
+            p->mouse_flags &= MOUSE_FLAG_SCROLL_UP_DOWN_ONLY;
         } else {
             p->mouse_src = p->mouse_speed_pct = p->mouse_flags = 0;
         }

@@ -50,7 +50,8 @@ uint16_t usb_hid_get_feature(uint8_t report_id, uint8_t *buf, uint16_t len);
 #define USB_MOUSE_MIDDLE 0x04
 uint16_t usb_mouse_interface_desc(uint8_t *buf, uint16_t cap, uint8_t itf, uint8_t ep_in);
 bool usb_mouse_ready(uint8_t mouse);
-bool usb_mouse_send(uint8_t mouse, uint8_t buttons, int8_t dx, int8_t dy, int8_t wheel);
+// wheel: up is positive; pan (horizontal wheel): right is positive.
+bool usb_mouse_send(uint8_t mouse, uint8_t buttons, int8_t dx, int8_t dy, int8_t wheel, int8_t pan);
 
 #ifdef __cplusplus
 }

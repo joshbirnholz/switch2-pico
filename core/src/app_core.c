@@ -365,7 +365,7 @@ static void mouse_take_from_gamepad(s2_input_t *in) {
 // One Joy-Con's mouse: movement, buttons, wheel.
 typedef struct {
     int32_t acc_x, acc_y;     // hundredths of a count, not sent yet
-    float acc_wheel;
+    float acc_wheel, acc_pan;
     uint8_t sent_buttons;
     bool collected;
 } mouse_state_t;
@@ -392,19 +392,21 @@ static void mouse_one(int i, mouse_state_t *m, float dt) {
             if (s_raw_buttons & mb.right) buttons |= USB_MOUSE_RIGHT;
             if (s_raw_buttons & mb.middle) buttons |= USB_MOUSE_MIDDLE;
         }
-        // Scrolling, as on a Switch 2: up or left scrolls up, down or right
-        // down (the stronger direction counts).
+        // Scrolling (see joycon_mouse_scroll()).
         s2_input_t side;
         s2_stick_cal_t cal;
         if (s2_link_side_input(MOUSE_PID[i], &side, &cal)) {
             const uint16_t *raw = i == 0 ? side.stick_l : side.stick_r;
             float x = s2_stick_axis(&cal, 0, raw[0]), y = s2_stick_axis(&cal, 1, raw[1]);
-            float v = fabsf(y) >= fabsf(x) ? y : x;
-            if (v > MOUSE_SCROLL_DEAD || v < -MOUSE_SCROLL_DEAD) m->acc_wheel += v * MOUSE_SCROLL_HZ * dt;
+            bool up_down = settings_active(&g_settings, t)->mouse_flags & MOUSE_FLAG_SCROLL_UP_DOWN_ONLY;
+            float wv, pv;
+            joycon_mouse_scroll(i == 0, x, y, up_down, &wv, &pv);
+            if (fabsf(wv) > MOUSE_SCROLL_DEAD) m->acc_wheel += wv * MOUSE_SCROLL_HZ * dt;
+            if (fabsf(pv) > MOUSE_SCROLL_DEAD) m->acc_pan += pv * MOUSE_SCROLL_HZ * dt;
         }
     } else {
         m->acc_x = m->acc_y = 0;
-        m->acc_wheel = 0.0f;
+        m->acc_wheel = m->acc_pan = 0.0f;
     }
     // Not sent yet (endpoint busy, host asleep): never more than a few reports' worth.
     const int32_t lim = 4 * 127 * 100;
@@ -414,9 +416,12 @@ static void mouse_one(int i, mouse_state_t *m, float dt) {
     if (m->acc_y < -lim) m->acc_y = -lim;
     if (m->acc_wheel > 127.0f) m->acc_wheel = 127.0f;
     if (m->acc_wheel < -127.0f) m->acc_wheel = -127.0f;
+    if (m->acc_pan > 127.0f) m->acc_pan = 127.0f;
+    if (m->acc_pan < -127.0f) m->acc_pan = -127.0f;
     int32_t x = clamp127(m->acc_x / 100), y = clamp127(m->acc_y / 100), w = clamp127((int32_t)m->acc_wheel);
-    if (!x && !y && !w && buttons == m->sent_buttons) return;
-    if (!usb_mouse_send((uint8_t)i, buttons, (int8_t)x, (int8_t)y, (int8_t)w)) return;
+    int32_t pan = clamp127((int32_t)m->acc_pan);
+    if (!x && !y && !w && !pan && buttons == m->sent_buttons) return;
+    if (!usb_mouse_send((uint8_t)i, buttons, (int8_t)x, (int8_t)y, (int8_t)w, (int8_t)pan)) return;
     if (!m->collected && s_mouse_down[i]) {
         m->collected = true;
         LOG("mouse: Joy-Con 2 (%c) sending to the host", i ? 'R' : 'L');
@@ -424,6 +429,7 @@ static void mouse_one(int i, mouse_state_t *m, float dt) {
     m->acc_x -= x * 100;
     m->acc_y -= y * 100;
     m->acc_wheel -= (float)w;
+    m->acc_pan -= (float)pan;
     m->sent_buttons = buttons;
 }
 

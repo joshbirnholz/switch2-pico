@@ -200,7 +200,8 @@ static bool prohid_xfer_cb(uint8_t rhport, uint8_t ep_addr, xfer_result_t result
 
 
 // ---------------------------------------------------------------------------
-// USB mouse: a plain boot-compatible mouse (5 buttons, x, y, wheel).
+// USB mouse: a plain boot-compatible mouse (5 buttons, x, y, wheel, and a
+// horizontal wheel after the boot fields).
 // ---------------------------------------------------------------------------
 static const uint8_t MOUSE_REPORT_DESC[] = {
     0x05, 0x01, 0x09, 0x02, 0xA1, 0x01,          // Generic Desktop, Mouse, Application
@@ -210,6 +211,8 @@ static const uint8_t MOUSE_REPORT_DESC[] = {
     0x95, 0x01, 0x75, 0x03, 0x81, 0x01,          //     padding
     0x05, 0x01, 0x09, 0x30, 0x09, 0x31, 0x09, 0x38,   // X, Y, Wheel
     0x15, 0x81, 0x25, 0x7F, 0x75, 0x08, 0x95, 0x03, 0x81, 0x06,
+    0x05, 0x0C, 0x0A, 0x38, 0x02,                // Consumer, AC Pan (horizontal wheel)
+    0x15, 0x81, 0x25, 0x7F, 0x75, 0x08, 0x95, 0x01, 0x81, 0x06,
     0xC0, 0xC0,
 };
 
@@ -242,7 +245,7 @@ bool usb_mouse_ready(uint8_t i) {
            usbd_edpt_ready(0, s_mouse[i].ep_in);
 }
 
-bool usb_mouse_send(uint8_t i, uint8_t buttons, int8_t dx, int8_t dy, int8_t wheel) {
+bool usb_mouse_send(uint8_t i, uint8_t buttons, int8_t dx, int8_t dy, int8_t wheel, int8_t pan) {
     if (!usb_mouse_ready(i)) return false;
     mouse_hid_t *m = &s_mouse[i];
     if (!usbd_edpt_claim(0, m->ep_in)) return false;
@@ -251,8 +254,9 @@ bool usb_mouse_send(uint8_t i, uint8_t buttons, int8_t dx, int8_t dy, int8_t whe
     b[1] = (uint8_t)dx;
     b[2] = (uint8_t)dy;
     b[3] = (uint8_t)wheel;
+    b[4] = (uint8_t)pan;
     // Boot protocol: buttons, x, y only.
-    uint16_t n = m->protocol == HID_PROTOCOL_BOOT ? 3 : 4;
+    uint16_t n = m->protocol == HID_PROTOCOL_BOOT ? 3 : 5;
     bool ok = usbd_edpt_xfer(0, m->ep_in, b, n);
     if (!ok) usbd_edpt_release(0, m->ep_in);
     return ok;

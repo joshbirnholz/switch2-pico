@@ -299,6 +299,11 @@ void settings_init(void) {
             settings_profiles_numbered(&g_settings.prof[CTRL_JOYCON_L]);
             settings_profiles_numbered(&g_settings.prof[CTRL_JOYCON_R]);
         }
+        if (rev < 15) {
+            // mouse_flags held options since dropped: the defaults now.
+            for (int t = 0; t < CTRL_TYPE_COUNT; t++)
+                for (int i = 0; i < PROFILE_MAX; i++) g_settings.prof[t].p[i].mouse_flags = 0;
+        }
         g_settings.ext_rev = SETTINGS_EXT_REV;
         settings_sanitize(&g_settings);
         LOG("settings: loaded from flash (bonded=%d%s)", g_settings.bonded,
