@@ -182,6 +182,17 @@ bool app_controller_type(ctrl_type_t t) {
     return false;
 }
 
+// Once a minute while connected: what the battery estimate is based on.
+static void battery_log(void) {
+    static uint32_t next;
+    if (!platform_time_reached(next)) return;
+    next = platform_deadline_ms(60000);
+    const battery_t *b = &g_battery;
+    LOG("battery: %u mV now (last window %u-%u), estimate %u mV, state 0x%02x, %u%%%s", b->last_mv, b->win_min,
+        b->win_max, (unsigned)(b->mv + 0.5f), b->last_state, b->pct,
+        b->full ? " full" : b->charging ? " charging" : "");
+}
+
 static void mode_select_task(void) {
     // A chosen mode is applied even if the controller drops meanwhile.
     if (s_mode_switch >= 0 && platform_time_reached(s_mode_switch_at)) {
@@ -281,7 +292,8 @@ static void update_input(void) {
         uint32_t raw_prev = s_raw_buttons;
         idle_check(&in, raw_prev, first);
         // Charge state byte is non-zero while external power is connected.
-        battery_update(&g_battery, in.battery_mv, in.charge_state != 0 && in.charge_state != 0x20, platform_millis());
+        battery_update(&g_battery, in.battery_mv, in.charge_state, platform_millis());
+        battery_log();
         s_raw_buttons = in.buttons;
         // A button press while the host sleeps (controller still connected,
         // i.e. within SUSPEND_DISCONNECT_MS) wakes it.
@@ -352,7 +364,7 @@ static void update_input(void) {
             if (mapping_quick_remap_held(in.buttons)) out.buttons = 0;
         }
         // Charge state byte is non-zero while external power is connected.
-        procon_set_input(&out, true, in.battery_mv, in.charge_state != 0 && in.charge_state != 0x20);
+        procon_set_input(&out, true, in.battery_mv, battery_charging());
     } else {
         if (!was_connected) return;
         was_connected = false;

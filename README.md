@@ -265,8 +265,14 @@ DualSense modes add these outputs to the map:
 
 The battery level (DualSense percentage, Switch Pro full / medium / low /
 critical) comes from the controller's battery voltage through a typical
-lithium-cell curve, smoothed over several seconds so rumble doesn't make it
-jump, and it only moves down while discharging (up while charging).
+lithium-cell curve. Load (rumble, the radio) pulls the voltage down, so the
+highest reading of every 4 seconds is used and smoothed over about a minute.
+The level settles during the first minute of a connection; after that it
+moves at most 1 % per 20 seconds, only down while discharging and only up
+while charging. Plugging in or unplugging counts after 3 seconds; "full on
+external power" shows 100 %. The log gets a `battery:` line once a minute
+with the readings behind it. It is an estimate from voltage: expect it to be
+off by several percent, mostly in the flat middle of the curve.
 
 Rumble is the two-motor kind these controllers have, played on the Switch 2's
 HD rumble actuators like the motors of a real pad: the strong, heavy motor in

@@ -580,30 +580,59 @@ static void test_classic_rumble(void) {
     CHECK(!s2_rumble_block_active(bl));
 }
 
+// Feed reports every 8 ms from t0 to t1 (exclusive): `mv`, with a load dip
+// to `dip` mV for the first `dip_ms` of every second.
+static uint32_t feed_battery(battery_t *b, uint32_t t0, uint32_t t1, uint16_t mv, uint16_t dip, uint32_t dip_ms,
+                             uint8_t state) {
+    for (uint32_t t = t0; t < t1; t += 8) battery_update(b, (t % 1000) < dip_ms ? dip : mv, state, t);
+    return t1;
+}
+
 static void test_battery(void) {
     CHECK(battery_mv_to_percent(3300) == 0 && battery_mv_to_percent(4200) == 100);
     CHECK(battery_mv_to_percent(3700) == 30 && battery_mv_to_percent(3725) == 36);
     CHECK(battery_mv_to_percent(3900) > battery_mv_to_percent(3800));
     battery_t b;
     battery_reset(&b);
-    battery_update(&b, 3900, false, 0);
+    CHECK(b.pct == 100);
+    // A level from the first reading.
+    battery_update(&b, 3900, 0, 1);
     CHECK(b.pct == 72);
-    // A rumble dip of 150 mV for 200 ms barely moves it.
-    for (uint32_t t = 8; t <= 200; t += 8) battery_update(&b, 3750, false, t);
-    CHECK(b.pct >= 70);
-    // Back up: discharging never rises by a small amount.
-    for (uint32_t t = 208; t <= 20000; t += 8) battery_update(&b, 3900, false, t);
-    CHECK(b.pct <= 72 && b.pct >= 70);
-    // A sustained drop goes through.
-    for (uint32_t t = 20008; t <= 80000; t += 8) battery_update(&b, 3700, false, t);
+    // Rumble / radio dips (300 ms of every second, 150 mV down) don't pull it down:
+    // each window keeps its highest reading.
+    uint32_t t = feed_battery(&b, 9, 120000, 3900, 3750, 300, 0);
+    CHECK(b.pct >= 71 && b.pct <= 73);
+    // Noise of +-20 mV after settling: the level holds within a couple of percent.
+    uint8_t p0 = b.pct;
+    for (int k = 0; k < 30; k++) t = feed_battery(&b, t, t + 4000, k & 1 ? 3920 : 3880, 3880, 0, 0);
+    CHECK(b.pct <= p0 && b.pct + 3 >= p0);
+    // A real drop goes through, but at most 1 % per 20 s.
+    p0 = b.pct;
+    t = feed_battery(&b, t, t + 60000, 3700, 3700, 0, 0);
+    CHECK(b.pct < p0 && b.pct >= p0 - 3);
+    t = feed_battery(&b, t, t + 30 * 60000, 3700, 3700, 0, 0);
     CHECK(b.pct >= 29 && b.pct <= 31);
-    // Charger connected: the reading is corrected for the charging voltage.
-    battery_update(&b, 3900, true, 80008);
-    CHECK(b.charging && b.pct == battery_mv_to_percent(3780));
+    // Discharging never rises.
+    p0 = b.pct;
+    t = feed_battery(&b, t, t + 5 * 60000, 3800, 3800, 0, 0);
+    CHECK(b.pct == p0);
+    // A flicker of the charger flag (under 3 s) changes nothing.
+    t = feed_battery(&b, t, t + 1000, 3920, 3920, 0, 0x34);
+    t = feed_battery(&b, t, t + 8000, 3800, 3800, 0, 0);
+    CHECK(!b.charging && b.pct == p0);
+    // Charger connected: the reading is corrected for the charging voltage,
+    // settles, then only rises.
+    t = feed_battery(&b, t, t + 70000, 3900, 3900, 0, 0x34);
+    CHECK(b.charging && !b.full && b.pct == battery_mv_to_percent(3780));
+    p0 = b.pct;
+    t = feed_battery(&b, t, t + 60000, 3850, 3850, 0, 0x34);
+    CHECK(b.pct == p0);
+    // Full on external power: 100 %, not charging any more.
+    t = feed_battery(&b, t, t + 8000, 4180, 4180, 0, 0x20);
+    CHECK(b.full && b.pct == 100);
     // No reading (0 mV) is ignored.
-    uint8_t p = b.pct;
-    battery_update(&b, 0, true, 80016);
-    CHECK(b.pct == p);
+    battery_update(&b, 0, 0x20, t);
+    CHECK(b.pct == 100);
 }
 
 static void test_gc_adapter(void) {

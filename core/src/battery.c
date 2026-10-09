@@ -1,8 +1,13 @@
 #include "battery.h"
 
-#define TAU_MS          8000.0f   // smoothing time constant
+#define WINDOW_MS       4000      // highest reading per window
+#define TAU_MS          60000.0f  // smoothing of the window highs
+#define TAU_SETTLE_MS   8000.0f   // ... while settling
+#define SETTLE_MS       60000     // level follows the estimate freely this long
+#define STEP_MS         20000     // then at most 1 % per this
+#define CHG_DEBOUNCE_MS 3000      // charger flag must hold this long
 #define CHARGE_OFFSET   120       // mV a charging cell reads above its resting voltage
-#define JUMP_PCT        10        // a rise this large while discharging is believed
+#define STATE_FULL      0x20      // charge state: on external power, charged
 
 battery_t g_battery;
 
@@ -31,42 +36,90 @@ uint8_t battery_mv_to_percent(uint16_t mv) {
 }
 
 void battery_reset(battery_t *b) {
-    b->mv = 0;
-    b->last_ms = 0;
+    *b = (battery_t){0};
     b->pct = 100;
-    b->charging = false;
 }
 
-void battery_update(battery_t *b, uint16_t mv, bool charging, uint32_t now_ms) {
-    if (mv < 2500 || mv > 5000) return;   // no reading
-    bool was_charging = b->charging;
-    b->charging = charging;
-    if (b->mv == 0 || charging != was_charging) {
-        // First sample, or the charger was (dis)connected: the voltage steps.
-        b->mv = (float)mv;
-        b->last_ms = now_ms;
-        uint16_t rest = charging && mv > CHARGE_OFFSET ? (uint16_t)(mv - CHARGE_OFFSET) : mv;
-        b->pct = battery_mv_to_percent(rest);
+static bool reached(uint32_t now, uint32_t t) {
+    return (int32_t)(now - t) >= 0;
+}
+
+static uint8_t level_of(const battery_t *b, uint16_t window_high) {
+    int rest = window_high - (b->charging ? CHARGE_OFFSET : 0);
+    return battery_mv_to_percent(rest > 0 ? (uint16_t)rest : 0);
+}
+
+// A window ended with this highest reading.
+static void window_done(battery_t *b, uint16_t high, uint32_t now) {
+    int rest = high - (b->charging ? CHARGE_OFFSET : 0);
+    if (rest < 0) rest = 0;
+    bool settling = !reached(now, b->settle_until);
+    if (!b->have) {
+        b->mv = (float)rest;
+        b->have = true;
+    } else {
+        float tau = settling ? TAU_SETTLE_MS : TAU_MS;
+        b->mv += ((float)rest - b->mv) * (WINDOW_MS / (tau + WINDOW_MS));
+    }
+    uint8_t target = battery_mv_to_percent((uint16_t)(b->mv + 0.5f));
+    if (b->full) target = 100;
+    if (settling) {
+        b->pct = target;
+        b->last_step = now;
         return;
     }
-    float dt = (float)(now_ms - b->last_ms);
-    b->last_ms = now_ms;
-    if (dt > 60000.0f) dt = 60000.0f;
-    b->mv += ((float)mv - b->mv) * (dt / (TAU_MS + dt));
-    uint16_t rest = (uint16_t)(b->mv + 0.5f);
-    if (charging) rest = rest > CHARGE_OFFSET ? (uint16_t)(rest - CHARGE_OFFSET) : 0;
-    uint8_t p = battery_mv_to_percent(rest);
-    if (charging) {
-        if (p > b->pct || b->pct - p >= JUMP_PCT) b->pct = p;   // only rises while charging
-    } else {
-        if (p < b->pct || p - b->pct >= JUMP_PCT) b->pct = p;   // only drops while discharging
+    if (!reached(now, b->last_step + STEP_MS)) return;
+    if (b->charging ? target > b->pct : target < b->pct) {
+        b->pct = (uint8_t)(b->charging ? b->pct + 1 : b->pct - 1);
+        b->last_step = now;
+    }
+}
+
+void battery_update(battery_t *b, uint16_t mv, uint8_t state, uint32_t now) {
+    b->last_state = state;
+    if (mv < 2500 || mv > 5000) return;   // no reading
+    b->last_mv = mv;
+
+    // Charger flag, debounced. A change steps the voltage (CHARGE_OFFSET):
+    // start over with a new settling period.
+    bool chg = state != 0;
+    if (chg != b->chg_raw) {
+        b->chg_raw = chg;
+        b->chg_since = now;
+    }
+    if (!b->started) {
+        b->started = true;
+        b->charging = chg;
+        b->settle_until = now + SETTLE_MS;
+    } else if (chg != b->charging && reached(now, b->chg_since + CHG_DEBOUNCE_MS)) {
+        b->charging = chg;
+        b->have = false;
+        b->win_max = 0;
+        b->settle_until = now + SETTLE_MS;
+    }
+    b->full = b->charging && state == STATE_FULL;
+    if (b->full) b->pct = 100;
+
+    if (b->win_max == 0) {
+        b->win_start = now;
+        b->win_max = b->win_min = mv;
+        // A level right away, refined as windows complete.
+        if (!b->have) b->pct = b->full ? 100 : level_of(b, mv);
+        return;
+    }
+    if (mv > b->win_max) b->win_max = mv;
+    if (mv < b->win_min) b->win_min = mv;
+    if (reached(now, b->win_start + WINDOW_MS)) {
+        window_done(b, b->win_max, now);
+        b->win_start = now;
+        b->win_max = b->win_min = mv;
     }
 }
 
 uint8_t battery_percent(void) {
-    return g_battery.mv == 0 ? 100 : g_battery.pct;
+    return g_battery.pct;
 }
 
 bool battery_charging(void) {
-    return g_battery.charging;
+    return g_battery.charging && !g_battery.full;
 }
