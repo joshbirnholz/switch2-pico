@@ -25,3 +25,10 @@ export const getPrefs = callable<[], Prefs>("get_prefs");
 export const setPref = callable<[key: string, value: boolean], Prefs>("set_pref");
 export const checkUpdate = callable<[force: boolean], UpdateInfo>("check_update");
 export const installUpdate = callable<[], Result & { version?: string }>("install_update");
+export interface PluginUpdate extends Result {
+  installed?: string;
+  latest?: string;
+  available?: boolean;
+}
+export const checkPluginUpdate = callable<[force: boolean], PluginUpdate>("check_plugin_update");
+export const installPluginUpdate = callable<[], Result & { version?: string }>("install_plugin_update");

@@ -49,6 +49,7 @@ export interface Settings {
   types: CtrlType[];
   inputs: string[];
   quick_remap: number;
+  usb_detach: number;
 }
 
 // Controller types (ctrl_type_t).

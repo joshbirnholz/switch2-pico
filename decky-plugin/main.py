@@ -14,14 +14,20 @@
 
 import asyncio
 import ctypes
+import hashlib
+import io
 import errno
 import fcntl
 import glob
 import json
 import os
+import shutil
 import struct
+import subprocess
+import tempfile
 import time
 import urllib.request
+import zipfile
 import zlib
 
 import decky
@@ -29,6 +35,9 @@ import decky
 CONFIG_INTERFACE_NAME = "Switch2-Pico Config"
 # CI publishes every build of the default branch here (see .github/workflows/build.yml).
 FW_BASE = "https://joshbirnholz.github.io/switch2-pico/fw/"
+# ... and this plugin, built from decky-plugin/ (latest.json: version, file, sha256).
+PLUGIN_BASE = "https://joshbirnholz.github.io/switch2-pico/decky/"
+PLUGIN_FILES = ("main.py", "plugin.json", "package.json", "LICENSE", "README.md", "dist/index.js")
 
 # <linux/usbdevice_fs.h>
 USBDEVFS_BULK = 0xC0185502             # _IOWR('U', 2, struct usbdevfs_bulktransfer), 64-bit
@@ -184,6 +193,8 @@ class Plugin:
         self.latest = None          # latest.json from GitHub
         self.latest_at = 0.0
         self.notified_version = None
+        self.plugin_latest = None   # the plugin's latest.json
+        self.plugin_notified = None
         self.updating = False
         self.monitor = asyncio.get_event_loop().create_task(self._monitor())
         decky.logger.info("Switch2-Pico plugin started")
@@ -302,6 +313,64 @@ class Plugin:
         finally:
             self.updating = False
 
+    # ---- Plugin self-update ------------------------------------------------
+    async def check_plugin_update(self, force=False):
+        """{"ok", "installed", "latest", "available"} for this plugin."""
+        installed = getattr(decky, "DECKY_PLUGIN_VERSION", "0")
+        try:
+            if force or not self.plugin_latest:
+                data = await asyncio.to_thread(http_get, PLUGIN_BASE + "latest.json?%d" % int(time.time()))
+                self.plugin_latest = json.loads(data)
+        except Exception as e:
+            return {"ok": False, "installed": installed, "error": "Couldn't reach GitHub (%s)" % e}
+        latest = self.plugin_latest.get("version", "0")
+        return {"ok": True, "installed": installed, "latest": latest, "available": vcmp(latest, installed) > 0}
+
+    async def install_plugin_update(self):
+        """Download the latest plugin, put its files in place and restart
+        Decky (which reloads every plugin, this one included)."""
+        try:
+            up = await self.check_plugin_update(force=True)
+            if not up.get("ok"):
+                raise DongleError(up.get("error"))
+            info = self.plugin_latest
+            data = await asyncio.to_thread(http_get, PLUGIN_BASE + info["file"] + "?%s" % info.get("sha256", "")[:12], 60)
+            if info.get("sha256") and hashlib.sha256(data).hexdigest() != info["sha256"]:
+                raise DongleError("download corrupted (checksum mismatch)")
+            await asyncio.to_thread(self._replace_plugin, data)
+            decky.logger.info("plugin %s installed; restarting Decky", info.get("version"))
+            # Restart once this call has answered.
+            asyncio.get_event_loop().call_later(1.0, lambda: subprocess.Popen(
+                ["systemctl", "restart", "plugin_loader"], start_new_session=True))
+            return {"ok": True, "version": info.get("version")}
+        except Exception as e:
+            decky.logger.error("plugin update failed: %s", e)
+            return {"ok": False, "error": str(e)}
+
+    def _replace_plugin(self, data):
+        dest = decky.DECKY_PLUGIN_DIR
+        with zipfile.ZipFile(io.BytesIO(data)) as z, tempfile.TemporaryDirectory() as tmp:
+            members = {}
+            for name in z.namelist():
+                # Switch2-Pico/<file>: only the plugin's own files.
+                parts = name.split("/", 1)
+                if len(parts) == 2 and parts[1] in PLUGIN_FILES:
+                    members[parts[1]] = name
+            missing = [f for f in ("main.py", "plugin.json", "dist/index.js") if f not in members]
+            if missing:
+                raise DongleError("not a Switch2-Pico plugin package (missing %s)" % ", ".join(missing))
+            for rel, name in members.items():
+                path = os.path.join(tmp, rel)
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                with z.open(name) as src, open(path, "wb") as out:
+                    shutil.copyfileobj(src, out)
+            # Everything extracted: now swap each file in place.
+            for rel in members:
+                target = os.path.join(dest, rel)
+                os.makedirs(os.path.dirname(target), exist_ok=True)
+                shutil.copyfile(os.path.join(tmp, rel), target + ".new")
+                os.replace(target + ".new", target)
+
     # ---- Background: notifications -----------------------------------------
     async def _monitor(self):
         """Connects, low batteries and new firmware, as "notify" events
@@ -341,6 +410,10 @@ class Plugin:
                     if up.get("available") and up["latest"] != self.notified_version:
                         self.notified_version = up["latest"]
                         await decky.emit("notify", "update", up["latest"], "")
+                    pu = await self.check_plugin_update(force=True)
+                    if pu.get("available") and pu["latest"] != self.plugin_notified:
+                        self.plugin_notified = pu["latest"]
+                        await decky.emit("notify", "plugin", pu["latest"], "")
             except asyncio.CancelledError:
                 raise
             except Exception as e:

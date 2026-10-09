@@ -65,6 +65,31 @@ jobs:
             build-nrf/switch2_nrf52840.uf2
             build-nrf/switch2_nrf.ino.hex
 
+  # The Decky plugin (decky-plugin/): its installable zip.
+  decky-plugin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: decky-plugin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm build
+      - run: python3 -m py_compile main.py
+      - run: ./package.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: switch2-pico-decky
+          path: decky-plugin/out/Switch2-Pico.zip
+
   # Every push to the default branch refreshes one rolling pre-release,
   # "latest", so the UF2 files can be downloaded directly (artifacts need a
   # GitHub login and come zipped).
@@ -74,7 +99,7 @@ jobs:
     if: >-
       always() && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch &&
       needs.test.result == 'success' && needs.firmware-nrf52840.result == 'success'
-    needs: [test, firmware-pico2w, firmware-nrf52840]
+    needs: [test, firmware-pico2w, firmware-nrf52840, decky-plugin]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -107,20 +132,25 @@ jobs:
           else
             gh release create latest --target "$GITHUB_SHA" --title "Latest build (v$ver, $short)" --notes "$notes" --prerelease
           fi
-          gh release upload latest switch2-pico-v$ver-*.uf2 --clobber
+          if [ -f dist/switch2-pico-decky/Switch2-Pico.zip ]; then
+            pver=$(jq -r .version decky-plugin/package.json)
+            cp dist/switch2-pico-decky/Switch2-Pico.zip "switch2-pico-decky-v$pver.zip"
+          fi
+          gh release upload latest switch2-pico-v$ver-*.uf2 switch2-pico-decky-v*.zip --clobber
 
   # Publishes the configuration page (web/) together with the latest firmware
   # (fw/) to GitHub Pages: https://joshbirnholz.github.io/switch2-pico/. The
   # page is also the WebUSB landing page Chrome offers when the dongle is
   # plugged in, and its "Update" button downloads fw/latest.json and the
   # .uf2 files from here (GitHub release downloads can't be fetched from a
-  # web page: they send no CORS headers). Enable once under Settings ->
+  # web page: they send no CORS headers). The Decky plugin checks
+  # decky/latest.json for its own updates. Enable once under Settings ->
   # Pages -> Source: GitHub Actions.
   pages:
     if: >-
       always() && needs.test.result == 'success' && needs.firmware-nrf52840.result == 'success' &&
       ((github.event_name == 'push' && github.ref_name == github.event.repository.default_branch) || github.event_name == 'workflow_dispatch')
-    needs: [test, firmware-pico2w, firmware-nrf52840]
+    needs: [test, firmware-pico2w, firmware-nrf52840, decky-plugin]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -154,6 +184,14 @@ jobs:
            "files": {$files}}
           JSON
           cat site/fw/latest.json
+          if [ -f dist/switch2-pico-decky/Switch2-Pico.zip ]; then
+            mkdir -p site/decky
+            cp dist/switch2-pico-decky/Switch2-Pico.zip site/decky/Switch2-Pico.zip
+            pver=$(jq -r .version decky-plugin/package.json)
+            sum=$(sha256sum site/decky/Switch2-Pico.zip | cut -d' ' -f1)
+            echo "{\"version\": \"$pver\", \"file\": \"Switch2-Pico.zip\", \"sha256\": \"$sum\"}" > site/decky/latest.json
+            cat site/decky/latest.json
+          fi
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -1,8 +1,13 @@
 // Switch2-Pico: quick controls for the dongle in the Quick Access menu.
 import { addEventListener, definePlugin, removeEventListener, toaster } from "@decky/api";
-import { ButtonItem, PanelSection, PanelSectionRow, showModal, SliderField, staticClasses, ToggleField } from "@decky/ui";
-import { useEffect, useRef, useState } from "react";
-import { action, checkUpdate, getPrefs, getSettings, getStatus, Prefs, setPref, setSettings, UpdateInfo } from "./api";
+import {
+  ButtonItem, DialogButton, Field, Focusable, PanelSection, PanelSectionRow, showModal, SliderField, staticClasses, ToggleField,
+} from "@decky/ui";
+import { CSSProperties, ReactNode, useEffect, useRef, useState } from "react";
+import {
+  action, checkPluginUpdate, checkUpdate, getPrefs, getSettings, getStatus, installPluginUpdate, PluginUpdate, Prefs, setPref,
+  setSettings, UpdateInfo,
+} from "./api";
 import { InputIcon, OutputIcon, SlotIcon } from "./icons";
 import {
   CTRL_GC, CtrlType, extraButtons, isJoyCon, MF_INVERT_H, MF_INVERT_V, MF_UP_DOWN_ONLY, MODE_NAMES, MODE_X360, outputText, PIDS,
@@ -10,7 +15,40 @@ import {
 } from "./model";
 import { confirm, PairedModal, PickerModal, UpdateModal } from "./modals";
 
-const hint: React.CSSProperties = { fontSize: 12.5, color: "#a3adba", lineHeight: 1.35 };
+const hint: CSSProperties = { fontSize: 12.5, color: "#a3adba", lineHeight: 1.35 };
+// Everything stays within the panel's width (no horizontal scrolling).
+const card: CSSProperties = {
+  boxSizing: "border-box", width: "100%", maxWidth: "100%", overflow: "hidden", padding: 10, borderRadius: 6,
+  display: "flex", flexDirection: "column", gap: 8,
+};
+const btnRow: CSSProperties = { display: "flex", gap: 8, width: "100%", boxSizing: "border-box" };
+const half: CSSProperties = { flex: 1, minWidth: 0, width: "auto", height: 36, padding: "0 8px", boxSizing: "border-box" };
+const small: CSSProperties = {
+  width: "auto", minWidth: 0, maxWidth: 160, height: 38, padding: "0 10px", boxSizing: "border-box",
+  display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+};
+const ellipsis: CSSProperties = { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 };
+
+// A label on the left and a compact control on the right.
+function Row(props: { label: ReactNode; description?: ReactNode; children: ReactNode }) {
+  return (
+    <Field label={props.label} description={props.description} childrenContainerWidth="min" padding="compact">
+      {props.children}
+    </Field>
+  );
+}
+
+function Banner(props: { text: string; action: string; onAction(): void; onLater(): void }) {
+  return (
+    <div style={{ ...card, background: "#2e2611" }}>
+      <div style={{ fontWeight: 600, color: "#f5c35a" }}>{props.text}</div>
+      <Focusable style={btnRow}>
+        <DialogButton style={half} onClick={props.onAction}>{props.action}</DialogButton>
+        <DialogButton style={half} onClick={props.onLater}>Later</DialogButton>
+      </Focusable>
+    </div>
+  );
+}
 
 function Battery({ pct, label }: { pct: number; label?: string }) {
   const w = Math.max(1, Math.round((11 * pct) / 100));
@@ -35,6 +73,8 @@ function Content() {
   const [prefs, setPrefs] = useState<Prefs | null>(null);
   const [upd, setUpd] = useState<UpdateInfo | null>(null);
   const [later, setLater] = useState(false);
+  const [pupd, setPupd] = useState<PluginUpdate | null>(null);
+  const [pLater, setPLater] = useState(false);
   const [restarting, setRestarting] = useState(false);
   const typeSeen = useRef(-1);
   const speedTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -65,6 +105,7 @@ function Content() {
     poll();
     getPrefs().then(setPrefs);
     checkUpdate(false).then(setUpd);
+    checkPluginUpdate(false).then(setPupd);
     const id = setInterval(poll, 1000);
     return () => clearInterval(id);
   }, []);
@@ -78,12 +119,32 @@ function Content() {
     if (restarts) typeSeen.current = -1;
   };
 
+  const pluginBanner = pupd?.available && !pLater && (
+    <PanelSectionRow>
+      <Banner
+        text={`Plugin ${pupd.latest} is available`}
+        action="Update"
+        onLater={() => setPLater(true)}
+        onAction={() =>
+          confirm(`Update the plugin to ${pupd.latest}?`, "Decky restarts to load it; the Quick Access menu closes for a moment.", "Update", async () => {
+            const r = await installPluginUpdate();
+            toaster.toast({
+              title: "Switch2-Pico",
+              body: r.ok ? `Plugin ${r.version} installed. Decky is restarting…` : `Plugin update failed: ${r.error}`,
+            });
+          })
+        }
+      />
+    </PanelSectionRow>
+  );
+
   if (!st) {
     const busy = err.startsWith("in use");
     return (
       <PanelSection>
+        {pluginBanner}
         <PanelSectionRow>
-          <div style={{ textAlign: "center", padding: "16px 0 8px" }}>
+          <div style={{ textAlign: "center", padding: "16px 0 8px", boxSizing: "border-box", width: "100%" }}>
             <div style={{ fontSize: 17, fontWeight: 600, marginBottom: 6 }}>
               {restarting ? "Dongle restarting…" : busy ? "Dongle busy" : "Dongle not found"}
             </div>
@@ -173,14 +234,26 @@ function Content() {
   return (
     <>
       <PanelSection>
+        {/* First: something focusable at the very top, so moving up with the
+            D-pad scrolls the panel back to its top. */}
+        {T && P && (
+          <PanelSectionRow>
+            <Row label="Profile">
+              <DialogButton style={small} onClick={pickProfile}>
+                {!T.numbered && <SlotIcon label={slotLabel(T, ai)} gamecube={t === CTRL_GC} />}
+                <span style={ellipsis}>{T.numbered ? `${ai + 1} · ${P.name}` : P.name}</span>
+              </DialogButton>
+            </Row>
+          </PanelSectionRow>
+        )}
         <PanelSectionRow>
-          <div style={{ padding: 12, borderRadius: 6, background: "#1f252e", display: "flex", flexDirection: "column", gap: 6 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-              <span style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 600 }}>
+          <div style={{ ...card, background: "#1f252e", gap: 4 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 600, minWidth: 0 }}>
                 <span style={{ width: 8, height: 8, borderRadius: 4, background: ready.length ? "#3ecf6e" : "#5c6470", flex: "none" }} />
                 {ready.length ? T?.name ?? PIDS[ready[0].pid] : "No controller connected"}
               </span>
-              <span style={{ display: "flex", gap: 10, fontSize: 14 }}>
+              <span style={{ display: "flex", gap: 10, fontSize: 14, flex: "none" }}>
                 {ready.map((k) => (
                   <Battery key={k.addr} pct={k.battery_pct} label={ready.length > 1 ? sideLetter(k.pid) : undefined} />
                 ))}
@@ -189,47 +262,31 @@ function Content() {
             <div style={hint}>{MODE_NAMES[runMode]}</div>
           </div>
         </PanelSectionRow>
+        {(pairing.required || ready.length > 0) && (
+          <PanelSectionRow>
+            <Focusable style={{ ...btnRow, padding: "4px 0" }}>
+              {pairing.required && (
+                <DialogButton style={half} onClick={() => action("pair").then(poll)}>
+                  {pairing.open ? `Stop (${Math.ceil(pairing.left_ms / 1000)} s)` : "Pair controller"}
+                </DialogButton>
+              )}
+              {ready.length > 0 && (
+                <DialogButton style={half} onClick={() => action("disconnect").then(poll)}>Disconnect</DialogButton>
+              )}
+            </Focusable>
+          </PanelSectionRow>
+        )}
         {upd?.available && !later && (
           <PanelSectionRow>
-            <div style={{ padding: 12, borderRadius: 6, background: "#2e2611", display: "flex", flexDirection: "column", gap: 8 }}>
-              <div style={{ fontWeight: 600, color: "#f5c35a" }}>Firmware {upd.latest} is available</div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <ButtonItem
-                  layout="below"
-                  onClick={() => showModal(<UpdateModal version={upd.latest!} onDone={() => checkUpdate(true).then(setUpd)} />)}
-                >
-                  Update now
-                </ButtonItem>
-                <ButtonItem layout="below" onClick={() => setLater(true)}>Later</ButtonItem>
-              </div>
-            </div>
+            <Banner
+              text={`Firmware ${upd.latest} is available`}
+              action="Update now"
+              onLater={() => setLater(true)}
+              onAction={() => showModal(<UpdateModal version={upd.latest!} onDone={() => checkUpdate(true).then(setUpd)} />)}
+            />
           </PanelSectionRow>
         )}
-      </PanelSection>
-
-      <PanelSection title="Controller">
-        {pairing.required && (
-          <PanelSectionRow>
-            <ButtonItem layout="below" onClick={() => action("pair").then(poll)}>
-              {pairing.open ? `Stop pairing (${Math.ceil(pairing.left_ms / 1000)} s)` : "Pair a controller"}
-            </ButtonItem>
-          </PanelSectionRow>
-        )}
-        {ready.length > 0 && (
-          <PanelSectionRow>
-            <ButtonItem layout="below" onClick={() => action("disconnect").then(poll)}>Disconnect</ButtonItem>
-          </PanelSectionRow>
-        )}
-        {T && P && (
-          <PanelSectionRow>
-            <ButtonItem layout="inline" label="Profile" onClick={pickProfile}>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                {!T.numbered && <SlotIcon label={slotLabel(T, ai)} gamecube={t === CTRL_GC} />}
-                {T.numbered ? `${ai + 1} · ${P.name}` : P.name}
-              </span>
-            </ButtonItem>
-          </PanelSectionRow>
-        )}
+        {pluginBanner}
       </PanelSection>
 
       {T && P && S && (
@@ -238,20 +295,18 @@ function Content() {
             const o = P.map[e.input];
             return (
               <PanelSectionRow key={e.input}>
-                <ButtonItem
-                  layout="inline"
+                <Row
                   label={
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
                       <InputIcon label={e.label} />
                       {e.side && <span style={hint}>{e.side}</span>}
                     </span>
                   }
-                  onClick={() => pickOutput(e.input, e.label, e.side)}
                 >
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6, maxWidth: 150, overflow: "hidden" }}>
+                  <DialogButton style={small} onClick={() => pickOutput(e.input, e.label, e.side)}>
                     <OutputIcon mode={mode} idx={o} />
-                  </span>
-                </ButtonItem>
+                  </DialogButton>
+                </Row>
               </PanelSectionRow>
             );
           })}
@@ -318,15 +373,20 @@ function Content() {
 
       <PanelSection title="Dongle">
         <PanelSectionRow>
-          <ButtonItem
-            layout="inline"
-            label="Paired controllers"
-            description={`${st.bond.list.length} remembered`}
-            onClick={() => showModal(<PairedModal onChange={poll} />)}
-          >
-            Manage
-          </ButtonItem>
+          <Row label="Paired controllers" description={`${st.bond.list.length} remembered`}>
+            <DialogButton style={small} onClick={() => showModal(<PairedModal onChange={poll} />)}>Manage</DialogButton>
+          </Row>
         </PanelSectionRow>
+        {S && (
+          <PanelSectionRow>
+            <ToggleField
+              label="Only on USB while a controller is connected"
+              description={S.usb_detach ? "A controller must be connected to configure the dongle." : undefined}
+              checked={!!S.usb_detach}
+              onChange={(v) => save(`usb_detach=${v ? 1 : 0}`)}
+            />
+          </PanelSectionRow>
+        )}
         {prefs && (
           <PanelSectionRow>
             <ToggleField
@@ -354,6 +414,7 @@ function Content() {
           <div style={{ ...hint, paddingTop: 4 }}>
             Firmware {st.version} ({st.platform})
             {upd?.ok && !upd.available && upd.latest ? " · up to date" : ""}
+            {pupd?.installed ? ` · plugin ${pupd.installed}` : ""}
           </div>
         </PanelSectionRow>
       </PanelSection>
@@ -378,6 +439,8 @@ async function onNotify(kind: string, a: string | number, b: string | number) {
     toaster.toast({ title: `${PIDS[Number(a)] ?? "Controller"} battery low`, body: `${b}% left` });
   } else if (kind === "update") {
     toaster.toast({ title: `Switch2-Pico ${a} available`, body: "Open the plugin to update" });
+  } else if (kind === "plugin") {
+    toaster.toast({ title: `Switch2-Pico plugin ${a} available`, body: "Open the plugin to update" });
   } else if (kind === "profile") {
     toaster.toast({ title: `Profile: ${a}`, body: MODE_NAMES[STATUS_MODES[String(b)] ?? 0] });
   }

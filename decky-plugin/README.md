@@ -12,9 +12,12 @@ menu (Decky Loader), on a Steam Deck or any SteamOS / Linux machine with Decky.
 * **Remap from the controller** (C + GL / GR or SL / SR) where available.
 * **Mouse Mode** for Joy-Con 2 (Xbox 360 profiles): on / off, speed, scrolling.
 * **Paired controllers**: forget one or all.
+* **Only on USB while a controller is connected** (the dongle's setting).
 * **Reboot dongle**.
 * **Firmware updates**: checks GitHub on start and once a day, and installs
   the update over USB.
+* **Plugin updates**: checks for a newer version of itself the same way,
+  installs it and restarts Decky to load it.
 * Notifications: a controller connected, a low battery, a profile switch
   (C + Home), a firmware update available.
 
@@ -30,7 +33,11 @@ at the same moment).
 
 Firmware updates use `latest.json` and the `.uf2` files CI publishes to
 GitHub Pages (`https://joshbirnholz.github.io/switch2-pico/fw/`), the same
-ones the configuration page's Update button uses.
+ones the configuration page's Update button uses. CI also builds this plugin
+and publishes it at `…/decky/` (`latest.json` with its version and SHA-256,
+and `Switch2-Pico.zip`); the plugin compares that version with its own
+(`package.json`), so bump `version` there for a release. Both are published
+from the default branch.
 
 ## Install
 
