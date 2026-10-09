@@ -9,7 +9,7 @@
 
 settings_t g_settings;
 
-_Static_assert(sizeof(settings_t) <= 1024, "settings_t too large");
+_Static_assert(sizeof(settings_t) <= 4096, "settings_t too large");
 
 static bool s_dirty;
 static uint32_t s_save_deadline;
@@ -74,6 +74,7 @@ void settings_defaults(settings_t *s) {
     settings_default_mode_slots(s->mode_slot);
     settings_default_profile(CTRL_GAMECUBE, &s->gc_profile);
     s->gc_usb_mode = USB_MODE_GC_ADAPTER;
+    for (int t = 0; t < CTRL_TYPE_COUNT; t++) settings_default_profiles((ctrl_type_t)t, &s->prof[t]);
     s->ext_rev = SETTINGS_EXT_REV;
 
     s->stick_deadzone_pct = 6;
@@ -119,6 +120,7 @@ static uint16_t clamp_u16(uint16_t v, uint16_t lo, uint16_t hi) {
 }
 
 void settings_sanitize(settings_t *s) {
+    for (int t = 0; t < CTRL_TYPE_COUNT; t++) settings_sanitize_profiles((ctrl_type_t)t, &s->prof[t]);
     // Paired controllers: no gaps; the single-controller fields follow the newest.
     int n = 0;
     for (int i = 0; i < BOND_MAX; i++) {
@@ -126,38 +128,14 @@ void settings_sanitize(settings_t *s) {
     }
     for (int i = n; i < BOND_MAX; i++) memset(&s->bonds[i], 0, sizeof s->bonds[i]);
     settings_bond_sync(s);
-    for (int t = 0; t < CTRL_TYPE_COUNT; t++) {
-        uint8_t *bm = settings_button_map(s, (ctrl_type_t)t);
-        for (int i = 0; i < IN_COUNT; i++)
-            if (bm[i] >= OUT_COUNT) bm[i] = OUT_NONE;
-        for (int m = 0; m < MODE_MAP_SLOTS; m++) {
-            uint8_t *mm = settings_mode_map(s, (ctrl_type_t)t, (usb_mode_t)m);
-            for (int i = 0; i < IN_COUNT; i++)
-                if (mm[i] >= GP_COUNT) mm[i] = GP_NONE;
-        }
-        uint8_t *sl = settings_mode_slots(s, (ctrl_type_t)t);
-        for (int i = 0; i < MODE_SLOT_COUNT; i++)
-            if (sl[i] > USB_MODE_COUNT) sl[i] = MODE_SLOT_EMPTY;
-    }
-    if (s->usb_mode >= USB_MODE_COUNT) s->usb_mode = USB_MODE_SWITCH_PRO;
-    if (s->gc_usb_mode >= USB_MODE_COUNT) s->gc_usb_mode = USB_MODE_GC_ADAPTER;
     if (s->last_ctrl >= CTRL_TYPE_COUNT) s->last_ctrl = CTRL_PRO;
     if (s->ble_tx_power > 3) s->ble_tx_power = 0;
     s->idle_disconnect_off = s->idle_disconnect_off ? 1 : 0;
     s->idle_minutes = s->idle_minutes ? clamp_u8(s->idle_minutes, 1, 240) : 15;
     s->pair_button = s->pair_button && platform_has_sync_button() ? 1 : 0;
-    s->stick_deadzone_pct = clamp_u8(s->stick_deadzone_pct, 0, 40);
-    s->stick_outer_pct = clamp_u8(s->stick_outer_pct, 50, 100);
-    s->gc_profile.stick_deadzone_pct = clamp_u8(s->gc_profile.stick_deadzone_pct, 0, 40);
-    s->gc_profile.stick_outer_pct = clamp_u8(s->gc_profile.stick_outer_pct, 50, 100);
-    s->gc_profile.swap_sticks = s->gc_profile.swap_sticks ? 1 : 0;
-    s->gc_profile.rumble_enabled = s->gc_profile.rumble_enabled ? 1 : 0;
-    s->gc_profile.rumble_strength_pct = clamp_u8(s->gc_profile.rumble_strength_pct, 0, 200);
-    s->swap_sticks = s->swap_sticks ? 1 : 0;
     if (s->gyro_range > GYRO_RANGE_14_3) s->gyro_range = GYRO_RANGE_AUTO;
     s->gyro_scale_pct = clamp_u16(s->gyro_scale_pct, 10, 400);
     s->accel_scale_pct = clamp_u16(s->accel_scale_pct, 10, 400);
-    s->rumble_strength_pct = clamp_u8(s->rumble_strength_pct, 0, 200);
     if (s->rumble_freq_mode > RUMBLE_FREQ_FIXED) s->rumble_freq_mode = RUMBLE_FREQ_TRANSLATE;
     s->rumble_freq_slope = clamp_u8(s->rumble_freq_slope, 16, 255);
     s->usb_report_interval_ms = clamp_u8(s->usb_report_interval_ms, 4, 16);
@@ -170,6 +148,33 @@ void settings_sanitize(settings_t *s) {
     if (pl > 0 && pl < 8) {
         snprintf(s->wifi_pass, sizeof s->wifi_pass, "switch2pico");
     }
+}
+
+// Before profiles each controller type had one map per mode, its mode
+// shortcut buttons (mode + 1), one USB mode and one set of stick / rumble
+// options: they become one profile per mode, the shortcut buttons point at
+// the same modes' profiles, and the type's mode is the active profile.
+static void profiles_from_legacy(settings_t *s, ctrl_type_t t) {
+    bool gc = t == CTRL_GAMECUBE;
+    const ctrl_profile_t *g = &s->gc_profile;
+    ctrl_profiles_t *c = &s->prof[t];
+    memset(c, 0, sizeof *c);
+    for (int m = 0; m < USB_MODE_COUNT; m++) {
+        profile_t *p = &c->p[m];
+        settings_default_profile_for(t, (usb_mode_t)m, p);
+        const uint8_t *map = m == USB_MODE_SWITCH_PRO ? (gc ? g->button_map : s->button_map)
+                                                      : (gc ? g->mode_map[m] : s->mode_map[m]);
+        memcpy(p->map, map, IN_COUNT);
+        p->stick_deadzone_pct = gc ? g->stick_deadzone_pct : s->stick_deadzone_pct;
+        p->stick_outer_pct = gc ? g->stick_outer_pct : s->stick_outer_pct;
+        p->swap_sticks = gc ? g->swap_sticks : s->swap_sticks;
+        p->rumble_enabled = gc ? g->rumble_enabled : s->rumble_enabled;
+        p->rumble_strength_pct = gc ? g->rumble_strength_pct : s->rumble_strength_pct;
+        p->trigger_threshold = s->gc_trigger_threshold;
+    }
+    memcpy(c->slot, gc ? g->mode_slot : s->mode_slot, MODE_SLOT_COUNT);
+    uint8_t mode = gc ? s->gc_usb_mode : s->usb_mode;
+    c->active = mode < USB_MODE_COUNT ? mode : 0;
 }
 
 static settings_t s_stored;   // last image read from / written to storage
@@ -227,6 +232,11 @@ void settings_init(void) {
             g_settings.gc_profile.swap_sticks = g_settings.swap_sticks;
             g_settings.gc_profile.rumble_enabled = g_settings.rumble_enabled;
             g_settings.gc_profile.rumble_strength_pct = g_settings.rumble_strength_pct;
+        }
+        if (rev < 10) {
+            // Profiles: one per mode from that mode's map (after the steps
+            // above, which bring the per-mode fields up to date).
+            for (int t = 0; t < CTRL_TYPE_COUNT; t++) profiles_from_legacy(&g_settings, (ctrl_type_t)t);
         }
         g_settings.ext_rev = SETTINGS_EXT_REV;
         settings_sanitize(&g_settings);

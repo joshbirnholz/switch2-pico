@@ -169,7 +169,7 @@ static void api_status(http_response_t *r) {
 // ---------------------------------------------------------------------------
 static void api_settings_get(http_response_t *r) {
     jbuf_t j;
-    if (!jb_init(&j, 8192)) return respond_text(r, 500, "oom");
+    if (!jb_init(&j, 12288)) return respond_text(r, 500, "oom");
     const settings_t *s = &g_settings;
     // Every mode's output names (null: the mode lacks it), then per
     // controller type every mode's map, its defaults and the mode shortcut
@@ -188,33 +188,45 @@ static void api_settings_get(http_response_t *r) {
         }
         jb_printf(&j, "]}");
     }
+    // Per controller type: its profiles (see profile_t), the active one, the
+    // shortcut buttons (profile index + 1) and every mode's default map.
     static const char *const CTRL_NAMES[CTRL_TYPE_COUNT] = {"Pro Controller", "GameCube controller"};
-    jb_printf(&j, "],\"ctrl_type\":%u,\"profiles\":[", mapping_ctrl_type(s2_link_mapping_ctx()));
+    jb_printf(&j, "],\"ctrl_type\":%u,\"last_ctrl\":%u,\"profile_max\":%d,\"types\":[",
+              mapping_ctrl_type(s2_link_mapping_ctx()), s->last_ctrl, PROFILE_MAX);
     for (int t = 0; t < CTRL_TYPE_COUNT; t++) {
+        const ctrl_profiles_t *c = settings_profiles(s, (ctrl_type_t)t);
         jb_printf(&j, "%s{\"name\":", t ? "," : "");
         jb_str(&j, CTRL_NAMES[t]);
-        jb_printf(&j, ",\"maps\":[");
-        for (int m = 0; m < USB_MODE_COUNT; m++) {
-            const uint8_t *map = settings_map_for(s, (ctrl_type_t)t, (usb_mode_t)m);
-            jb_printf(&j, "%s[", m ? "," : "");
-            for (int i = 0; i < IN_COUNT; i++) jb_printf(&j, "%s%u", i ? "," : "", map[i]);
-            jb_printf(&j, "]");
+        jb_printf(&j, ",\"active\":%u,\"profiles\":[", c->active);
+        for (int i = 0; i < PROFILE_MAX; i++) {
+            const profile_t *p = &c->p[i];
+            jb_printf(&j, "%s", i ? "," : "");
+            if (!p->used) {
+                jb_printf(&j, "null");
+                continue;
+            }
+            jb_printf(&j, "{\"name\":");
+            jb_str(&j, p->name);
+            jb_printf(&j, ",\"mode\":%u,\"deadzone\":%u,\"outer\":%u,\"swap\":%u,\"threshold\":%u,\"rumble\":%u,"
+                          "\"strength\":%u,\"map\":[",
+                      p->usb_mode, p->stick_deadzone_pct, p->stick_outer_pct, p->swap_sticks, p->trigger_threshold,
+                      p->rumble_enabled, p->rumble_strength_pct);
+            for (int k = 0; k < IN_COUNT; k++) jb_printf(&j, "%s%u", k ? "," : "", p->map[k]);
+            jb_printf(&j, "]}");
         }
         jb_printf(&j, "],\"defaults\":[");
         for (int m = 0; m < USB_MODE_COUNT; m++) {
-            uint8_t d[IN_COUNT];
-            if (m == USB_MODE_SWITCH_PRO) settings_default_button_map((ctrl_type_t)t, d);
-            else settings_default_mode_map((ctrl_type_t)t, (usb_mode_t)m, d);
+            profile_t d;
+            settings_default_profile_for((ctrl_type_t)t, (usb_mode_t)m, &d);
             jb_printf(&j, "%s[", m ? "," : "");
-            for (int i = 0; i < IN_COUNT; i++) jb_printf(&j, "%s%u", i ? "," : "", d[i]);
+            for (int k = 0; k < IN_COUNT; k++) jb_printf(&j, "%s%u", k ? "," : "", d.map[k]);
             jb_printf(&j, "]");
         }
-        jb_printf(&j, "],\"mode_slots\":{");
-        const uint8_t *sl = settings_mode_slots(s, (ctrl_type_t)t);
+        jb_printf(&j, "],\"slots\":{");
         for (int i = 0; i < MODE_SLOT_COUNT; i++) {
             jb_printf(&j, "%s", i ? "," : "");
             jb_str(&j, mode_select_slot_name((mode_slot_t)i));
-            jb_printf(&j, ":%u", sl[i]);
+            jb_printf(&j, ":%u", c->slot[i]);
         }
         jb_printf(&j, "}}");
     }
@@ -225,28 +237,23 @@ static void api_settings_get(http_response_t *r) {
         jb_str(&j, in_button_name((in_button_t)i));
     }
     jb_printf(&j,
-              "],\"deadzone\":%u,\"outer\":%u,\"swap_sticks\":%u,\"gc_threshold\":%u,"
-              "\"gyro_enabled\":%u,\"gyro_range\":%u,\"gyro_scale\":%u,\"accel_scale\":%u,"
+              "],\"gyro_enabled\":%u,\"gyro_range\":%u,\"gyro_scale\":%u,\"accel_scale\":%u,"
               "\"gyro_bias\":[%d,%d,%d],"
-              "\"rumble_enabled\":%u,\"rumble_strength\":%u,\"rumble_freq_mode\":%u,\"rumble_freq_slope\":%u,"
+              "\"rumble_freq_mode\":%u,\"rumble_freq_slope\":%u,"
               "\"usb_interval\":%u,\"led_follow_host\":%u,"
-              "\"quick_remap\":%u,\"usb_mode\":%u,\"usb_detach\":%u,\"usb_wakeup\":%u,\"webusb\":%u,\"hotkey\":%u,\"wifi_autostart\":%u,\"wifi_channel\":%u,"
+              "\"quick_remap\":%u,\"usb_detach\":%u,\"usb_wakeup\":%u,\"webusb\":%u,\"hotkey\":%u,\"wifi_autostart\":%u,\"wifi_channel\":%u,"
               "\"wifi_ssid\":",
-              s->stick_deadzone_pct, s->stick_outer_pct, s->swap_sticks, s->gc_trigger_threshold, s->gyro_enabled,
+              s->gyro_enabled,
               s->gyro_range, s->gyro_scale_pct, s->accel_scale_pct, s->gyro_bias[0], s->gyro_bias[1],
-              s->gyro_bias[2], s->rumble_enabled, s->rumble_strength_pct, s->rumble_freq_mode,
+              s->gyro_bias[2], s->rumble_freq_mode,
               s->rumble_freq_slope, s->usb_report_interval_ms,
-              s->led_follow_host, !s->quick_remap_off, s->usb_mode, s->usb_detach_when_idle, s->usb_remote_wakeup, s->webusb_enabled, s->hotkey_enabled,
+              s->led_follow_host, !s->quick_remap_off, s->usb_detach_when_idle, s->usb_remote_wakeup, s->webusb_enabled, s->hotkey_enabled,
               s->wifi_autostart, s->wifi_channel);
     jb_str(&j, s->wifi_ssid);
     jb_printf(&j, ",\"wifi_has_pass\":%s,\"ble_tx_power\":%u,\"idle_disconnect\":%u,\"idle_minutes\":%u,"
-                  "\"pair_button\":%u,\"sync_button\":%s,"
-                  "\"gc_deadzone\":%u,\"gc_outer\":%u,\"gc_swap_sticks\":%u,\"gc_rumble_enabled\":%u,\"gc_rumble_strength\":%u,"
-                  "\"gc_usb_mode\":%u,\"last_ctrl\":%u}",
+                  "\"pair_button\":%u,\"sync_button\":%s}",
               s->wifi_pass[0] ? "true" : "false", s->ble_tx_power, !s->idle_disconnect_off, s->idle_minutes,
-              s->pair_button, platform_has_sync_button() ? "true" : "false", s->gc_profile.stick_deadzone_pct,
-              s->gc_profile.stick_outer_pct, s->gc_profile.swap_sticks, s->gc_profile.rumble_enabled,
-              s->gc_profile.rumble_strength_pct, s->gc_usb_mode, s->last_ctrl);
+              s->pair_button, platform_has_sync_button() ? "true" : "false");
     respond_json(r, &j);
 }
 
@@ -276,38 +283,50 @@ typedef struct {
     bool usb;         // changing it requires USB re-enumeration
 } num_field_t;
 
-// Which controller type and mode the map_* / slot_* keys of a POST edit
-// (ctrl=<t>, map_mode=<n>; default: the connected controller, active mode).
-static usb_mode_t s_post_map_mode;
-static ctrl_type_t s_post_ctrl;
+// Profile keys (controller type t, profile i, slot name n):
+//   prof_<t>_<i>=<mode>,<deadzone>,<outer>,<swap>,<threshold>,<rumble>,<strength>,<map x IN_COUNT>,<name>
+//                (empty: no profile there)
+//   active_<t>=<i>        slot_<t>_<n>=<i + 1, 0: none>
+static bool parse_profile(const char *v, profile_t *p) {
+    memset(p, 0, sizeof *p);
+    if (!*v) return true;   // unused
+    uint8_t num[7 + IN_COUNT];
+    char *end;
+    for (size_t k = 0; k < sizeof num; k++) {
+        long n = strtol(v, &end, 10);
+        if (end == v || *end != ',') return false;
+        num[k] = (uint8_t)(n < 0 ? 0 : n > 255 ? 255 : n);
+        v = end + 1;
+    }
+    p->used = 1;
+    p->usb_mode = num[0];
+    p->stick_deadzone_pct = num[1];
+    p->stick_outer_pct = num[2];
+    p->swap_sticks = num[3];
+    p->trigger_threshold = num[4];
+    p->rumble_enabled = num[5];
+    p->rumble_strength_pct = num[6];
+    memcpy(p->map, num + 7, IN_COUNT);
+    snprintf(p->name, sizeof p->name, "%s", v);
+    return true;
+}
 
 static bool apply_kv(settings_t *s, const char *k, const char *v, bool *usb_reconnect) {
-    if (strcmp(k, "ctrl") == 0) {
-        int t = atoi(v);
-        if (t >= 0 && t < CTRL_TYPE_COUNT) s_post_ctrl = (ctrl_type_t)t;
+    int t, i, n = 0;
+    if (sscanf(k, "prof_%d_%d%n", &t, &i, &n) == 2 && !k[n]) {
+        if (t < 0 || t >= CTRL_TYPE_COUNT || i < 0 || i >= PROFILE_MAX) return false;
+        return parse_profile(v, &settings_profiles(s, (ctrl_type_t)t)->p[i]);
+    }
+    if (sscanf(k, "active_%d%n", &t, &n) == 1 && !k[n]) {
+        if (t < 0 || t >= CTRL_TYPE_COUNT) return false;
+        settings_profiles(s, (ctrl_type_t)t)->active = (uint8_t)atoi(v);
         return true;
     }
-    if (strcmp(k, "map_mode") == 0) {
-        int m = atoi(v);
-        if (m >= 0 && m < USB_MODE_COUNT) s_post_map_mode = (usb_mode_t)m;
-        return true;
-    }
-    if (strncmp(k, "map_", 4) == 0) {
-        usb_mode_t mode = s_post_map_mode;
-        uint8_t *map = settings_map_for(s, s_post_ctrl, mode);
-        for (int i = 0; i < IN_COUNT; i++) {
-            if (strcmp(k + 4, in_button_name((in_button_t)i)) == 0) {
-                map[i] = (uint8_t)atoi(v);
-                return true;
-            }
-        }
-        return false;
-    }
-    if (strncmp(k, "slot_", 5) == 0) {
-        for (int i = 0; i < MODE_SLOT_COUNT; i++) {
-            if (strcmp(k + 5, mode_select_slot_name((mode_slot_t)i)) == 0) {
-                int v2 = atoi(v);
-                settings_mode_slots(s, s_post_ctrl)[i] = (uint8_t)(v2 >= 0 && v2 <= USB_MODE_COUNT ? v2 : MODE_SLOT_EMPTY);
+    if (sscanf(k, "slot_%d_%n", &t, &n) == 1 && n > 0) {
+        if (t < 0 || t >= CTRL_TYPE_COUNT) return false;
+        for (int m = 0; m < MODE_SLOT_COUNT; m++) {
+            if (strcmp(k + n, mode_select_slot_name((mode_slot_t)m)) == 0) {
+                settings_mode_slots(s, (ctrl_type_t)t)[m] = (uint8_t)atoi(v);
                 return true;
             }
         }
@@ -330,16 +349,10 @@ static bool apply_kv(settings_t *s, const char *k, const char *v, bool *usb_reco
         return true;
     }
     const num_field_t fields[] = {
-        {"deadzone", &s->stick_deadzone_pct, 1, false},
-        {"outer", &s->stick_outer_pct, 1, false},
-        {"swap_sticks", &s->swap_sticks, 1, false},
-        {"gc_threshold", &s->gc_trigger_threshold, 1, false},
         {"gyro_enabled", &s->gyro_enabled, 1, false},
         {"gyro_range", &s->gyro_range, 1, false},
         {"gyro_scale", &s->gyro_scale_pct, 2, false},
         {"accel_scale", &s->accel_scale_pct, 2, false},
-        {"rumble_enabled", &s->rumble_enabled, 1, false},
-        {"rumble_strength", &s->rumble_strength_pct, 1, false},
         {"rumble_freq_mode", &s->rumble_freq_mode, 1, false},
         {"rumble_freq_slope", &s->rumble_freq_slope, 1, false},
         {"usb_interval", &s->usb_report_interval_ms, 1, true},
@@ -347,17 +360,10 @@ static bool apply_kv(settings_t *s, const char *k, const char *v, bool *usb_reco
         {"usb_detach", &s->usb_detach_when_idle, 1, false},
         {"usb_wakeup", &s->usb_remote_wakeup, 1, false},
         {"webusb", &s->webusb_enabled, 1, true},
-        {"usb_mode", &s->usb_mode, 1, false},
-        {"gc_usb_mode", &s->gc_usb_mode, 1, false},
         {"hotkey", &s->hotkey_enabled, 1, false},
         {"ble_tx_power", &s->ble_tx_power, 1, false},
         {"idle_minutes", &s->idle_minutes, 1, false},
         {"pair_button", &s->pair_button, 1, false},
-        {"gc_deadzone", &s->gc_profile.stick_deadzone_pct, 1, false},
-        {"gc_outer", &s->gc_profile.stick_outer_pct, 1, false},
-        {"gc_swap_sticks", &s->gc_profile.swap_sticks, 1, false},
-        {"gc_rumble_enabled", &s->gc_profile.rumble_enabled, 1, false},
-        {"gc_rumble_strength", &s->gc_profile.rumble_strength_pct, 1, false},
         {"wifi_autostart", &s->wifi_autostart, 1, false},
         {"wifi_channel", &s->wifi_channel, 1, false},
     };
@@ -388,8 +394,6 @@ static void api_settings_post(const http_request_t *req, http_response_t *r) {
     static settings_t s;   // not on the loop task's 4 KB stack
     s = g_settings;
     bool usb = false;
-    s_post_map_mode = usb_mode_active();
-    s_post_ctrl = mapping_ctrl_type(s2_link_mapping_ctx());
     char *save = NULL;
     for (char *pair = strtok_r(body, "&", &save); pair; pair = strtok_r(NULL, "&", &save)) {
         char *eq = strchr(pair, '=');

@@ -522,7 +522,7 @@ static void rumble_task(void) {
     s2_rumble_params_t p = {
         .translate_freq = g_settings.rumble_freq_mode == RUMBLE_FREQ_TRANSLATE,
         .freq_slope = g_settings.rumble_freq_slope,
-        .strength_pct = g_settings.rumble_strength_pct,
+        .strength_pct = settings_tuning(&g_settings, mapping_ctrl_type(&s_map)).rumble_strength,
     };
     uint8_t pkt[S2_RUMBLE_PRO_PACKET_LEN];
     pkt[0] = 0x00;

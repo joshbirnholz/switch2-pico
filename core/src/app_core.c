@@ -107,7 +107,8 @@ static mode_select_t s_msel;
 static uint32_t s_swallow;            // raw buttons kept from the host until released
 static uint32_t s_blink_at;
 static bool s_blink_on;
-static int s_mode_switch = -1;        // usb_mode_t to switch to, -1: none
+static int s_mode_switch = -1;        // profile to switch to (with a restart), -1: none
+static ctrl_type_t s_mode_switch_type; // ... of this controller type
 static uint32_t s_mode_switch_at;
 
 void app_mode_select_cancel(void) {
@@ -119,36 +120,48 @@ void app_mode_select_cancel(void) {
 }
 
 static void mode_select_step(uint32_t raw) {
-    usb_mode_t chosen;
+    uint8_t chosen;
     uint32_t now = platform_millis();
-    const uint8_t *slots = settings_mode_slots(&g_settings, mapping_ctrl_type(s2_link_mapping_ctx()));
+    ctrl_type_t type = mapping_ctrl_type(s2_link_mapping_ctx());
+    ctrl_profiles_t *profiles = settings_profiles(&g_settings, type);
+    const uint8_t *slots = profiles->slot;
     switch (mode_select_update(&s_msel, slots, raw, now, &chosen)) {
     case MODE_SELECT_ENTER:
-        LOG("mode select: press a button with a mode (C + Home again to leave)");
+        LOG("profile select: press a button with a profile (C + Home again to leave)");
         s2_link_haptic(S2_HAPTIC_BA_THUMP);
         s_blink_on = true;
         s_blink_at = now;
         s2_link_set_led_override(0x0F);
         break;
     case MODE_SELECT_CANCEL:
-        LOG("mode select: left without a change");
+        LOG("profile select: left without a change");
         s_swallow = raw;
         s2_link_set_led_override(-1);
         break;
-    case MODE_SELECT_CHOSEN:
+    case MODE_SELECT_CHOSEN: {
         s_swallow = raw;
-        if (chosen == usb_mode_active() && chosen == *settings_usb_mode(&g_settings, mapping_ctrl_type(s2_link_mapping_ctx()))) {
-            LOG("mode select: already %s", usb_mode_name(chosen));
+        const profile_t *p = &profiles->p[chosen];
+        if (chosen == profiles->active) {
+            LOG("profile select: already %s", p->name);
             s2_link_haptic(S2_HAPTIC_TICK);
             s2_link_set_led_override(-1);
+        } else if (p->usb_mode == usb_mode_active()) {
+            // Same USB mode: only the map and options change, right away.
+            LOG("profile select: %s", p->name);
+            profiles->active = chosen;
+            settings_save_later();
+            s2_link_haptic(S2_HAPTIC_THUMP);
+            s2_link_set_led_override(-1);
         } else {
-            LOG("mode select: %s, restarting", usb_mode_name(chosen));
+            LOG("profile select: %s (%s), restarting", p->name, usb_mode_name((usb_mode_t)p->usb_mode));
             s2_link_haptic(S2_HAPTIC_THUMP);
             s2_link_set_led_override(0x0F);
             s_mode_switch = chosen;
+            s_mode_switch_type = type;
             s_mode_switch_at = platform_deadline_ms(MODE_SWITCH_DELAY);
         }
         break;
+    }
     default:
         break;
     }
@@ -159,16 +172,16 @@ static void mode_select_step(uint32_t raw) {
     }
 }
 
-// A controller of type t is about to connect. Each type has its own USB
-// mode: when t's differs from the one the dongle runs in, remember t and
-// restart into its mode (the controller keeps advertising meanwhile and
+// A controller of type t is about to connect. Each type has its own active
+// profile: when its USB mode differs from the one the dongle runs in,
+// remember t and restart into that mode (the controller keeps advertising meanwhile and
 // connects after the restart). True while restarting: don't connect.
 bool app_controller_type(ctrl_type_t t) {
     static bool restarting;
     if (restarting) return true;
     if (g_settings.last_ctrl != t) {
         g_settings.last_ctrl = (uint8_t)t;
-        uint8_t m = *settings_usb_mode(&g_settings, t);
+        uint8_t m = settings_active(&g_settings, t)->usb_mode;
         if (m != usb_mode_active()) {
             LOG("usb: %s controller: its mode is %s, restarting", t == CTRL_GAMECUBE ? "GameCube" : "Pro",
                 usb_mode_name((usb_mode_t)m));
@@ -199,9 +212,10 @@ static void battery_log(void) {
 }
 
 static void mode_select_task(void) {
-    // A chosen mode is applied even if the controller drops meanwhile.
+    // A chosen profile is applied even if the controller drops meanwhile.
     if (s_mode_switch >= 0 && platform_time_reached(s_mode_switch_at)) {
-        *settings_usb_mode(&g_settings, (ctrl_type_t)g_settings.last_ctrl) = (uint8_t)s_mode_switch;
+        settings_profiles(&g_settings, s_mode_switch_type)->active = (uint8_t)s_mode_switch;
+        g_settings.last_ctrl = (uint8_t)s_mode_switch_type;
         s_mode_switch = -1;
         settings_save_now();
         app_request_reboot(false);
@@ -313,8 +327,8 @@ static void update_input(void) {
         if (mode != USB_MODE_SWITCH_PRO) {
             // Generic modes: the mode's own map (gp_out_t), same shortcuts.
             const mapping_ctx_t *ctx = s2_link_mapping_ctx();
-            // This controller type's map for the mode (see settings.h).
-            uint8_t *map = settings_mode_map(&g_settings, mapping_ctrl_type(ctx), mode);
+            // The active profile's map (its mode is the one we run in).
+            uint8_t *map = settings_active_map(&g_settings, mapping_ctrl_type(ctx));
             // Not in DualSense Edge mode: GL/GR/C are its paddles and Fn
             // buttons, which the host's software remaps itself.
             bool quick = !g_settings.quick_remap_off && mode != USB_MODE_DUALSENSE_EDGE;
@@ -360,7 +374,7 @@ static void update_input(void) {
         } else if (!g_settings.quick_remap_off) {
             in_button_t back;
             if (mapping_quick_remap(&g_settings, ct, prev, in.buttons, &back)) {
-                uint8_t o = settings_button_map(&g_settings, ct)[back];
+                uint8_t o = settings_active_map(&g_settings, ct)[back];
                 LOG("remap: %s -> %s", in_button_name(back), o ? out_button_name((out_button_t)o) : "nothing");
                 settings_save_later();
                 s2_link_haptic(S2_HAPTIC_TICK);   // feedback on the controller

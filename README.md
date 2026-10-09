@@ -201,56 +201,67 @@ the real adapter. Notes:
 * Reports go out at the *Report interval* (default 8 ms = 125 Hz, like the
   real adapter; 4 ms for 250 Hz).
 
-**Per controller.** The Pro Controller and the NSO GameCube controller each
-have their own button maps (every mode), mode shortcut buttons, stick
-settings (deadzone, full deflection, swap) and rumble settings; the dongle uses
-the set of whichever controller is connected. The configuration page has a
-**Pro Controller** tab and a **GameCube controller** tab for these (it opens on
-the connected controller's tab, marked with a green dot); settings shared by
-both — USB mode, report interval, pairing, Wi-Fi, firmware — sit outside the
-tabs. Motion and HD rumble options are on the Pro Controller tab only; the
-trigger threshold is on the GameCube tab. Defaults differ where it helps: a GameCube
-controller's analog L / R are the triggers (LT / RT, L2 / R2) and Z the right
-bumper in the gamepad modes; a Pro Controller in GameCube adapter mode uses
-ZL / ZR as L / R and R as Z.
+**Profiles.** A profile is a USB mode together with its button mapping, stick
+settings (inner deadzone, full deflection, swap), trigger threshold and rumble
+(on/off, strength). The Pro Controller and the NSO GameCube controller each
+have their own profiles, up to 8. One profile per controller type is **in
+use**, and it applies whenever that controller connects. Several profiles can
+share a mode, for example two Xbox 360 profiles with different mappings.
 
-**Mode per controller.** The Pro Controller and the GameCube controller each
-keep their own USB mode (set on the configuration page's tab for each, or with
-the shortcut below while that controller is connected). The dongle starts in
-the mode of the controller that connected last; when a controller of the other
-type connects and its mode differs, the dongle restarts in that mode first and
-the controller connects right after (a controller being paired is paired
-first, then the dongle switches and it reconnects). A new dongle uses the
-GameCube adapter mode for the GameCube controller.
+The configuration page has a **Pro Controller** tab and a **GameCube
+controller** tab. It opens on the connected controller's tab, marked with a
+green dot. Each tab has a **Profiles** card (pick, **Use now**, New, Duplicate,
+Rename, Delete, and the profile's mode), then that profile's **Button
+mapping**, **Sticks and triggers** and **Rumble**. Settings shared by every
+profile sit outside the profile cards or outside the tabs: report interval,
+pairing, Wi-Fi and firmware, plus motion and HD-rumble frequency on the Pro
+Controller tab. Changing a profile's mode starts its mapping over from that
+mode's defaults. The profile in use can't be deleted.
+
+New dongles, and settings from before profiles, start with one profile per
+mode, named after it, holding that mode's mapping. In use: Switch Pro for the
+Pro Controller, GameCube adapter for the GameCube controller (or the mode each
+used before). Defaults differ where it helps: a GameCube controller's analog
+L / R are the triggers (LT / RT, L2 / R2) and Z the right bumper in the
+gamepad modes; a Pro Controller in GameCube adapter mode uses ZL / ZR as L / R
+and R as Z.
+
+**Mode per controller.** The dongle starts in the mode of the profile in use
+for the controller that connected last. When a controller of the other type
+connects and its profile's mode differs, the dongle restarts in that mode
+first and the controller connects right after. A controller being paired is
+paired first; then the dongle switches and the controller reconnects.
 
 **Switching from the controller:** hold **C + Home** for 1.5 seconds. The
 controller gives a "ba-thump" and all four of its lights blink. Then press the
-button for the mode you want; the controller thumps and the dongle restarts in
-that mode. Defaults:
+button for the profile you want; the controller thumps. A profile in the same
+USB mode applies at once; one in another mode restarts the dongle in that
+mode. Defaults (the per-mode profiles):
 
-| Button | Mode |
+| Button | Profile |
 | --- | --- |
 | A | DualSense Edge |
-| B | Xbox 360 controller |
+| B | Xbox 360 |
 | X | DualSense |
-| Y | Switch Pro Controller |
+| Y | Switch Pro |
 | D-pad | – (empty) |
 
-**USB and system → Mode shortcut** assigns a mode, or – (empty), to each face
-button and D-pad direction. Empty buttons are ignored. Press C + Home
-again, or wait 5 seconds without pressing anything, to leave without a change.
-While choosing, the host sees no buttons pressed. While C is held, Home doesn't
-reach the host, so the hold doesn't open the host's home menu (setting every
-button to – turns the shortcut and this off, except on the Pico 2 W while
-the Wi-Fi hotkey is on). The **Haptics test** section plays these effects, and
-the controller's built-in vibration samples.
+**Profiles → Shortcut on the controller** assigns a profile, or – (empty), to
+each face button and D-pad direction, per controller type. Empty buttons are
+ignored. Press C + Home again, or wait 5 seconds without pressing anything, to
+leave without a change. While choosing, the host sees no buttons pressed.
+While C is held, Home doesn't reach the host, so the hold doesn't open the
+host's home menu. Setting every button to – turns off both the shortcut and
+this Home blocking, except on the Pico 2 W while the Wi-Fi hotkey is on. The
+**Haptics test** section plays these effects, and the controller's built-in
+vibration samples.
 
-Changing the mode restarts the dongle, which then has that controller's USB
+A change of mode restarts the dongle, which then has that controller's USB
 IDs; the configuration page still finds it (Linux: install the current
-`tools/99-switch2-pico.rules`, which covers every mode's IDs). Each mode keeps its own button map,
-edited in **Button mapping** (pick the mode under *Mapping for*). The defaults
-go by position (Nintendo A = Circle / Xbox B, B = Cross / Xbox A, and so on),
-and the C + GL/GR + button shortcut works in every mode except DualSense Edge.
+`tools/99-switch2-pico.rules`, which covers every mode's IDs). The default
+mappings go by position (Nintendo A = Circle / Xbox B, B = Cross / Xbox A, and
+so on). The C + GL/GR + button shortcut changes the profile in use and works
+in every mode except DualSense Edge.
 
 DualSense modes add these outputs to the map:
 
@@ -465,7 +476,8 @@ sketch.
 | `core/src/usb_hid.c`, `usb_pro_desc.c` | TinyUSB HID class driver and the Pro Controller report descriptor |
 | `core/src/hd_rumble.c` | Switch 1 HD rumble decoder and Switch 2 encoder |
 | `core/src/mapping.c` | Button remapping, stick calibration and deadzones, IMU conversion |
-| `core/src/mode_select.c` | USB mode shortcut on the controller (C + Home, then a button) |
+| `core/src/mode_select.c` | Profile shortcut on the controller (C + Home, then a button) |
+| `core/src/profiles.c` | Profiles per controller type: defaults, checks |
 | `core/src/web_api.c`, `webusb.c` | Configuration API, served over HTTP or WebUSB |
 | `core/src/app_core.c`, `settings.c` | Glue, USB suspend / wakeup, settings |
 | `core/src/platform.h` | Board services (time, storage, reboot, firmware update) |

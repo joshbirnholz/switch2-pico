@@ -122,13 +122,14 @@ uint32_t mapping_buttons_except(const settings_t *s, const mapping_ctx_t *ctx, c
         // Analog GameCube triggers count as the shoulder press past the threshold.
         int l = (int)in->trigger_l - ctx->gc_trigger_neutral[0];
         int r = (int)in->trigger_r - ctx->gc_trigger_neutral[1];
-        if (l > s->gc_trigger_threshold) raw |= S2_BTN_L;
-        if (r > s->gc_trigger_threshold) raw |= S2_BTN_R;
+        int th = settings_active(s, CTRL_GAMECUBE)->trigger_threshold;
+        if (l > th) raw |= S2_BTN_L;
+        if (r > th) raw |= S2_BTN_R;
     }
     uint32_t out = 0;
     for (int i = 0; i < IN_COUNT; i++) {
         if (raw & IN_BITS[i]) {
-            out |= mapping_out_button_bit((out_button_t)settings_button_map(s, mapping_ctrl_type(ctx))[i]);
+            out |= mapping_out_button_bit((out_button_t)settings_active_map(s, mapping_ctrl_type(ctx))[i]);
         }
     }
     return out;
@@ -138,7 +139,8 @@ static void stick_scaled(uint8_t deadzone_pct, uint8_t outer_pct, const s2_stick
                          uint16_t out[2]);
 
 void mapping_stick(const settings_t *s, const s2_stick_cal_t *cal, const uint16_t raw[2], uint16_t out[2]) {
-    stick_scaled(s->stick_deadzone_pct, s->stick_outer_pct, cal, raw, out);
+    ctrl_tuning_t t = settings_tuning(s, CTRL_PRO);
+    stick_scaled(t.deadzone, t.outer, cal, raw, out);
 }
 
 static void stick_scaled(uint8_t deadzone_pct, uint8_t outer_pct, const s2_stick_cal_t *cal, const uint16_t raw[2],
@@ -248,7 +250,7 @@ bool mapping_quick_remap_held(uint32_t raw) {
 }
 
 bool mapping_quick_remap(settings_t *s, ctrl_type_t type, uint32_t prev, uint32_t raw, in_button_t *changed) {
-    return mapping_quick_remap_map(settings_button_map(s, type), prev, raw, changed);
+    return mapping_quick_remap_map(settings_active_map(s, type), prev, raw, changed);
 }
 
 bool mapping_quick_remap_map(uint8_t map[IN_COUNT], uint32_t prev, uint32_t raw, in_button_t *changed) {
@@ -275,7 +277,7 @@ bool mapping_macro_busy(const mapping_macro_t *m) {
 
 uint32_t mapping_macro_step(mapping_macro_t *m, const settings_t *s, ctrl_type_t type, uint32_t prev, uint32_t raw,
                             uint32_t now_ms) {
-    switch (mapping_macro_run(m, settings_button_map(s, type), OUT_HOME_A, prev, raw, now_ms)) {
+    switch (mapping_macro_run(m, settings_active_map(s, type), OUT_HOME_A, prev, raw, now_ms)) {
     case MACRO_GUIDE: return S1_BTN_HOME;
     case MACRO_GUIDE_SOUTH: return S1_BTN_HOME | S1_BTN_A;
     default: return 0;
@@ -318,8 +320,9 @@ uint32_t mapping_gp_buttons(const settings_t *s, const uint8_t map[IN_COUNT], co
     if (ctx && ctx->is_gamecube) {
         int l = (int)in->trigger_l - ctx->gc_trigger_neutral[0];
         int r = (int)in->trigger_r - ctx->gc_trigger_neutral[1];
-        if (l > s->gc_trigger_threshold) raw |= S2_BTN_L;
-        if (r > s->gc_trigger_threshold) raw |= S2_BTN_R;
+        int th = settings_active(s, CTRL_GAMECUBE)->trigger_threshold;
+        if (l > th) raw |= S2_BTN_L;
+        if (r > th) raw |= S2_BTN_R;
     }
     uint32_t out = 0;
     for (int i = 0; i < IN_COUNT; i++) {

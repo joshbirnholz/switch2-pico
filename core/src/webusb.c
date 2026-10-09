@@ -9,7 +9,7 @@
 #include "settings.h"
 #include "web_api.h"
 
-#define REQ_MAX 6144
+#define REQ_MAX 8192
 
 static uint8_t s_rx[REQ_MAX + 1];
 static uint32_t s_rx_len;

@@ -16,7 +16,7 @@
 // One flash sector for settings, well clear of the BTstack TLV bank at the
 // very end of flash.
 #define SETTINGS_FLASH_OFFSET (PICO_FLASH_SIZE_BYTES - 16 * FLASH_SECTOR_SIZE)
-#define SETTINGS_MAX 1024
+#define SETTINGS_MAX 4096   // one flash sector
 
 uint32_t platform_millis(void) {
     return to_ms_since_boot(get_absolute_time());

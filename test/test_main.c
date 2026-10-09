@@ -50,14 +50,20 @@ usb_mode_t usb_mode_active(void) { return USB_MODE_DUALSENSE_EDGE; }
 
 static void test_defaults(settings_t *s) {
     memset(s, 0, sizeof *s);
-    for (int i = IN_A; i <= IN_RIGHT; i++) s->button_map[i] = (uint8_t)(OUT_A + i);
-    memcpy(s->gc_profile.button_map, s->button_map, IN_COUNT);   // GameCube controller: same
-    s->stick_deadzone_pct = 0;
-    s->stick_outer_pct = 100;
+    // Both controller types: the Switch Pro profile active, identity map, no deadzone.
+    for (int t = 0; t < CTRL_TYPE_COUNT; t++) {
+        settings_default_profiles((ctrl_type_t)t, &s->prof[t]);
+        s->prof[t].active = 0;
+        profile_t *p = &s->prof[t].p[0];
+        for (int i = 0; i < IN_COUNT; i++) p->map[i] = OUT_NONE;
+        for (int i = IN_A; i <= IN_RIGHT; i++) p->map[i] = (uint8_t)(OUT_A + i);
+        p->stick_deadzone_pct = 0;
+        p->stick_outer_pct = 100;
+        p->trigger_threshold = 120;
+    }
     s->gyro_enabled = 1;
     s->gyro_scale_pct = 100;
     s->accel_scale_pct = 100;
-    s->gc_trigger_threshold = 120;
 }
 
 // ---------------------------------------------------------------------------
@@ -198,10 +204,13 @@ static void test_input_report(void) {
 }
 
 // ---------------------------------------------------------------------------
+// The Pro Controller's active profile map (test_defaults: Switch Pro profile).
+#define PRO_MAP(st) settings_active_map(&(st), CTRL_PRO)
+
 static void test_mapping(void) {
     settings_t s;
     test_defaults(&s);
-    s.button_map[IN_GL] = OUT_B;
+    PRO_MAP(s)[IN_GL] = OUT_B;
     mapping_ctx_t ctx;
     memset(&ctx, 0, sizeof ctx);
     s2_default_stick_cal(&ctx.cal_l);
@@ -228,7 +237,7 @@ static void test_mapping(void) {
     CHECK(out.gyro[0] == 20 && out.gyro[1] == -10 && out.gyro[2] == 30);
 
     // Deadzone
-    s.stick_deadzone_pct = 10;
+    settings_active(&s, CTRL_PRO)->stick_deadzone_pct = 10;
     in.stick_l[0] = 2048 + 100;   // ~7% deflection
     mapping_apply(&s, &ctx, &in, &out);
     CHECK(out.stick_l[0] == S1_STICK_CENTER);
@@ -250,7 +259,7 @@ static void test_mapping(void) {
 static void test_quick_remap(void) {
     settings_t s;
     test_defaults(&s);
-    s.button_map[IN_GL] = OUT_LSTICK;
+    PRO_MAP(s)[IN_GL] = OUT_LSTICK;
     in_button_t changed = IN_COUNT;
     uint32_t chord = S2_BTN_C | S2_BTN_GL;
 
@@ -261,21 +270,21 @@ static void test_quick_remap(void) {
 
     // C + GL + A: GL now sends A.
     CHECK(mapping_quick_remap(&s, CTRL_PRO, chord, chord | S2_BTN_A, &changed));
-    CHECK(changed == IN_GL && s.button_map[IN_GL] == OUT_A);
+    CHECK(changed == IN_GL && PRO_MAP(s)[IN_GL] == OUT_A);
     // Holding A doesn't repeat.
     CHECK(!mapping_quick_remap(&s, CTRL_PRO, chord | S2_BTN_A, chord | S2_BTN_A, &changed));
     // Same again clears it.
     CHECK(mapping_quick_remap(&s, CTRL_PRO, chord, chord | S2_BTN_A, &changed));
-    CHECK(s.button_map[IN_GL] == OUT_NONE);
+    CHECK(PRO_MAP(s)[IN_GL] == OUT_NONE);
     // GL follows what the pressed button currently sends.
-    s.button_map[IN_B] = OUT_X;
+    PRO_MAP(s)[IN_B] = OUT_X;
     CHECK(mapping_quick_remap(&s, CTRL_PRO, chord, chord | S2_BTN_B, &changed));
-    CHECK(s.button_map[IN_GL] == OUT_X);
+    CHECK(PRO_MAP(s)[IN_GL] == OUT_X);
 
     // GR works the same and leaves GL alone; both held is ambiguous; Home is skipped.
     uint32_t chord_r = S2_BTN_C | S2_BTN_GR;
     CHECK(mapping_quick_remap(&s, CTRL_PRO, chord_r, chord_r | S2_BTN_UP, &changed));
-    CHECK(changed == IN_GR && s.button_map[IN_GR] == OUT_UP && s.button_map[IN_GL] == OUT_X);
+    CHECK(changed == IN_GR && PRO_MAP(s)[IN_GR] == OUT_UP && PRO_MAP(s)[IN_GL] == OUT_X);
     CHECK(!mapping_quick_remap(&s, CTRL_PRO, chord | S2_BTN_GR, chord | S2_BTN_GR | S2_BTN_Y, &changed));
     CHECK(!mapping_quick_remap(&s, CTRL_PRO, chord, chord | S2_BTN_HOME, &changed));
 }
@@ -283,7 +292,7 @@ static void test_quick_remap(void) {
 static void test_macro(void) {
     settings_t s;
     test_defaults(&s);
-    s.button_map[IN_C] = OUT_HOME_A;
+    PRO_MAP(s)[IN_C] = OUT_HOME_A;
     mapping_macro_t m;
     memset(&m, 0, sizeof m);
     uint32_t C = S2_BTN_C;
@@ -307,7 +316,7 @@ static void test_macro(void) {
     CHECK(mapping_macro_step(&m, &s, CTRL_PRO, S2_BTN_A | C, S2_BTN_A, 3010) == 0);
     CHECK(!mapping_macro_busy(&m));
     // Not mapped: nothing.
-    s.button_map[IN_C] = OUT_NONE;
+    PRO_MAP(s)[IN_C] = OUT_NONE;
     CHECK(mapping_macro_step(&m, &s, CTRL_PRO, 0, C, 4000) == 0 && !mapping_macro_busy(&m));
     // The macro output itself sets no button through the normal mapping.
     CHECK(mapping_out_button_bit(OUT_HOME_A) == 0);
@@ -508,7 +517,7 @@ static void test_mode_select(void) {
     CHECK(slots[MODE_SLOT_X] == USB_MODE_DUALSENSE + 1 && slots[MODE_SLOT_Y] == USB_MODE_SWITCH_PRO + 1);
     CHECK(slots[MODE_SLOT_UP] == MODE_SLOT_EMPTY && slots[MODE_SLOT_RIGHT] == MODE_SLOT_EMPTY);
     mode_select_t m;
-    usb_mode_t mode = USB_MODE_COUNT;
+    uint8_t mode = USB_MODE_COUNT;
     mode_select_init(&m);
     // A short hold does nothing; the full hold enters once.
     CHECK(mode_select_update(&m, slots, CH, 1000, &mode) == MODE_SELECT_NONE);
@@ -690,34 +699,53 @@ static void test_gc_adapter(void) {
     CHECK(map[IN_L] == GP_L2 && map[IN_R] == GP_R2 && map[IN_ZR] == GP_R1 && map[IN_ZL] == GP_L1);
     settings_default_mode_map(CTRL_PRO, USB_MODE_XBOX360, map);
     CHECK(map[IN_L] == GP_L1 && map[IN_ZR] == GP_R2);
-    // Profiles are separate; the map lookup follows the controller type.
-    static settings_t st;
-    memset(&st, 0, sizeof st);
-    settings_default_profile(CTRL_GAMECUBE, &st.gc_profile);
-    settings_default_button_map(CTRL_PRO, st.button_map);
-    st.button_map[IN_A] = OUT_B;
-    CHECK(settings_button_map(&st, CTRL_PRO)[IN_A] == OUT_B && settings_button_map(&st, CTRL_GAMECUBE)[IN_A] == OUT_A);
-    CHECK(settings_map_for(&st, CTRL_GAMECUBE, USB_MODE_XBOX360) == st.gc_profile.mode_map[USB_MODE_XBOX360]);
     mapping_ctx_t gcx;
     memset(&gcx, 0, sizeof gcx);
     gcx.is_gamecube = true;
     CHECK(mapping_ctrl_type(&gcx) == CTRL_GAMECUBE && mapping_ctrl_type(NULL) == CTRL_PRO);
-    // Stick and rumble settings are per controller too.
-    st.stick_deadzone_pct = 6;
-    st.rumble_strength_pct = 100;
-    st.gc_profile.stick_deadzone_pct = 12;
-    st.gc_profile.rumble_strength_pct = 40;
-    CHECK(settings_tuning(&st, CTRL_PRO).deadzone == 6 && settings_tuning(&st, CTRL_PRO).rumble_strength == 100);
-    CHECK(settings_tuning(&st, CTRL_GAMECUBE).deadzone == 12 && settings_tuning(&st, CTRL_GAMECUBE).rumble_strength == 40);
-    // USB mode per controller type; the dongle starts in the last-connected type's.
-    st.usb_mode = USB_MODE_XBOX360;
-    st.gc_usb_mode = USB_MODE_GC_ADAPTER;
+}
+
+static void test_profiles(void) {
+    static settings_t st;
+    memset(&st, 0, sizeof st);
+    // Defaults: one profile per mode, the shortcut buttons on the same modes as before.
+    for (int t = 0; t < CTRL_TYPE_COUNT; t++) settings_default_profiles((ctrl_type_t)t, &st.prof[t]);
+    ctrl_profiles_t *pro = settings_profiles(&st, CTRL_PRO), *gc = settings_profiles(&st, CTRL_GAMECUBE);
+    CHECK(pro->p[USB_MODE_XBOX360].used && pro->p[USB_MODE_XBOX360].usb_mode == USB_MODE_XBOX360);
+    CHECK(strcmp(pro->p[USB_MODE_GC_ADAPTER].name, "GameCube adapter") == 0 && !pro->p[USB_MODE_COUNT].used);
+    CHECK(pro->slot[MODE_SLOT_A] == USB_MODE_DUALSENSE_EDGE + 1 && pro->slot[MODE_SLOT_Y] == USB_MODE_SWITCH_PRO + 1);
+    CHECK(pro->active == USB_MODE_SWITCH_PRO && gc->active == USB_MODE_GC_ADAPTER);
+    // Per controller type: the GameCube controller's Xbox map has its triggers on L / R.
+    CHECK(gc->p[USB_MODE_XBOX360].map[IN_L] == GP_L2 && pro->p[USB_MODE_XBOX360].map[IN_L] == GP_L1);
+    // The active profile gives the map, options and the boot mode.
+    pro->p[USB_MODE_SWITCH_PRO].stick_deadzone_pct = 12;
+    gc->p[USB_MODE_GC_ADAPTER].rumble_strength_pct = 40;
+    CHECK(settings_tuning(&st, CTRL_PRO).deadzone == 12 && settings_tuning(&st, CTRL_GAMECUBE).rumble_strength == 40);
+    CHECK(settings_active_map(&st, CTRL_GAMECUBE) == gc->p[USB_MODE_GC_ADAPTER].map);
     st.last_ctrl = CTRL_PRO;
-    CHECK(settings_boot_usb_mode(&st) == USB_MODE_XBOX360);
+    CHECK(settings_boot_usb_mode(&st) == USB_MODE_SWITCH_PRO);
     st.last_ctrl = CTRL_GAMECUBE;
     CHECK(settings_boot_usb_mode(&st) == USB_MODE_GC_ADAPTER);
-    *settings_usb_mode(&st, CTRL_GAMECUBE) = USB_MODE_DUALSENSE;
-    CHECK(st.gc_usb_mode == USB_MODE_DUALSENSE && st.usb_mode == USB_MODE_XBOX360);
+    // Two profiles in the same mode, e.g. a second Xbox map.
+    pro->p[6] = pro->p[USB_MODE_XBOX360];
+    snprintf(pro->p[6].name, PROFILE_NAME_LEN, "Xbox swapped");
+    pro->p[6].map[IN_A] = GP_SOUTH;
+    pro->slot[MODE_SLOT_UP] = 7;
+    pro->active = 6;
+    CHECK(settings_active_map(&st, CTRL_PRO)[IN_A] == GP_SOUTH && pro->p[USB_MODE_XBOX360].map[IN_A] == GP_EAST);
+    // Sanitize: a deleted active profile falls back to the first one; slots
+    // to deleted profiles empty; bad maps reset; names filled in.
+    memset(&pro->p[6], 0, sizeof pro->p[6]);
+    pro->p[2].map[IN_B] = 200;
+    pro->p[3].name[0] = 0;
+    pro->p[1].stick_outer_pct = 10;
+    settings_sanitize_profiles(CTRL_PRO, pro);
+    CHECK(pro->active == 0 && pro->slot[MODE_SLOT_UP] == MODE_SLOT_EMPTY);
+    CHECK(pro->p[2].map[IN_B] == GP_SOUTH && strcmp(pro->p[3].name, "Profile 4") == 0 && pro->p[1].stick_outer_pct == 50);
+    // No profiles at all: defaults again.
+    memset(pro, 0, sizeof *pro);
+    settings_sanitize_profiles(CTRL_PRO, pro);
+    CHECK(pro->p[0].used && pro->active == USB_MODE_SWITCH_PRO);
 }
 
 static void test_bonds(void) {
@@ -768,6 +796,7 @@ int main(void) {
     test_battery();
     test_gc_adapter();
     test_bonds();
+    test_profiles();
     printf("%d passed, %d failed\n", g_pass, g_fail);
     return g_fail ? 1 : 0;
 }

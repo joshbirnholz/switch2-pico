@@ -81,9 +81,9 @@ typedef enum {
     MODE_SLOT_COUNT
 } mode_slot_t;
 #define MODE_SLOT_EMPTY 0
-#define SETTINGS_EXT_REV 9   // 1: mode_map; 2: mode_slot; 3: ble_tx_power; 4: idle_*; 5: pair_button;
+#define SETTINGS_EXT_REV 10  // 1: mode_map; 2: mode_slot; 3: ble_tx_power; 4: idle_*; 5: pair_button;
                              // 6: gc_profile; 7: gc_profile sticks / rumble; 8: bonds;
-                             // 9: gc_usb_mode, last_ctrl
+                             // 9: gc_usb_mode, last_ctrl; 10: profiles
 
 // Remembered (paired) controllers. Any of them can connect, one at a time;
 // pairing one more when the list is full forgets the oldest pairing.
@@ -98,11 +98,38 @@ typedef struct {
 
 // Controller types with their own button maps and mode shortcut buttons.
 typedef enum {
-    CTRL_PRO = 0,        // Pro Controller 2 (and Joy-Con 2): button_map / mode_map / mode_slot
-    CTRL_GAMECUBE = 1,   // NSO GameCube controller: gc_profile
+    CTRL_PRO = 0,        // Pro Controller 2
+    CTRL_GAMECUBE = 1,   // NSO GameCube controller
     CTRL_TYPE_COUNT
 } ctrl_type_t;
 
+// Profiles: a USB mode with a button map and the options that go with it.
+// Each controller type has its own (up to PROFILE_MAX); one is active, and
+// the mode shortcut buttons (C + Home, then a button) pick among them.
+#define PROFILE_MAX      8
+#define PROFILE_NAME_LEN 20
+typedef struct {
+    uint8_t used;
+    uint8_t usb_mode;                   // usb_mode_t
+    char name[PROFILE_NAME_LEN];        // NUL-terminated
+    uint8_t map[IN_COUNT];              // Switch Pro mode: out_button_t; other modes: gp_out_t
+    uint8_t stick_deadzone_pct;         // inner radial deadzone, 0..40
+    uint8_t stick_outer_pct;            // radius treated as full deflection, 50..100
+    uint8_t swap_sticks;                // swap left and right sticks
+    uint8_t trigger_threshold;          // analog L / R count as pressed past this (GameCube controller)
+    uint8_t rumble_enabled;
+    uint8_t rumble_strength_pct;        // 0..200
+    uint8_t reserved[8];
+} profile_t;
+
+typedef struct {
+    profile_t p[PROFILE_MAX];
+    uint8_t slot[MODE_SLOT_COUNT];      // profile index + 1 per mode_slot_t (MODE_SLOT_EMPTY: none)
+    uint8_t active;                     // profile in use
+    uint8_t reserved[3];
+} ctrl_profiles_t;
+
+// Before profiles (ext_rev < 10): one map per mode. Read only to migrate.
 typedef struct {
     uint8_t button_map[IN_COUNT];                  // Switch Pro mode: out_button_t
     uint8_t mode_map[MODE_MAP_SLOTS][IN_COUNT];    // other modes: gp_out_t
@@ -187,13 +214,17 @@ typedef struct {
     uint8_t idle_minutes;               // ... after this many minutes without input (1..240)
     uint8_t pair_button;                // pair only during a window opened by Sync / the page
                                         // (default on for boards with a button: Pico BOOTSEL)
-    ctrl_profile_t gc_profile;          // NSO GameCube controller (the Pro uses the fields above)
+    ctrl_profile_t gc_profile;          // legacy: NSO GameCube controller (the Pro used the fields above)
     bond_t bonds[BOND_MAX];             // paired controllers, newest pairing first
     // USB mode per controller type: usb_mode is the Pro Controller's. The
     // dongle starts in the mode of the type that connected last and restarts
     // into the other type's mode when one of those connects.
     uint8_t gc_usb_mode;                // usb_mode_t for the NSO GameCube controller
     uint8_t last_ctrl;                  // ctrl_type_t of the controller that connected last
+    // Profiles per controller type (ext_rev 10). They replace the per-mode
+    // maps, mode_slot, usb_mode / gc_usb_mode and the stick / trigger /
+    // rumble fields above, which only remain for migrating older saves.
+    ctrl_profiles_t prof[CTRL_TYPE_COUNT];
 
     uint32_t crc;
 } settings_t;
@@ -228,48 +259,40 @@ void settings_default_mode_map(ctrl_type_t type, usb_mode_t mode, uint8_t map[IN
 void settings_default_mode_slots(uint8_t slots[MODE_SLOT_COUNT]);
 void settings_default_profile(ctrl_type_t type, ctrl_profile_t *p);
 
-// The maps of one controller type (the Pro's are the original fields).
-static inline uint8_t *settings_button_map(const settings_t *s, ctrl_type_t t) {
-    return (uint8_t *)(t == CTRL_GAMECUBE ? s->gc_profile.button_map : s->button_map);
+// Profiles (see profile_t).
+void settings_default_profiles(ctrl_type_t type, ctrl_profiles_t *c);
+void settings_default_profile_for(ctrl_type_t type, usb_mode_t mode, profile_t *p);   // default name / map / options
+const char *settings_mode_profile_name(usb_mode_t mode);
+void settings_sanitize_profiles(ctrl_type_t type, ctrl_profiles_t *c);
+
+static inline ctrl_profiles_t *settings_profiles(const settings_t *s, ctrl_type_t t) {
+    return (ctrl_profiles_t *)&s->prof[t < CTRL_TYPE_COUNT ? t : CTRL_PRO];
 }
-static inline uint8_t *settings_mode_map(const settings_t *s, ctrl_type_t t, usb_mode_t m) {
-    return (uint8_t *)(t == CTRL_GAMECUBE ? s->gc_profile.mode_map[m] : s->mode_map[m]);
+// The profile in use for a controller type (always a used one, see sanitize).
+static inline profile_t *settings_active(const settings_t *s, ctrl_type_t t) {
+    ctrl_profiles_t *c = settings_profiles(s, t);
+    return &c->p[c->active < PROFILE_MAX ? c->active : 0];
 }
-// The USB mode of one controller type, and the one the dongle starts in.
-static inline uint8_t *settings_usb_mode(const settings_t *s, ctrl_type_t t) {
-    return (uint8_t *)(t == CTRL_GAMECUBE ? &s->gc_usb_mode : &s->usb_mode);
-}
-static inline uint8_t settings_boot_usb_mode(const settings_t *s) {
-    return *settings_usb_mode(s, s->last_ctrl == CTRL_GAMECUBE ? CTRL_GAMECUBE : CTRL_PRO);
+static inline uint8_t *settings_active_map(const settings_t *s, ctrl_type_t t) {
+    return settings_active(s, t)->map;
 }
 static inline uint8_t *settings_mode_slots(const settings_t *s, ctrl_type_t t) {
-    return (uint8_t *)(t == CTRL_GAMECUBE ? s->gc_profile.mode_slot : s->mode_slot);
+    return settings_profiles(s, t)->slot;
 }
-// Sticks and rumble of one controller type.
+// The USB mode the dongle starts in: the active profile of the controller
+// type that connected last.
+static inline uint8_t settings_boot_usb_mode(const settings_t *s) {
+    return settings_active(s, s->last_ctrl == CTRL_GAMECUBE ? CTRL_GAMECUBE : CTRL_PRO)->usb_mode;
+}
+// Sticks, triggers and rumble of a controller type's active profile.
 typedef struct {
-    uint8_t deadzone, outer, swap, rumble_enabled, rumble_strength;
+    uint8_t deadzone, outer, swap, trigger_threshold, rumble_enabled, rumble_strength;
 } ctrl_tuning_t;
 static inline ctrl_tuning_t settings_tuning(const settings_t *s, ctrl_type_t t) {
-    ctrl_tuning_t r;
-    if (t == CTRL_GAMECUBE) {
-        r.deadzone = s->gc_profile.stick_deadzone_pct;
-        r.outer = s->gc_profile.stick_outer_pct;
-        r.swap = s->gc_profile.swap_sticks;
-        r.rumble_enabled = s->gc_profile.rumble_enabled;
-        r.rumble_strength = s->gc_profile.rumble_strength_pct;
-    } else {
-        r.deadzone = s->stick_deadzone_pct;
-        r.outer = s->stick_outer_pct;
-        r.swap = s->swap_sticks;
-        r.rumble_enabled = s->rumble_enabled;
-        r.rumble_strength = s->rumble_strength_pct;
-    }
+    const profile_t *p = settings_active(s, t);
+    ctrl_tuning_t r = {p->stick_deadzone_pct, p->stick_outer_pct, p->swap_sticks,
+                       p->trigger_threshold,  p->rumble_enabled,  p->rumble_strength_pct};
     return r;
-}
-
-// Map of the given USB mode (Switch Pro: out_button_t, others: gp_out_t).
-static inline uint8_t *settings_map_for(const settings_t *s, ctrl_type_t t, usb_mode_t m) {
-    return m == USB_MODE_SWITCH_PRO ? settings_button_map(s, t) : settings_mode_map(s, t, m);
 }
 
 const char *in_button_name(in_button_t b);

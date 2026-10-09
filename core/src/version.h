@@ -8,7 +8,7 @@ extern "C" {
 // Firmware version. The Pico build passes it from the VERSION file; other
 // builds use this default (keep it in sync with VERSION).
 #ifndef S2P_VERSION
-#define S2P_VERSION "0.7.8"
+#define S2P_VERSION "0.8.0"
 #endif
 
 #ifdef __cplusplus

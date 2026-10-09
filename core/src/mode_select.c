@@ -33,7 +33,7 @@ void mode_select_init(mode_select_t *m) {
 
 bool mode_select_enabled(const uint8_t slots[MODE_SLOT_COUNT]) {
     for (int i = 0; i < MODE_SLOT_COUNT; i++) {
-        if (slots[i] != MODE_SLOT_EMPTY && slots[i] <= USB_MODE_COUNT) return true;
+        if (slots[i] != MODE_SLOT_EMPTY && slots[i] <= PROFILE_MAX) return true;
     }
     return false;
 }
@@ -52,7 +52,7 @@ void mode_select_cancel(mode_select_t *m) {
 }
 
 mode_select_event_t mode_select_update(mode_select_t *m, const uint8_t slots[MODE_SLOT_COUNT], uint32_t raw,
-                                       uint32_t now_ms, usb_mode_t *chosen) {
+                                       uint32_t now_ms, uint8_t *chosen) {
     uint32_t prev = m->prev;
     m->prev = raw;
     bool combo = (raw & COMBO) == COMBO;
@@ -83,8 +83,8 @@ mode_select_event_t mode_select_update(mode_select_t *m, const uint8_t slots[MOD
     for (int i = 0; i < MODE_SLOT_COUNT; i++) {
         if (!(pressed & SLOT_BITS[i])) continue;
         uint8_t v = slots[i];
-        if (v == MODE_SLOT_EMPTY || v > USB_MODE_COUNT) continue;   // nothing there: ignore
-        *chosen = (usb_mode_t)(v - 1);
+        if (v == MODE_SLOT_EMPTY || v > PROFILE_MAX) continue;   // nothing there: ignore
+        *chosen = (uint8_t)(v - 1);
         mode_select_cancel(m);
         return MODE_SELECT_CHOSEN;
     }

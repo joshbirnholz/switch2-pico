@@ -9,7 +9,7 @@
 #include "wifi_ap.h"
 
 #define HTTP_PORT 80
-#define RX_MAX 6144
+#define RX_MAX 8192
 #define HDR_MAX 256
 
 typedef struct {

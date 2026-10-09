@@ -53,6 +53,7 @@ add_executable(switch2_pico
         ${CORE}/mapping.c
         ${CORE}/mode_select.c
         ${CORE}/bonds.c
+        ${CORE}/profiles.c
         ${CORE}/battery.c
         ${CORE}/procon.c
         ${CORE}/s2_link.c

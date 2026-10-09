@@ -148,51 +148,55 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
 </div>
 
 <section class="card tabbed">
-  <h2>Mode</h2>
-  <div class="grid">
-    <label data-tab="0">Mode for the Pro Controller<select data-k="usb_mode"><option value="0">Switch Pro Controller</option><option value="1">DualSense Edge</option><option value="2">DualSense</option><option value="3">Xbox 360 controller</option><option value="4">GameCube adapter</option></select></label>
-    <label data-tab="1">Mode for the GameCube controller<select data-k="gc_usb_mode"><option value="0">Switch Pro Controller</option><option value="1">DualSense Edge</option><option value="2">DualSense</option><option value="3">Xbox 360 controller</option><option value="4">GameCube adapter</option></select></label>
+  <h2>Profiles</h2>
+  <p class="note" style="margin-top:0">A profile is a USB mode with its button mapping, stick, trigger and rumble settings. Each controller type has its own (up to 8); the one <b>in use</b> applies whenever that controller connects.</p>
+  <div class="row" style="align-items:flex-end;gap:8px">
+    <label>Profile<select id="prof-sel" onchange="pickProfile(+this.value)"></select></label>
+    <button id="prof-use" onclick="profUse()">Use now</button>
+    <button onclick="profNew()">New</button>
+    <button onclick="profDup()">Duplicate</button>
+    <button onclick="profRename()">Rename</button>
+    <button class="danger" onclick="profDel()">Delete</button>
   </div>
-  <p class="note">Each controller type keeps its own mode. When a controller connects and its mode isn't the one the dongle is in, the dongle restarts in that mode first; the controller connects right after.</p>
+  <div class="grid" style="margin-top:12px">
+    <label>Mode<select id="pf-mode" onchange="profMode(+this.value)"><option value="0">Switch Pro Controller</option><option value="1">DualSense Edge</option><option value="2">DualSense</option><option value="3">Xbox 360 controller</option><option value="4">GameCube adapter</option></select></label>
+  </div>
+  <p class="note" id="prof-note"></p>
   <h3 style="margin:14px 0 4px;font-size:14px">Shortcut on the controller</h3>
-  <p class="note" style="margin-top:0">On the controller, hold <b>C + Home</b> until its lights blink, then press a button below to switch to that mode (the dongle restarts; the choice is kept for this controller type). C + Home again, or a few seconds without pressing anything, leaves without a change. Buttons set to – are ignored; with every button set to – the shortcut is off.</p>
+  <p class="note" style="margin-top:0">On the controller, hold <b>C + Home</b> until its lights blink, then press a button below to use that profile. Profiles in the same mode switch at once; a different mode restarts the dongle. C + Home again, or a few seconds without pressing anything, leaves without a change. Buttons set to – are ignored; with every button set to – the shortcut is off.</p>
   <div class="diamonds" id="slots"></div>
 </section>
 
 <section class="card tabbed">
-  <h2>Button mapping</h2>
-  <div class="row" style="align-items:flex-end;gap:12px">
-    <label>Mapping for<select id="map-sel" onchange="switchMapMode(this.value)"></select></label>
-    <span class="note" style="flex:1;min-width:220px">Each mode keeps its own mapping; this follows the controller's mode (above) unless you pick another. The picture shows the controller live: pressed buttons light up and the sticks move.</span>
-  </div>
+  <h2>Button mapping <span class="note" id="map-prof-name"></span></h2>
+  <p class="note" style="margin-top:0">For the profile chosen above. The picture shows the controller live: pressed buttons light up and the sticks move.</p>
   <p class="note" id="map-ctrl-note" style="margin:6px 0 0"></p>
   <div class="pad" id="map"></div>
   <div class="row" style="margin-top:12px">
     <button id="preset-reset" onclick="presetIdentity()">Reset to labels</button>
     <button id="preset-swap" onclick="presetSwapFace()">Swap A/B and X/Y (positional)</button>
   </div>
-  <label class="check" style="margin-top:12px" data-tab="0"><input type="checkbox" data-k="quick_remap">Remap GL/GR from the controller (all modes except DualSense Edge, where they are paddles the host remaps): hold C + GL or GR and press a button. Do it again to clear.</label>
+  <label class="check" style="margin-top:12px" data-tab="0"><input type="checkbox" data-k="quick_remap">Remap GL/GR from the controller (all modes except DualSense Edge, where they are paddles the host remaps): hold C + GL or GR and press a button. Do it again to clear. Changes the profile in use.</label>
 </section>
 
-
-<section class="card tabbed" data-tab="0">
-  <h2>Sticks</h2>
+<section class="card tabbed">
+  <h2>Sticks and triggers <span class="note" id="st-prof-name"></span></h2>
   <div class="grid">
-    <label>Inner deadzone: <b id="v-deadzone"></b>%<input type="range" min="0" max="40" data-k="deadzone"></label>
-    <label>Full deflection at: <b id="v-outer"></b>%<input type="range" min="50" max="100" data-k="outer"></label>
-    <label class="check"><input type="checkbox" data-k="swap_sticks">Swap left and right sticks</label>
+    <label>Inner deadzone: <b id="v-pf-deadzone"></b>%<input type="range" min="0" max="40" id="pf-deadzone"></label>
+    <label>Full deflection at: <b id="v-pf-outer"></b>%<input type="range" min="50" max="100" id="pf-outer"></label>
+    <label class="check"><input type="checkbox" id="pf-swap"><span id="pf-swap-label">Swap left and right sticks</span></label>
+    <label data-tab="1">Trigger threshold (L / R count as pressed past this)<input type="number" min="0" max="255" id="pf-threshold"></label>
   </div>
+  <p class="note" data-tab="1">The analog L / R values themselves go to the modes that have analog triggers (Xbox, DualSense, GameCube adapter).</p>
 </section>
 
-<section class="card tabbed" data-tab="1">
-  <h2>Sticks and triggers</h2>
+<section class="card tabbed">
+  <h2>Rumble <span class="note" id="rb-prof-name"></span></h2>
   <div class="grid">
-    <label>Inner deadzone: <b id="v-gc_deadzone"></b>%<input type="range" min="0" max="40" data-k="gc_deadzone"></label>
-    <label>Full deflection at: <b id="v-gc_outer"></b>%<input type="range" min="50" max="100" data-k="gc_outer"></label>
-    <label class="check"><input type="checkbox" data-k="gc_swap_sticks">Swap main stick and C-stick</label>
-    <label>Trigger threshold (L / R count as pressed past this)<input type="number" min="0" max="255" data-k="gc_threshold"></label>
+    <label class="check"><input type="checkbox" id="pf-rumble">Rumble</label>
+    <label>Strength: <b id="v-pf-strength"></b>%<input type="range" min="0" max="200" id="pf-strength"></label>
   </div>
-  <p class="note">The analog L / R values themselves go to the modes that have analog triggers (Xbox, DualSense, GameCube adapter).</p>
+  <p class="note" data-tab="1">One classic motor: strength is how much of the time it runs.</p>
 </section>
 
 <section class="card tabbed" data-tab="0">
@@ -212,24 +216,13 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
 </section>
 
 <section class="card tabbed" data-tab="0">
-  <h2>Rumble</h2>
+  <h2>HD rumble</h2>
   <div class="grid">
-    <label class="check"><input type="checkbox" data-k="rumble_enabled">HD rumble</label>
-    <label>Strength: <b id="v-rumble_strength"></b>%<input type="range" min="0" max="200" data-k="rumble_strength"></label>
     <label>Frequencies
       <select data-k="rumble_freq_mode"><option value="0">Translate (HD rumble)</option><option value="1">Fixed (amplitude only)</option></select></label>
     <label>Frequency scale (codes/octave)<input type="number" min="16" max="255" data-k="rumble_freq_slope"></label>
   </div>
-  <p class="note">The Switch 2 rumble frequency encoding is not fully documented. If effects feel off, try "Fixed" or adjust the scale.</p>
-</section>
-
-<section class="card tabbed" data-tab="1">
-  <h2>Rumble (GameCube)</h2>
-  <div class="grid">
-    <label class="check"><input type="checkbox" data-k="gc_rumble_enabled">Rumble</label>
-    <label>Strength: <b id="v-gc_rumble_strength"></b>%<input type="range" min="0" max="200" data-k="gc_rumble_strength"></label>
-  </div>
-  <p class="note">One classic motor: strength is how much of the time it runs.</p>
+  <p class="note">For all Pro Controller profiles. The Switch 2 rumble frequency encoding is not fully documented. If effects feel off, try "Fixed" or adjust the scale.</p>
 </section>
 
 <section class="card wifi-only">
@@ -455,9 +448,15 @@ const PAD_GROUPS={
   face:['Face buttons',[['X','X','n'],['Y','Y','w'],['A','A','e'],['B','B','s']],'diamond'],
   rs:['Right stick',[['RStick','Pressed']]],
 };
-// Which controller type's maps / mode shortcut are shown (S.profiles index).
-let MAP_CTRL=0,SLOT_CTRL=0;
-function mapMode(){const P=S.profiles[MAP_CTRL];return {...S.modes[MAP_MODE],map:P.maps[MAP_MODE],default_map:P.defaults[MAP_MODE]}}
+// Profiles (S.types[t]: profiles[] (null: unused), active, slots, defaults).
+// The tab (MAP_CTRL) picks the controller type, CUR[t] the profile edited;
+// edits stay in S until saved, which sends every profile of both types.
+let MAP_CTRL=0;
+const CUR=[0,0];
+const TYPE=()=>S.types[MAP_CTRL];
+const prof=()=>TYPE().profiles[CUR[MAP_CTRL]];
+const MODE_NAMES=['Switch Pro Controller','DualSense Edge','DualSense','Xbox 360 controller','GameCube adapter'];
+function mapMode(){const P=prof();return {...S.modes[P.mode],map:P.map,default_map:TYPE().defaults[P.mode]}}
 function renderMap(mode){
   MAP_MODE=+mode;
   const M=mapMode(),m=$('map');
@@ -487,50 +486,96 @@ function renderMap(mode){
     m.querySelectorAll('.g-ls,.g-rs').forEach(g=>g.style.display='none');
     [['ZR','Z'],['Plus','Start']].forEach(([n,lab])=>m.querySelector(`[data-map="${n}"]`).parentElement.firstChild.textContent=lab);
   }
-  $('map-sel').value=MAP_MODE;
-  $('map-ctrl-note').textContent=MAP_CTRL===1?'Analog L / R count as pressed past the trigger threshold (GameCube tab, Sticks and triggers); the C-stick is the right stick.':'';
+  $('map-ctrl-note').textContent=MAP_CTRL===1?'Analog L / R count as pressed past the trigger threshold (Sticks and triggers); the C-stick is the right stick.':'';
 }
-// Grid values -> S.modes (unsaved edits survive switching between modes).
-let MAP_DIRTY=new Set();
+// Editor values -> the profile in S.
 function stashMap(){
   if(!S||!$('map').querySelector('[data-map]'))return;
-  const M=mapMode();let changed=false;
-  IN.forEach((n,i)=>{const v=+$('map').querySelector(`[data-map="${n}"]`).value;if(M.map[i]!==v){M.map[i]=v;changed=true}});
-  if(changed)MAP_DIRTY.add(MAP_CTRL+':'+MAP_MODE);
+  const P=prof();IN.forEach((n,i)=>P.map[i]=+$('map').querySelector(`[data-map="${n}"]`).value);
 }
-function switchMapMode(m){stashMap();renderMap(m)}
-function switchMapCtrl(c){stashMap();MAP_CTRL=+c;renderMap(MAP_MODE)}
+function stashProfile(){
+  if(!S)return;
+  stashMap();
+  const P=prof();
+  P.deadzone=+$('pf-deadzone').value;P.outer=+$('pf-outer').value;P.swap=$('pf-swap').checked?1:0;
+  P.threshold=+$('pf-threshold').value;P.rumble=$('pf-rumble').checked?1:0;P.strength=+$('pf-strength').value;
+  stashSlots();
+}
 function stashSlots(){
   if(!S||!$('slots').querySelector('[data-slot]'))return;
-  const v=S.profiles[SLOT_CTRL].mode_slots;
+  const v=TYPE().slots;
   $('slots').querySelectorAll('[data-slot]').forEach(el=>v[el.dataset.slot]=+el.value);
 }
-function switchSlotCtrl(c){stashSlots();SLOT_CTRL=+c;renderSlots()}
-// Controller tabs: the mapping / mode shortcut show that controller's set and
-// sections only for one controller type (data-tab) show / hide.
+// The profile editor for the current tab and profile.
+function renderProfile(){
+  const T=TYPE(),P=prof();
+  $('prof-sel').innerHTML=T.profiles.map((q,i)=>q?`<option value="${i}">${esc(q.name)}${i===T.active?' (in use)':''}</option>`:'').join('');
+  $('prof-sel').value=CUR[MAP_CTRL];
+  $('prof-use').disabled=CUR[MAP_CTRL]===T.active;
+  $('pf-mode').value=P.mode;
+  const pending=T.active!==S.saved_active[MAP_CTRL];
+  $('prof-note').textContent=(CUR[MAP_CTRL]===T.active?'This profile is in use.':'Not in use; "Use now" (then Save) switches to it.')+
+    (pending?' Save to apply the change of profile.':'');
+  ['map-prof-name','st-prof-name','rb-prof-name'].forEach(id=>$(id).textContent='— '+P.name);
+  const set=(id,v)=>{$(id).value=v;const l=$('v-'+id);if(l)l.textContent=v;$(id).oninput=()=>{if(l)l.textContent=$(id).value}};
+  set('pf-deadzone',P.deadzone);set('pf-outer',P.outer);set('pf-threshold',P.threshold);set('pf-strength',P.strength);
+  $('pf-swap').checked=!!P.swap;$('pf-rumble').checked=!!P.rumble;
+  $('pf-swap-label').textContent=MAP_CTRL===1?'Swap main stick and C-stick':'Swap left and right sticks';
+  renderMap(P.mode);
+  renderSlots();
+}
+function esc(t){return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function pickProfile(i){stashProfile();CUR[MAP_CTRL]=i;renderProfile()}
+function profUse(){stashProfile();TYPE().active=CUR[MAP_CTRL];renderProfile();toast('Save to apply')}
+function freeSlot(){const i=TYPE().profiles.findIndex(q=>!q);if(i<0)alert('Each controller type can have up to '+S.profile_max+' profiles.');return i}
+function askName(def){const n=prompt('Profile name',def);if(n===null)return null;return n.trim().slice(0,19)||def}
+function profNew(){
+  stashProfile();const i=freeSlot();if(i<0)return;
+  const m=prof().mode,name=askName(MODE_NAMES[m]);if(name===null)return;
+  TYPE().profiles[i]={name,mode:m,deadzone:6,outer:95,swap:0,threshold:120,rumble:1,strength:100,map:TYPE().defaults[m].slice()};
+  CUR[MAP_CTRL]=i;renderProfile();
+}
+function profDup(){
+  stashProfile();const i=freeSlot();if(i<0)return;
+  const P=prof(),name=askName((P.name+' copy').slice(0,19));if(name===null)return;
+  TYPE().profiles[i]={...P,name,map:P.map.slice()};CUR[MAP_CTRL]=i;renderProfile();
+}
+function profRename(){stashProfile();const n=askName(prof().name);if(n===null)return;prof().name=n;renderProfile()}
+function profDel(){
+  stashProfile();const T=TYPE(),i=CUR[MAP_CTRL];
+  if(i===T.active){alert('This profile is in use. Pick another one with "Use now" first.');return}
+  if(!confirm('Delete the profile "'+prof().name+'"?'))return;
+  T.profiles[i]=null;
+  for(const k in T.slots)if(T.slots[k]===i+1)T.slots[k]=0;
+  CUR[MAP_CTRL]=T.active;renderProfile();
+}
+// Changing a profile's mode starts its mapping from that mode's defaults
+// (outputs differ between modes).
+function profMode(m){
+  stashProfile();const P=prof();if(P.mode===m)return;
+  if(!confirm('Change this profile to '+MODE_NAMES[m]+'? Its button mapping starts over from that mode\'s defaults.')){$('pf-mode').value=P.mode;return}
+  P.mode=m;P.map=TYPE().defaults[m].slice();renderProfile();
+}
+// Controller tabs: sections only for one controller type (data-tab) show / hide.
 function showTab(t){
   document.querySelectorAll('[data-tab]').forEach(e=>e.classList.toggle('tab-hidden',+e.dataset.tab!==t));
   document.querySelectorAll('[data-tabbtn]').forEach(b=>{
     const i=+b.dataset.tabbtn;b.setAttribute('aria-selected',i===t?'true':'false');
     const conn=ST&&ST.link&&ST.link.state==='ready'&&(ST.link.pid===8307?1:0)===i;
-    b.innerHTML=(S&&S.profiles?S.profiles[i].name:b.textContent)+(conn?'<span class="dot" title="connected"></span>':'');
+    b.innerHTML=(S&&S.types?S.types[i].name:b.textContent)+(conn?'<span class="dot" title="connected"></span>':'');
   });
 }
-// Each controller type's own USB mode select.
-const modeSel=t=>document.querySelector(`[data-k="${t?'gc_usb_mode':'usb_mode'}"]`);
 function setTab(t){
   if(!S)return;
-  switchMapCtrl(t);switchMapMode(modeSel(t).value);switchSlotCtrl(t);showTab(t);
+  stashProfile();MAP_CTRL=t;showTab(t);renderProfile();
 }
 const SLOTS=['A','B','X','Y','Up','Down','Left','Right'];
 function renderSlots(){
-  const sel=document.querySelector('[data-k="usb_mode"]');
-  const names=[...sel.options].map(o=>o.text);
-  const opts='<option value="0">–</option>'+names.map((n,i)=>`<option value="${i+1}">${n}</option>`).join('');
+  const T=TYPE();
+  const opts='<option value="0">–</option>'+T.profiles.map((q,i)=>q?`<option value="${i+1}">${esc(q.name)}</option>`:'').join('');
   const dia=(cells)=>'<div class="diamond">'+cells.map(([n,a])=>`<label style="--a:${a}">${n}<select data-slot="${n}">${opts}</select></label>`).join('')+'</div>';
   $('slots').innerHTML=dia([['Up','n'],['Left','w'],['Right','e'],['Down','s']])+dia([['X','n'],['Y','w'],['A','e'],['B','s']]);
-  const v=S.profiles[SLOT_CTRL].mode_slots||{};
-  SLOTS.forEach(n=>$('slots').querySelector(`[data-slot="${n}"]`).value=v[n]||0);
+  SLOTS.forEach(n=>$('slots').querySelector(`[data-slot="${n}"]`).value=T.slots[n]||0);
 }
 function render(){
   document.querySelectorAll('[data-k]').forEach(el=>{
@@ -545,32 +590,38 @@ function render(){
   pb.disabled=!S.sync_button;
   $('pair-button-row').style.opacity=S.sync_button?'':'0.5';
   $('pair-button-note').textContent=S.sync_button?'With BOOTSEL as Sync, a 1–5 s hold toggles the configuration Wi-Fi.':'Not available on this board (no Sync button): any controller in pairing mode pairs.';
-  const sel=document.querySelector('[data-k="usb_mode"]');
-  $('map-sel').innerHTML=[...sel.options].map(o=>`<option value="${o.value}">${o.text}</option>`).join('');
-  [0,1].forEach(t=>{modeSel(t).onchange=()=>{if(MAP_CTRL===t)switchMapMode(modeSel(t).value)}});
-  MAP_DIRTY=new Set();
-  MAP_CTRL=SLOT_CTRL=S.last_ctrl??S.ctrl_type??0;
-  renderMap(modeSel(MAP_CTRL).value);
+  // What runs now: the active profiles as saved (a restart is needed when
+  // the in-use type's profile changes mode).
+  S.saved_active=S.types.map(T=>T.active);
+  S.boot_mode=S.types[S.last_ctrl||0].profiles[S.types[S.last_ctrl||0].active].mode;
+  MAP_CTRL=S.last_ctrl??S.ctrl_type??0;
+  CUR[0]=S.types[0].active;CUR[1]=S.types[1].active;
   showTab(MAP_CTRL);
-  renderSlots();
+  renderProfile();
 }
 async function loadSettings(){S=(await api('/api/settings')).json();render()}
 async function save(){
+  stashProfile();
   const p=new URLSearchParams();
-  // Every controller type / mode whose map was edited, and both controller
-  // types' mode shortcut buttons (ctrl / map_mode apply to the keys after them).
-  stashMap();MAP_DIRTY.add(MAP_CTRL+':'+MAP_MODE);
-  for(const k of MAP_DIRTY){const [c,m]=k.split(':').map(Number);
-    p.append('ctrl',c);p.append('map_mode',m);IN.forEach((n,i)=>p.append('map_'+n,S.profiles[c].maps[m][i]))}
-  stashSlots();
-  S.profiles.forEach((P,c)=>{p.append('ctrl',c);SLOTS.forEach(n=>p.append('slot_'+n,P.mode_slots[n]||0))});
+  // Every profile of both controller types (empty: none), the one in use and
+  // the shortcut buttons.
+  S.types.forEach((T,t)=>{
+    T.profiles.forEach((P,i)=>p.append(`prof_${t}_${i}`,P?[P.mode,P.deadzone,P.outer,P.swap,P.threshold,P.rumble,P.strength,...P.map,P.name].join(','):''));
+    p.append(`active_${t}`,T.active);
+    SLOTS.forEach(n=>p.append(`slot_${t}_${n}`,T.slots[n]||0));
+  });
   document.querySelectorAll('[data-k]').forEach(el=>p.append(el.dataset.k,el.type==='checkbox'?(el.checked?1:0):el.value));
   const pw=$('wifi_pass').value;if(pw)p.append('wifi_pass',pw);
-  // The mode of the controller type in use changed: the dongle restarts.
-  const lt=S.last_ctrl||0,modeEl=modeSel(lt);
-  if(S&&modeEl&&String(S[lt?'gc_usb_mode':'usb_mode'])!==modeEl.value&&!confirm('Changing the mode of the controller in use restarts the dongle. Continue?'))return;
+  // The profile in use for the controller type that connects (or connected
+  // last) now has another USB mode: the dongle restarts.
+  const lt=S.last_ctrl||0,T=S.types[lt];
+  if(T.profiles[T.active].mode!==S.boot_mode&&!confirm('The profile in use for the '+T.name+' has another USB mode: the dongle restarts. Continue?'))return;
   const r=await api('/api/settings',{method:'POST',body:p.toString()});
-  if(r.ok){S=r.json();render();toast('Saved')}else toast('Save failed');
+  if(r.ok){const keep=MAP_CTRL,cur=CUR.slice();S=r.json();render();
+    // Stay where the user was.
+    MAP_CTRL=keep;CUR[0]=S.types[0].profiles[cur[0]]?cur[0]:S.types[0].active;CUR[1]=S.types[1].profiles[cur[1]]?cur[1]:S.types[1].active;
+    showTab(MAP_CTRL);renderProfile();toast('Saved')}
+  else toast('Save failed');
 }
 function presetIdentity(){const M=mapMode();IN.forEach((n,i)=>{document.querySelector(`[data-map="${n}"]`).value=M.default_map[i]})}
 function presetSwapFace(){const M=mapMode(),sw={A:'B',B:'A',X:'Y',Y:'X'};for(const n in sw){document.querySelector(`[data-map="${n}"]`).value=M.outputs.indexOf(sw[n])}}
