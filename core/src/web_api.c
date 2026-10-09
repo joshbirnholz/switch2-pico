@@ -241,11 +241,12 @@ static void api_settings_get(http_response_t *r) {
     jb_str(&j, s->wifi_ssid);
     jb_printf(&j, ",\"wifi_has_pass\":%s,\"ble_tx_power\":%u,\"idle_disconnect\":%u,\"idle_minutes\":%u,"
                   "\"pair_button\":%u,\"sync_button\":%s,"
-                  "\"gc_deadzone\":%u,\"gc_outer\":%u,\"gc_swap_sticks\":%u,\"gc_rumble_enabled\":%u,\"gc_rumble_strength\":%u}",
+                  "\"gc_deadzone\":%u,\"gc_outer\":%u,\"gc_swap_sticks\":%u,\"gc_rumble_enabled\":%u,\"gc_rumble_strength\":%u,"
+                  "\"gc_usb_mode\":%u,\"last_ctrl\":%u}",
               s->wifi_pass[0] ? "true" : "false", s->ble_tx_power, !s->idle_disconnect_off, s->idle_minutes,
               s->pair_button, platform_has_sync_button() ? "true" : "false", s->gc_profile.stick_deadzone_pct,
               s->gc_profile.stick_outer_pct, s->gc_profile.swap_sticks, s->gc_profile.rumble_enabled,
-              s->gc_profile.rumble_strength_pct);
+              s->gc_profile.rumble_strength_pct, s->gc_usb_mode, s->last_ctrl);
     respond_json(r, &j);
 }
 
@@ -347,6 +348,7 @@ static bool apply_kv(settings_t *s, const char *k, const char *v, bool *usb_reco
         {"usb_wakeup", &s->usb_remote_wakeup, 1, false},
         {"webusb", &s->webusb_enabled, 1, true},
         {"usb_mode", &s->usb_mode, 1, false},
+        {"gc_usb_mode", &s->gc_usb_mode, 1, false},
         {"hotkey", &s->hotkey_enabled, 1, false},
         {"ble_tx_power", &s->ble_tx_power, 1, false},
         {"idle_minutes", &s->idle_minutes, 1, false},
@@ -399,12 +401,12 @@ static void api_settings_post(const http_request_t *req, http_response_t *r) {
     }
     free(body);
     settings_sanitize(&s);
-    bool mode_changed = s.usb_mode != g_settings.usb_mode;
+    bool mode_changed = settings_boot_usb_mode(&s) != usb_mode_active();
     g_settings = s;
     if (mode_changed) {
         // The host must see a different device: save and restart.
         settings_save_now();
-        LOG("web: USB mode -> %s, restarting", usb_mode_name((usb_mode_t)s.usb_mode));
+        LOG("web: USB mode -> %s, restarting", usb_mode_name((usb_mode_t)settings_boot_usb_mode(&s)));
         app_request_reboot(false);
     } else {
         settings_save_later();

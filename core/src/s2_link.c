@@ -7,6 +7,7 @@
 #include "log.h"
 #include "platform.h"
 #include "s2_transport.h"
+#include "app.h"
 #include "settings.h"
 
 // ---------------------------------------------------------------------------
@@ -1003,6 +1004,12 @@ void s2c_on_advertisement(const uint8_t addr[6], uint8_t addr_type, int8_t rssi,
         return;   // reconnecting to another host (e.g. a console)
     }
 
+    // Each controller type has its own USB mode; this may restart the dongle
+    // into it first (the controller connects after the restart). A controller
+    // in pairing mode is paired first (a restart would close the pairing
+    // window); the switch then happens once it is ready.
+    if (!adv.pairing_mode && app_controller_type(adv.pid == S2_PID_GAMECUBE ? CTRL_GAMECUBE : CTRL_PRO)) return;
+
     s2t_stop_scan();
     memcpy(s_peer, addr, 6);
     s_peer_type = addr_type;
@@ -1072,6 +1079,9 @@ void s2c_on_input_enabled(bool ok) {
     s_rate_window = platform_deadline_ms(1000);
     s_rate_count = 0;
     set_state(S2_LINK_READY);
+    // Normally done before connecting; after pairing, this may restart into
+    // the controller type's mode (the controller then reconnects).
+    app_controller_type(mapping_ctrl_type(&s_map));
 }
 
 void s2c_on_conn_interval(uint16_t conn_interval) {

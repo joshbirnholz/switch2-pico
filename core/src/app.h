@@ -8,12 +8,16 @@ extern "C" {
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "settings.h"
+
 // Services provided by main.c to the web interface.
 
 // Re-enumerate on USB (needed after changing descriptor related settings).
 void app_request_usb_reconnect(void);
 // Reboot, optionally into the UF2 bootloader for firmware updates.
 void app_request_reboot(bool bootloader);
+// See app_core.c: switch to the USB mode of the controller type about to connect.
+bool app_controller_type(ctrl_type_t t);
 // Turn the configuration Wi-Fi off shortly (no-op on boards without Wi-Fi).
 void app_wifi_stop(void);
 // Raw Switch 2 buttons of the last report (for the live view).

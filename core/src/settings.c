@@ -73,6 +73,7 @@ void settings_defaults(settings_t *s) {
     for (int m = 0; m < MODE_MAP_SLOTS; m++) settings_default_mode_map(CTRL_PRO, (usb_mode_t)m, s->mode_map[m]);
     settings_default_mode_slots(s->mode_slot);
     settings_default_profile(CTRL_GAMECUBE, &s->gc_profile);
+    s->gc_usb_mode = USB_MODE_GC_ADAPTER;
     s->ext_rev = SETTINGS_EXT_REV;
 
     s->stick_deadzone_pct = 6;
@@ -139,6 +140,8 @@ void settings_sanitize(settings_t *s) {
             if (sl[i] > USB_MODE_COUNT) sl[i] = MODE_SLOT_EMPTY;
     }
     if (s->usb_mode >= USB_MODE_COUNT) s->usb_mode = USB_MODE_SWITCH_PRO;
+    if (s->gc_usb_mode >= USB_MODE_COUNT) s->gc_usb_mode = USB_MODE_GC_ADAPTER;
+    if (s->last_ctrl >= CTRL_TYPE_COUNT) s->last_ctrl = CTRL_PRO;
     if (s->ble_tx_power > 3) s->ble_tx_power = 0;
     s->idle_disconnect_off = s->idle_disconnect_off ? 1 : 0;
     s->idle_minutes = s->idle_minutes ? clamp_u8(s->idle_minutes, 1, 240) : 15;
@@ -202,6 +205,11 @@ void settings_init(void) {
             // adapter map (new, GameCube-controller defaults) gets the Pro's.
             settings_default_profile(CTRL_GAMECUBE, &g_settings.gc_profile);
             settings_default_mode_map(CTRL_PRO, USB_MODE_GC_ADAPTER, g_settings.mode_map[USB_MODE_GC_ADAPTER]);
+        }
+        if (rev < 9) {
+            // One USB mode for both before.
+            g_settings.gc_usb_mode = g_settings.usb_mode;
+            g_settings.last_ctrl = CTRL_PRO;
         }
         if (rev < 8) {
             // One remembered controller before: it becomes the list.

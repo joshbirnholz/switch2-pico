@@ -137,7 +137,7 @@ static void mode_select_step(uint32_t raw) {
         break;
     case MODE_SELECT_CHOSEN:
         s_swallow = raw;
-        if (chosen == usb_mode_active() && chosen == g_settings.usb_mode) {
+        if (chosen == usb_mode_active() && chosen == *settings_usb_mode(&g_settings, mapping_ctrl_type(s2_link_mapping_ctx()))) {
             LOG("mode select: already %s", usb_mode_name(chosen));
             s2_link_haptic(S2_HAPTIC_TICK);
             s2_link_set_led_override(-1);
@@ -159,10 +159,33 @@ static void mode_select_step(uint32_t raw) {
     }
 }
 
+// A controller of type t is about to connect. Each type has its own USB
+// mode: when t's differs from the one the dongle runs in, remember t and
+// restart into its mode (the controller keeps advertising meanwhile and
+// connects after the restart). True while restarting: don't connect.
+bool app_controller_type(ctrl_type_t t) {
+    static bool restarting;
+    if (restarting) return true;
+    if (g_settings.last_ctrl != t) {
+        g_settings.last_ctrl = (uint8_t)t;
+        uint8_t m = *settings_usb_mode(&g_settings, t);
+        if (m != usb_mode_active()) {
+            LOG("usb: %s controller: its mode is %s, restarting", t == CTRL_GAMECUBE ? "GameCube" : "Pro",
+                usb_mode_name((usb_mode_t)m));
+            restarting = true;
+            settings_save_now();
+            app_request_reboot(false);
+            return true;
+        }
+        settings_save_later();
+    }
+    return false;
+}
+
 static void mode_select_task(void) {
     // A chosen mode is applied even if the controller drops meanwhile.
     if (s_mode_switch >= 0 && platform_time_reached(s_mode_switch_at)) {
-        g_settings.usb_mode = (uint8_t)s_mode_switch;
+        *settings_usb_mode(&g_settings, (ctrl_type_t)g_settings.last_ctrl) = (uint8_t)s_mode_switch;
         s_mode_switch = -1;
         settings_save_now();
         app_request_reboot(false);

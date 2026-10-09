@@ -28,7 +28,10 @@ static const char *const NAMES[USB_MODE_COUNT] = {
 usb_mode_t usb_mode_active(void) {
     // Latched at first use (boot): descriptors must not change under the host.
     static int mode = -1;
-    if (mode < 0) mode = g_settings.usb_mode < USB_MODE_COUNT ? g_settings.usb_mode : USB_MODE_SWITCH_PRO;
+    if (mode < 0) {
+        uint8_t m = settings_boot_usb_mode(&g_settings);
+        mode = m < USB_MODE_COUNT ? m : USB_MODE_SWITCH_PRO;
+    }
     return (usb_mode_t)mode;
 }
 

@@ -172,7 +172,7 @@ game.
 
 ### USB modes (DualSense Edge, DualSense, Xbox 360, GameCube adapter)
 
-Under **USB and system → Current mode** the dongle can present itself as:
+Under **Mode** (on each controller tab) the dongle can present itself as:
 
 | Mode | Use it for | GL / GR / C |
 | --- | --- | --- |
@@ -213,6 +213,15 @@ trigger threshold is on the GameCube tab. Defaults differ where it helps: a Game
 controller's analog L / R are the triggers (LT / RT, L2 / R2) and Z the right
 bumper in the gamepad modes; a Pro Controller in GameCube adapter mode uses
 ZL / ZR as L / R and R as Z.
+
+**Mode per controller.** The Pro Controller and the GameCube controller each
+keep their own USB mode (set on the configuration page's tab for each, or with
+the shortcut below while that controller is connected). The dongle starts in
+the mode of the controller that connected last; when a controller of the other
+type connects and its mode differs, the dongle restarts in that mode first and
+the controller connects right after (a controller being paired is paired
+first, then the dongle switches and it reconnects). A new dongle uses the
+GameCube adapter mode for the GameCube controller.
 
 **Switching from the controller:** hold **C + Home** for 1.5 seconds. The
 controller gives a "ba-thump" and all four of its lights blink. Then press the

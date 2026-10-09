@@ -81,8 +81,9 @@ typedef enum {
     MODE_SLOT_COUNT
 } mode_slot_t;
 #define MODE_SLOT_EMPTY 0
-#define SETTINGS_EXT_REV 8   // 1: mode_map; 2: mode_slot; 3: ble_tx_power; 4: idle_*; 5: pair_button;
-                             // 6: gc_profile; 7: gc_profile sticks / rumble; 8: bonds
+#define SETTINGS_EXT_REV 9   // 1: mode_map; 2: mode_slot; 3: ble_tx_power; 4: idle_*; 5: pair_button;
+                             // 6: gc_profile; 7: gc_profile sticks / rumble; 8: bonds;
+                             // 9: gc_usb_mode, last_ctrl
 
 // Remembered (paired) controllers. Any of them can connect, one at a time;
 // pairing one more when the list is full forgets the oldest pairing.
@@ -188,6 +189,11 @@ typedef struct {
                                         // (default on for boards with a button: Pico BOOTSEL)
     ctrl_profile_t gc_profile;          // NSO GameCube controller (the Pro uses the fields above)
     bond_t bonds[BOND_MAX];             // paired controllers, newest pairing first
+    // USB mode per controller type: usb_mode is the Pro Controller's. The
+    // dongle starts in the mode of the type that connected last and restarts
+    // into the other type's mode when one of those connects.
+    uint8_t gc_usb_mode;                // usb_mode_t for the NSO GameCube controller
+    uint8_t last_ctrl;                  // ctrl_type_t of the controller that connected last
 
     uint32_t crc;
 } settings_t;
@@ -228,6 +234,13 @@ static inline uint8_t *settings_button_map(const settings_t *s, ctrl_type_t t) {
 }
 static inline uint8_t *settings_mode_map(const settings_t *s, ctrl_type_t t, usb_mode_t m) {
     return (uint8_t *)(t == CTRL_GAMECUBE ? s->gc_profile.mode_map[m] : s->mode_map[m]);
+}
+// The USB mode of one controller type, and the one the dongle starts in.
+static inline uint8_t *settings_usb_mode(const settings_t *s, ctrl_type_t t) {
+    return (uint8_t *)(t == CTRL_GAMECUBE ? &s->gc_usb_mode : &s->usb_mode);
+}
+static inline uint8_t settings_boot_usb_mode(const settings_t *s) {
+    return *settings_usb_mode(s, s->last_ctrl == CTRL_GAMECUBE ? CTRL_GAMECUBE : CTRL_PRO);
 }
 static inline uint8_t *settings_mode_slots(const settings_t *s, ctrl_type_t t) {
     return (uint8_t *)(t == CTRL_GAMECUBE ? s->gc_profile.mode_slot : s->mode_slot);

@@ -669,6 +669,15 @@ static void test_gc_adapter(void) {
     st.gc_profile.rumble_strength_pct = 40;
     CHECK(settings_tuning(&st, CTRL_PRO).deadzone == 6 && settings_tuning(&st, CTRL_PRO).rumble_strength == 100);
     CHECK(settings_tuning(&st, CTRL_GAMECUBE).deadzone == 12 && settings_tuning(&st, CTRL_GAMECUBE).rumble_strength == 40);
+    // USB mode per controller type; the dongle starts in the last-connected type's.
+    st.usb_mode = USB_MODE_XBOX360;
+    st.gc_usb_mode = USB_MODE_GC_ADAPTER;
+    st.last_ctrl = CTRL_PRO;
+    CHECK(settings_boot_usb_mode(&st) == USB_MODE_XBOX360);
+    st.last_ctrl = CTRL_GAMECUBE;
+    CHECK(settings_boot_usb_mode(&st) == USB_MODE_GC_ADAPTER);
+    *settings_usb_mode(&st, CTRL_GAMECUBE) = USB_MODE_DUALSENSE;
+    CHECK(st.gc_usb_mode == USB_MODE_DUALSENSE && st.usb_mode == USB_MODE_XBOX360);
 }
 
 static void test_bonds(void) {

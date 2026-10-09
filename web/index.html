@@ -129,8 +129,6 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
 <section class="card">
   <h2>USB and system</h2>
   <div class="grid">
-    <label>Current mode
-      <select data-k="usb_mode"><option value="0">Switch Pro Controller</option><option value="1">DualSense Edge</option><option value="2">DualSense</option><option value="3">Xbox 360 controller</option><option value="4">GameCube adapter</option></select></label>
     <label>Report interval (ms)<input type="number" min="4" max="16" data-k="usb_interval"></label>
     <label>Bluetooth transmit power (nRF52840; from the next connection)
       <select data-k="ble_tx_power"><option value="0">+8 dBm (maximum)</option><option value="1">+4 dBm</option><option value="2">0 dBm</option><option value="3">−4 dBm (lowest current)</option></select></label>
@@ -149,10 +147,22 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
 </div>
 
 <section class="card tabbed">
+  <h2>Mode</h2>
+  <div class="grid">
+    <label data-tab="0">Mode for the Pro Controller<select data-k="usb_mode"><option value="0">Switch Pro Controller</option><option value="1">DualSense Edge</option><option value="2">DualSense</option><option value="3">Xbox 360 controller</option><option value="4">GameCube adapter</option></select></label>
+    <label data-tab="1">Mode for the GameCube controller<select data-k="gc_usb_mode"><option value="0">Switch Pro Controller</option><option value="1">DualSense Edge</option><option value="2">DualSense</option><option value="3">Xbox 360 controller</option><option value="4">GameCube adapter</option></select></label>
+  </div>
+  <p class="note">Each controller type keeps its own mode. When a controller connects and its mode isn't the one the dongle is in, the dongle restarts in that mode first; the controller connects right after.</p>
+  <h3 style="margin:14px 0 4px;font-size:14px">Shortcut on the controller</h3>
+  <p class="note" style="margin-top:0">On the controller, hold <b>C + Home</b> until its lights blink, then press a button below to switch to that mode (the dongle restarts; the choice is kept for this controller type). C + Home again, or a few seconds without pressing anything, leaves without a change. Buttons set to – are ignored; with every button set to – the shortcut is off.</p>
+  <div class="diamonds" id="slots"></div>
+</section>
+
+<section class="card tabbed">
   <h2>Button mapping</h2>
   <div class="row" style="align-items:flex-end;gap:12px">
     <label>Mapping for<select id="map-sel" onchange="switchMapMode(this.value)"></select></label>
-    <span class="note" style="flex:1;min-width:220px">Each mode keeps its own mapping; this follows the current mode unless you pick another. The picture shows the controller live: pressed buttons light up and the sticks move.</span>
+    <span class="note" style="flex:1;min-width:220px">Each mode keeps its own mapping; this follows the controller's mode (above) unless you pick another. The picture shows the controller live: pressed buttons light up and the sticks move.</span>
   </div>
   <p class="note" id="map-ctrl-note" style="margin:6px 0 0"></p>
   <div class="pad" id="map"></div>
@@ -163,11 +173,6 @@ pre{max-height:320px;overflow:auto;background:var(--bg);padding:10px;border-radi
   <label class="check" style="margin-top:12px" data-tab="0"><input type="checkbox" data-k="quick_remap">Remap GL/GR from the controller (all modes except DualSense Edge, where they are paddles the host remaps): hold C + GL or GR and press a button. Do it again to clear.</label>
 </section>
 
-<section class="card tabbed">
-  <h2>Mode shortcut</h2>
-  <p class="note" style="margin-top:0">On the controller, hold <b>C + Home</b> until its lights blink, then press a button below to switch to that mode (the dongle restarts). C + Home again, or a few seconds without pressing anything, leaves without a change. Buttons set to – are ignored; with every button set to – the shortcut is off.</p>
-  <div class="diamonds" id="slots"></div>
-</section>
 
 <section class="card tabbed" data-tab="0">
   <h2>Sticks</h2>
@@ -479,9 +484,11 @@ function showTab(t){
     b.innerHTML=(S&&S.profiles?S.profiles[i].name:b.textContent)+(conn?'<span class="dot" title="connected"></span>':'');
   });
 }
+// Each controller type's own USB mode select.
+const modeSel=t=>document.querySelector(`[data-k="${t?'gc_usb_mode':'usb_mode'}"]`);
 function setTab(t){
   if(!S)return;
-  switchMapCtrl(t);switchSlotCtrl(t);showTab(t);
+  switchMapCtrl(t);switchMapMode(modeSel(t).value);switchSlotCtrl(t);showTab(t);
 }
 const SLOTS=['A','B','X','Y','Up','Down','Left','Right'];
 function renderSlots(){
@@ -508,10 +515,10 @@ function render(){
   $('pair-button-note').textContent=S.sync_button?'With BOOTSEL as Sync, a 1–5 s hold toggles the configuration Wi-Fi.':'Not available on this board (no Sync button): any controller in pairing mode pairs.';
   const sel=document.querySelector('[data-k="usb_mode"]');
   $('map-sel').innerHTML=[...sel.options].map(o=>`<option value="${o.value}">${o.text}</option>`).join('');
-  sel.onchange=()=>switchMapMode(sel.value);
+  [0,1].forEach(t=>{modeSel(t).onchange=()=>{if(MAP_CTRL===t)switchMapMode(modeSel(t).value)}});
   MAP_DIRTY=new Set();
-  MAP_CTRL=SLOT_CTRL=S.ctrl_type||0;
-  renderMap(S.usb_mode);
+  MAP_CTRL=SLOT_CTRL=S.last_ctrl??S.ctrl_type??0;
+  renderMap(modeSel(MAP_CTRL).value);
   showTab(MAP_CTRL);
   renderSlots();
 }
@@ -527,8 +534,9 @@ async function save(){
   S.profiles.forEach((P,c)=>{p.append('ctrl',c);SLOTS.forEach(n=>p.append('slot_'+n,P.mode_slots[n]||0))});
   document.querySelectorAll('[data-k]').forEach(el=>p.append(el.dataset.k,el.type==='checkbox'?(el.checked?1:0):el.value));
   const pw=$('wifi_pass').value;if(pw)p.append('wifi_pass',pw);
-  const modeEl=document.querySelector('[data-k="usb_mode"]');
-  if(S&&modeEl&&String(S.usb_mode)!==modeEl.value&&!confirm('Changing what the dongle appears as restarts it. Continue?'))return;
+  // The mode of the controller type in use changed: the dongle restarts.
+  const lt=S.last_ctrl||0,modeEl=modeSel(lt);
+  if(S&&modeEl&&String(S[lt?'gc_usb_mode':'usb_mode'])!==modeEl.value&&!confirm('Changing the mode of the controller in use restarts the dongle. Continue?'))return;
   const r=await api('/api/settings',{method:'POST',body:p.toString()});
   if(r.ok){S=r.json();render();toast('Saved')}else toast('Save failed');
 }
