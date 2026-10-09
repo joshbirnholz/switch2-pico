@@ -928,15 +928,15 @@ static void test_joycon(void) {
     joycon_mouse_apply(&p, 10, -7, &ox, &oy);
     CHECK(ox == 1500 && oy == -1050);
 
-    // Scrolling: the stronger direction; left / right sideways (the (R)'s
-    // horizontal axis runs the other way), or up / down with the option.
+    // Scrolling: the stronger direction; left / right sideways (both
+    // Joy-Cons alike), or up / down with the option (the (R) the other way).
     float wv, pv;
     joycon_mouse_scroll(true, 0.2f, 0.9f, 0, &wv, &pv);
     CHECK(wv == 0.9f && pv == 0.0f);
     joycon_mouse_scroll(true, 0.8f, 0.1f, 0, &wv, &pv);
     CHECK(wv == 0.0f && pv == -0.8f);
     joycon_mouse_scroll(false, 0.8f, 0.1f, 0, &wv, &pv);
-    CHECK(wv == 0.0f && pv == 0.8f);
+    CHECK(wv == 0.0f && pv == -0.8f);
     joycon_mouse_scroll(true, -0.8f, 0.1f, MOUSE_FLAG_SCROLL_UP_DOWN_ONLY, &wv, &pv);   // (L) left: up
     CHECK(wv == 0.8f && pv == 0.0f);
     joycon_mouse_scroll(false, 0.8f, 0.1f, MOUSE_FLAG_SCROLL_UP_DOWN_ONLY, &wv, &pv);   // (R) left: up

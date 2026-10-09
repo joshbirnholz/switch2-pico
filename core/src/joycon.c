@@ -123,9 +123,9 @@ void joycon_mouse_buttons(ctrl_type_t type, bool left, joycon_mouse_buttons_t *o
 
 void joycon_mouse_scroll(bool left, float x, float y, uint8_t flags, float *wheel, float *pan) {
     *wheel = *pan = 0.0f;
-    // Signs as checked on hardware: the (R)'s horizontal axis runs the
-    // other way round as a mouse; `h` is positive for left on either.
-    float h = left ? -x : x;
+    // Signs as checked on hardware: sideways, both Joy-Cons the same way;
+    // left / right scrolling up / down, the (R) the other way round.
+    float h = (flags & MOUSE_FLAG_SCROLL_UP_DOWN_ONLY) && !left ? x : -x;
     if (flags & MOUSE_FLAG_INVERT_UP_DOWN) y = -y;
     if (flags & MOUSE_FLAG_INVERT_LEFT_RIGHT) h = -h;
     if (fabsf(y) >= fabsf(x)) *wheel = y;
