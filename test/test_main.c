@@ -955,9 +955,9 @@ static void test_joycon(void) {
     joycon_mouse_scroll(true, 0.2f, 0.9f, 0, &wv, &pv);
     CHECK(wv == 0.9f && pv == 0.0f);
     joycon_mouse_scroll(true, 0.8f, 0.1f, 0, &wv, &pv);
-    CHECK(wv == 0.0f && pv == -0.8f);
+    CHECK(wv == 0.0f && pv == 0.8f);
     joycon_mouse_scroll(false, 0.8f, 0.1f, 0, &wv, &pv);
-    CHECK(wv == 0.0f && pv == -0.8f);
+    CHECK(wv == 0.0f && pv == 0.8f);
     joycon_mouse_scroll(true, -0.8f, 0.1f, MOUSE_FLAG_SCROLL_UP_DOWN_ONLY, &wv, &pv);   // (L) left: up
     CHECK(wv == 0.8f && pv == 0.0f);
     joycon_mouse_scroll(false, 0.8f, 0.1f, MOUSE_FLAG_SCROLL_UP_DOWN_ONLY, &wv, &pv);   // (R) left: up
@@ -966,7 +966,7 @@ static void test_joycon(void) {
     joycon_mouse_scroll(true, 0.2f, 0.9f, MOUSE_FLAG_INVERT_UP_DOWN, &wv, &pv);
     CHECK(wv == -0.9f && pv == 0.0f);
     joycon_mouse_scroll(true, 0.8f, 0.1f, MOUSE_FLAG_INVERT_UP_DOWN | MOUSE_FLAG_INVERT_LEFT_RIGHT, &wv, &pv);
-    CHECK(wv == 0.0f && pv == 0.8f);
+    CHECK(wv == 0.0f && pv == -0.8f);
     joycon_mouse_scroll(false, 0.8f, 0.1f, MOUSE_FLAG_SCROLL_UP_DOWN_ONLY | MOUSE_FLAG_INVERT_LEFT_RIGHT, &wv, &pv);
     CHECK(wv == -0.8f && pv == 0.0f);
 
