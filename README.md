@@ -148,7 +148,9 @@ GameCube Controller).
 
 **Mouse.** On the Joy-Con 2 tabs, a profile's **Mouse** tab (Mouse Mode) turns one Joy-Con
 2 (either side of a pair, or the single one) into a USB mouse: lay it on its
-side on a surface and move it. Its shoulder button clicks, its trigger
+side on a surface and move it. It is only the mouse while it lies on
+something (the sensor reports how far the surface is): held in the hand, its
+buttons and stick are the controller's again. Its shoulder button clicks, its trigger
 right-clicks, its stick click middle-clicks, and its stick scrolls (each
 optional; what the mouse uses isn't sent to the controller). Speed and the
 direction of each axis can be set (the sensor's axes haven't been checked

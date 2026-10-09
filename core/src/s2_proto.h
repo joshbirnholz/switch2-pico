@@ -169,7 +169,9 @@ typedef struct {
     // Joy-Con 2 optical sensor (feature S2_FEATURE_MOUSE): an absolute
     // position that wraps; deltas between reports are the movement.
     uint16_t mouse_x, mouse_y;
-    uint16_t mouse_unk1, mouse_unk2;   // surface quality / lift-off distance? (not understood)
+    // Seen on hardware: about 2600-4600 / 140 on a surface, 4600 / 3000 in
+    // the air, so the second looks like the lift-off distance.
+    uint16_t mouse_quality, mouse_distance;
 } s2_input_t;
 
 // Buttons that are on each Joy-Con 2 (report 0x05 uses one layout for all).

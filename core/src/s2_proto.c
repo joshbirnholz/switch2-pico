@@ -125,8 +125,8 @@ bool s2_parse_input_report(const uint8_t *d, size_t len, s2_input_t *out) {
     }
     out->mouse_x = rd16(d + 0x10);
     out->mouse_y = rd16(d + 0x12);
-    out->mouse_unk1 = rd16(d + 0x14);
-    out->mouse_unk2 = rd16(d + 0x16);
+    out->mouse_quality = rd16(d + 0x14);
+    out->mouse_distance = rd16(d + 0x16);
     out->trigger_l = len > 0x3C ? d[0x3C] : 0;
     out->trigger_r = len > 0x3D ? d[0x3D] : 0;
     return true;

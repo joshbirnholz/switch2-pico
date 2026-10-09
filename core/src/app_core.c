@@ -313,6 +313,10 @@ static void neutral_input(s2_input_t *in) {
 // ---------------------------------------------------------------------------
 #define MOUSE_SCROLL_HZ      12.0f   // wheel steps per second at full deflection
 #define MOUSE_SCROLL_DEAD    0.25f
+// The sensor's lift-off distance (see s2_input_t): on a surface below the
+// first, lifted above the second.
+#define MOUSE_ON_SURFACE     800
+#define MOUSE_LIFTED         1500
 
 // The mouse in use, if any: the profile asks for it and the USB interface is there.
 static const profile_t *mouse_profile(joycon_mouse_buttons_t *mb) {
@@ -322,11 +326,30 @@ static const profile_t *mouse_profile(joycon_mouse_buttons_t *mb) {
     return p;
 }
 
-// What the mouse takes, the gamepad doesn't get.
+// The mouse Joy-Con is lying on a surface: only then is it a mouse (moving,
+// clicking, scrolling); held in the hand its buttons and stick are the
+// controller's.
+static bool s_mouse_down;
+
+static void mouse_surface_update(const profile_t *p) {
+    bool down = false;
+    s2_input_t side;
+    uint16_t pid = p && p->mouse_src == MOUSE_JOYCON_L ? S2_PID_JOYCON2_L : S2_PID_JOYCON2_R;
+    if (p && s2_link_side_input(pid, &side, NULL)) {
+        down = s_mouse_down ? side.mouse_distance < MOUSE_LIFTED : side.mouse_distance < MOUSE_ON_SURFACE;
+    }
+    if (down != s_mouse_down) {
+        s_mouse_down = down;
+        LOG("mouse: Joy-Con %s", down ? "on a surface: it's the mouse" : "lifted: its buttons are the controller's");
+    }
+}
+
+// What the mouse takes, the gamepad doesn't get (while it's on a surface).
 static void mouse_take_from_gamepad(s2_input_t *in) {
     joycon_mouse_buttons_t mb;
     const profile_t *p = mouse_profile(&mb);
-    if (!p) return;
+    mouse_surface_update(p);
+    if (!p || !s_mouse_down) return;
     if (p->mouse_flags & MOUSE_BUTTONS) in->buttons &= ~(mb.left | mb.right | mb.middle);
     if (p->mouse_flags & MOUSE_SCROLL) {
         // A single Joy-Con 2's stick is the (turned) left stick.
@@ -349,13 +372,20 @@ static void mouse_task(void) {
 
     joycon_mouse_buttons_t mb;
     const profile_t *p = mouse_profile(&mb);
+    mouse_surface_update(p);
     int32_t dx = 0, dy = 0;
     uint8_t buttons = 0;
     // What the mouse is doing, every 2 s while it is in use (for the log).
     static uint32_t log_at, sent, moved_x, moved_y;
     static bool was_ready;
-    if (usb_mouse_ready() != was_ready && (was_ready = !was_ready)) LOG("mouse: USB mouse interface in use by the host");
-    if (p && s2_link_mouse_take(p->mouse_src, &dx, &dy)) {
+    if (usb_mouse_ready() != was_ready) {
+        was_ready = !was_ready;
+        LOG("mouse: the host %s the USB mouse", was_ready ? "reads" : "stopped reading");
+    }
+    // Lifted: what the sensor reads is dropped (and nothing is clicked).
+    bool linked = p && s2_link_mouse_take(p->mouse_src, &dx, &dy);
+    if (linked && !s_mouse_down) dx = dy = 0;
+    if (linked) {
         moved_x += (uint32_t)(dx < 0 ? -dx : dx);
         moved_y += (uint32_t)(dy < 0 ? -dy : dy);
         if (platform_time_reached(log_at)) {
@@ -363,12 +393,15 @@ static void mouse_task(void) {
             s2_input_t side;
             uint16_t pid = p->mouse_src == MOUSE_JOYCON_L ? S2_PID_JOYCON2_L : S2_PID_JOYCON2_R;
             if (s2_link_side_input(pid, &side, NULL)) {
-                LOG("mouse: sensor x=%u y=%u (%u %u), moved %lu/%lu, %lu reports sent, host %s", side.mouse_x,
-                    side.mouse_y, side.mouse_unk1, side.mouse_unk2, (unsigned long)moved_x, (unsigned long)moved_y,
+                LOG("mouse: sensor x=%u y=%u (quality %u, distance %u), moved %lu/%lu, %lu reports sent, host %s",
+                    side.mouse_x, side.mouse_y, side.mouse_quality, side.mouse_distance, (unsigned long)moved_x,
+                    (unsigned long)moved_y,
                     (unsigned long)sent, usb_mouse_ready() ? "ready" : "not using it");
             }
             moved_x = moved_y = 0;
         }
+    }
+    if (linked && s_mouse_down) {
         int32_t ox, oy;
         joycon_mouse_apply(p, dx, dy, &ox, &oy);
         acc_x += ox;
