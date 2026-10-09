@@ -69,6 +69,9 @@ bool s2_link_side_input(uint16_t pid, s2_input_t *out, s2_stick_cal_t *cal);
 // Optical sensor movement of a Joy-Con 2 (pid S2_PID_JOYCON2_L / _R) since
 // the last call; false when it isn't connected.
 bool s2_link_mouse_take(uint16_t pid, int32_t *dx, int32_t *dy);
+// That Joy-Con 2's optical sensor is running (held as a mouse lies, Mouse
+// Mode on) and its readings can be trusted.
+bool s2_link_mouse_ready(uint16_t pid);
 
 // Rumble from the host, decoded (see hd_rumble.h).
 void s2_link_rumble_submit(const rumble_sample_t *left, int nl, const rumble_sample_t *right, int nr);

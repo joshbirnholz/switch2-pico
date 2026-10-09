@@ -933,6 +933,17 @@ static void test_joycon(void) {
     CHECK(rc.center[0] == 2100 && rc.max[0] == 1400 && rc.min[0] == 1200);
     CHECK(rc.center[1] == 2000 && rc.max[1] == 1300 && rc.min[1] == 1500);
 
+    // Mouse pose: gravity along X (either way), not upright or flat; a
+    // tilt of 60 degrees stays in once in, not comes in; moving keeps it.
+    const int16_t G = 4096;
+    int16_t side[3] = {G, 0, 0}, side2[3] = {-G, 0, 0}, flat[3] = {0, 0, G}, upright[3] = {0, G, 0};
+    int16_t tilt45[3] = {2896, 2896, 0}, tilt60[3] = {2048, 3547, 0}, shake[3] = {3 * G, 0, 0};
+    CHECK(joycon_mouse_pose(side, false) && joycon_mouse_pose(side2, false));
+    CHECK(!joycon_mouse_pose(flat, true) && !joycon_mouse_pose(upright, true));
+    CHECK(joycon_mouse_pose(tilt45, false));
+    CHECK(!joycon_mouse_pose(tilt60, false) && joycon_mouse_pose(tilt60, true));
+    CHECK(!joycon_mouse_pose(shake, false) && joycon_mouse_pose(shake, true));
+
     // Mouse: deltas across the 16-bit wrap.
     joycon_mouse_track_t t;
     joycon_mouse_reset(&t);

@@ -28,6 +28,12 @@
 #define RUMBLE_HOLD_MS          12     // re-send the current rumble this often
 #define RUMBLE_IDLE_STOP_MS     120    // host stopped sending -> silence
 #define GYRO_DETECT_MS          1500
+// Joy-Con 2 optical sensor (Mouse Mode): on once held as a mouse lies for
+// this long, off once out of that pose this long; its first readings after
+// turning on are skipped.
+#define MOUSE_POSE_ON_MS        100
+#define MOUSE_POSE_OFF_MS       1500
+#define MOUSE_SENSOR_SETTLE_MS  100
 // A Joy-Con 2 used as a pair whose partner hasn't connected this long counts
 // as a single (sideways) one.
 #define HALF_PAIR_MS            30000
@@ -114,6 +120,10 @@ typedef struct link {
     // Joy-Con 2 optical sensor
     joycon_mouse_track_t mouse;
     int32_t mouse_dx, mouse_dy;
+    bool mouse_pose;          // held as a mouse lies (the sensor is wanted)
+    bool pose_raw;            // ... going by the latest report
+    uint32_t pose_since;      // pose_raw has differed from mouse_pose since
+    uint32_t mouse_on_since;  // the sensor was turned on then
 } link_t;
 
 static link_t s_links[S2T_LINKS];
@@ -758,8 +768,10 @@ static void led_task(link_t *k) {
 
 static uint8_t features_wanted(const link_t *k) {
     uint8_t f = FEATURE_FLAGS;
-    // Mouse Mode: either Joy-Con 2 may become the mouse, so both report it.
-    if (pid_is_joycon(k->pid) && settings_profile_mouse(settings_active(&g_settings, s_type), s_type)) {
+    // Mouse Mode: either Joy-Con 2 may become the mouse; its sensor runs
+    // while it is held as a mouse lies (joycon_mouse_pose()).
+    if (pid_is_joycon(k->pid) && k->mouse_pose &&
+        settings_profile_mouse(settings_active(&g_settings, s_type), s_type)) {
         f |= S2_FEATURE_MOUSE;
     }
     return f;
@@ -769,6 +781,7 @@ static void features_enabled_cb(link_t *k, bool ok, const s2_response_t *rsp, ui
     (void)rsp;
     k->features_busy = false;
     if (ok) {
+        if ((f & S2_FEATURE_MOUSE) && !(k->features & S2_FEATURE_MOUSE)) k->mouse_on_since = platform_millis();
         k->features = (uint8_t)f;
         joycon_mouse_reset(&k->mouse);
         LOG("s2: link %u features 0x%02x", k->idx, k->features);
@@ -1124,6 +1137,21 @@ static void on_input_notification(link_t *k, const uint8_t *value, uint16_t len)
     uint8_t range = g_settings.gyro_range;
     if (range == GYRO_RANGE_AUTO) range = k->imu_detected ? k->info.gyro_range_detected : GYRO_RANGE_16_4;
     k->gyro_lsb_per_dps = range == GYRO_RANGE_14_3 ? S2_GYRO_LSB_PER_DPS_B : S2_GYRO_LSB_PER_DPS_A;
+
+    // Held as a mouse lies: on quickly, off once it has left that pose for
+    // a while (the Joy-Con tips about while used as a mouse).
+    if (pid_is_joycon(k->pid)) {
+        bool raw = joycon_mouse_pose(in.accel, k->pose_raw);
+        uint32_t now = platform_millis();
+        if (raw != k->pose_raw || raw == k->mouse_pose) k->pose_since = now;
+        k->pose_raw = raw;
+        if (raw != k->mouse_pose && now - k->pose_since >= (raw ? MOUSE_POSE_ON_MS : MOUSE_POSE_OFF_MS)) {
+            k->mouse_pose = raw;
+            if (settings_profile_mouse(settings_active(&g_settings, s_type), s_type)) {
+                LOG("s2: link %u %s: mouse sensor %s", k->idx, pid_name(k->pid), raw ? "on" : "off");
+            }
+        }
+    }
 
     if (k->features & S2_FEATURE_MOUSE) {
         int32_t dx, dy;
@@ -1784,6 +1812,12 @@ bool s2_link_get_input(s2_input_t *out, uint32_t *seq) {
 
 const mapping_ctx_t *s2_link_mapping_ctx(void) {
     return &s_map;
+}
+
+bool s2_link_mouse_ready(uint16_t pid) {
+    const link_t *k = link_by_pid(pid);
+    return k && k->state == S2_LINK_READY && (k->features & S2_FEATURE_MOUSE) &&
+           platform_millis() - k->mouse_on_since >= MOUSE_SENSOR_SETTLE_MS;
 }
 
 bool s2_link_mouse_take(uint16_t pid, int32_t *dx, int32_t *dy) {

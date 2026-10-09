@@ -337,7 +337,7 @@ static void mouse_pick(void) {
     for (int i = 0; i < USB_MOUSE_COUNT; i++) {
         s2_input_t side;
         bool down = false;
-        if (on && s2_link_side_input(MOUSE_PID[i], &side, NULL)) {
+        if (on && s2_link_mouse_ready(MOUSE_PID[i]) && s2_link_side_input(MOUSE_PID[i], &side, NULL)) {
             down = s_mouse_down[i] ? side.mouse_distance < MOUSE_LIFTED : side.mouse_distance < MOUSE_ON_SURFACE;
         }
         if (down != s_mouse_down[i]) {

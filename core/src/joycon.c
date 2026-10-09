@@ -121,6 +121,17 @@ void joycon_mouse_buttons(ctrl_type_t type, bool left, joycon_mouse_buttons_t *o
     if (type != CTRL_JOYCON_PAIR) out->stick_left = true;
 }
 
+bool joycon_mouse_pose(const int16_t accel[3], bool was) {
+    float x = accel[0], y = accel[1], z = accel[2];
+    float g2 = x * x + y * y + z * z;
+    const float one_g = 32767.0f / 8.0f;   // +-8 g full scale
+    if (g2 < 0.36f * one_g * one_g || g2 > 1.96f * one_g * one_g) return was;   // 0.6..1.4 g
+    // cos^2 of the angle between gravity and the X axis.
+    float c2 = x * x / g2;
+    return was ? c2 > 0.179f    // cos^2 65 degrees
+               : c2 > 0.329f;   // cos^2 55 degrees
+}
+
 void joycon_mouse_scroll(bool left, float x, float y, uint8_t flags, float *wheel, float *pan) {
     *wheel = *pan = 0.0f;
     // Signs as checked on hardware: sideways, both Joy-Cons the same way;

@@ -158,7 +158,9 @@ GameCube Controller).
 switch, Mouse Mode, and the pointer speed. With it on, each Joy-Con 2 laid on
 its side on a surface is its own USB mouse, as on a Switch 2 (the dongle adds
 two mice, the (L)'s and the (R)'s; the sensor reports how far the surface
-is). Its shoulder button clicks, its trigger right-clicks, its stick click
+is). As on a Switch 2, a Joy-Con's sensor only runs while it is tilted
+within about 55 degrees of lying on its side (it costs battery), so it
+becomes a mouse a moment after it is put down. Its shoulder button clicks, its trigger right-clicks, its stick click
 middle-clicks and its stick scrolls: up / down scroll up / down, and left /
 right scroll sideways (with **Scroll sideways with left / right** off, left
 scrolls up and right down, as on a Switch 2; **Invert up / down scrolling**

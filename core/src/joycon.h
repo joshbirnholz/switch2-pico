@@ -43,6 +43,13 @@ void joycon_merge(ctrl_type_t type, const joycon_side_t *l, const joycon_side_t 
 void joycon_rotate_stick(bool left, const uint16_t raw[2], const s2_stick_cal_t *cal, uint16_t out[2],
                          s2_stick_cal_t *out_cal);
 
+// Whether a Joy-Con 2 is held about as a mouse lies (on the side with the
+// rail): gravity along its width (accelerometer X), within about 55 degrees
+// to come in, 65 to go out (`was`: the previous answer). Either way up
+// counts. Readings far from 1 g (moving) keep the previous answer. As on a
+// Switch 2, the optical sensor runs only then (it costs battery).
+bool joycon_mouse_pose(const int16_t accel[3], bool was);
+
 // Mouse movement from consecutive absolute sensor positions (they wrap).
 typedef struct {
     uint16_t x, y;
