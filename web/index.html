@@ -115,6 +115,8 @@ main.wrap{padding-top:20px;padding-bottom:40px;display:flex;flex-direction:colum
 .pad .g-img svg{width:100%;display:block}
 .pad svg .b{fill:transparent;stroke:none;transition:fill .08s}
 .pad svg .b.on{fill:var(--on);fill-opacity:.7}
+.pad svg .b.an{fill:var(--on)}
+.pad svg text.trig{font:600 22px ui-monospace,monospace;fill:var(--muted)}
 .pad svg .b.sel{stroke:var(--on);stroke-width:6}
 .pad svg .pill{fill:var(--off);stroke:var(--muted);stroke-width:2}
 .pad svg .pill.back{stroke-dasharray:8 5}
@@ -258,7 +260,6 @@ body.offline #usb-help{display:flex}
         <button role="tab" data-sub="rumble" onclick="showSub('rumble')">Rumble</button>
       </div>
       <div class="panel" data-panel="buttons">
-        <p class="note" id="map-ctrl-note" style="margin-bottom:10px"></p>
         <div class="pad" id="map"></div>
         <div class="panel-foot">
           <button id="preset-reset" onclick="presetIdentity()">Reset to labels</button>
@@ -666,8 +667,9 @@ function renderMap(mode){
     ['Minus','LStick','RStick','GL','GR'].forEach(n=>m.querySelector(`[data-map="${n}"]`).parentElement.style.display='none');
     m.querySelectorAll('.g-ls,.g-rs').forEach(g=>g.style.display='none');
     [['ZR','Z'],['Plus','Start']].forEach(([n,lab])=>m.querySelector(`[data-map="${n}"]`).parentElement.firstChild.textContent=lab);
+    // Live analog L / R (0–255), beside the ZL and Z pills above them.
+    m.querySelector('.g-img svg').insertAdjacentHTML('beforeend','<text class="trig" id="trig-l" x="57" y="-31"></text><text class="trig" id="trig-r" x="938" y="-31"></text>');
   }
-  $('map-ctrl-note').textContent=MAP_CTRL===1?'Analog L / R count as pressed past the trigger threshold (Sticks and triggers); the C-stick is the right stick.':'';
 }
 // Editor values -> the profile in S.
 function stashMap(){
@@ -866,6 +868,16 @@ async function save(){
 }
 function presetIdentity(){const M=mapMode();IN.forEach((n,i)=>{document.querySelector(`[data-map="${n}"]`).value=M.default_map[i]})}
 function presetSwapFace(){const M=mapMode(),sw={A:'B',B:'A',X:'Y',Y:'X'};for(const n in sw){document.querySelector(`[data-map="${n}"]`).value=M.outputs.indexOf(sw[n])}}
+// GameCube analog L / R: the shoulder fades in red with the analog value and
+// is fully lit once its button clicks; the value shows beside it.
+function gcTriggers(tr,raw){
+  [['L',0,'trig-l'],['R',1,'trig-r']].forEach(([n,i,id])=>{
+    const v=tr?Math.max(0,Math.min(255,tr[i]|0)):0,pressed=!!(raw>>>S2BIT[n]&1);
+    const b=document.querySelector(`#map svg [data-b="${n}"]`);
+    if(b){b.classList.toggle('an',!!tr);b.style.fillOpacity=!tr?'':pressed?'1':(0.7*v/255).toFixed(3)}
+    const t=$(id);if(t)t.textContent=tr?(i?`R ${v}`:`L ${v}`):'';
+  });
+}
 function kv(el,rows){el.innerHTML=rows.map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join('')}
 // Stick head in the drawing, moved by the stick output (12-bit, y up).
 function stick(el,x,y){if(el)el.setAttribute('transform',`translate(${((x-2048)/2048*50).toFixed(1)} ${(-(y-2048)/2048*50).toFixed(1)})`)}
@@ -899,8 +911,9 @@ async function poll(){
     if(s.input&&ready&&(L.pid===8307?1:0)===MAP_CTRL){
       for(const n of IN){const d=document.querySelector(`#map svg [data-b="${n}"]`);if(d)d.classList.toggle('on',!!(s.input.raw_buttons>>>S2BIT[n]&1))}
       stick($('dot-l'),s.input.out_l[0],s.input.out_l[1]);stick($('dot-r'),s.input.out_r[0],s.input.out_r[1]);
+      if(MAP_CTRL===1)gcTriggers(s.input.triggers,s.input.raw_buttons);
       if($('imu'))$('imu').innerHTML='accel '+s.input.out_accel.join(' / ')+'<br>gyro '+s.input.out_gyro.join(' / ')+(s.input.triggers[0]||s.input.triggers[1]?'<br>triggers '+s.input.triggers.join(' / '):'');
-    }else{document.querySelectorAll('#map svg .on').forEach(e=>e.classList.remove('on'));stick($('dot-l'),2048,2048);stick($('dot-r'),2048,2048);if($('imu'))$('imu').textContent='';}
+    }else{document.querySelectorAll('#map svg .on').forEach(e=>e.classList.remove('on'));if(MAP_CTRL===1)gcTriggers(null,0);stick($('dot-l'),2048,2048);stick($('dot-r'),2048,2048);if($('imu'))$('imu').textContent='';}
     if(S)showTab(MAP_CTRL);
     renderBonds(s);
     document.querySelectorAll('.wifi-only').forEach(e=>e.hidden=s.wifi!==true);
