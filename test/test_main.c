@@ -12,6 +12,7 @@
 #include "battery.h"
 #include "gc_adapter.h"
 #include "hd_rumble.h"
+#include "joycon.h"
 #include "mapping.h"
 #include "s2_proto.h"
 #include "settings.h"
@@ -796,6 +797,183 @@ static void test_bonds(void) {
     CHECK(!st.bonded && settings_bond_count(&st) == 0);
 }
 
+// UUID byte arrays against their printed form (catches typos in the tables).
+static bool uuid_is(const uint8_t u[16], const char *str) {
+    uint8_t b[16];
+    int n = 0;
+    for (const char *c = str; *c && n < 16; c++) {
+        if (*c == '-') continue;
+        unsigned v;
+        if (sscanf(c, "%2x", &v) != 1) return false;
+        b[n++] = (uint8_t)v;
+        c++;
+    }
+    return n == 16 && memcmp(b, u, 16) == 0;
+}
+
+static void test_uuids(void) {
+    CHECK(uuid_is(S2_UUID_INPUT_JOYCON_L, "cc1bbbb5-7354-4d32-a716-a81cb241a32a"));
+    CHECK(uuid_is(S2_UUID_INPUT_JOYCON_R, "d5a9e01e-2ffc-4cca-b20c-8b67142bf442"));
+    CHECK(uuid_is(S2_UUID_VIB_JOYCON_L, "289326cb-a471-485d-a8f4-240c14f18241"));
+    CHECK(uuid_is(S2_UUID_VIB_JOYCON_R, "fa19b0fb-cd1f-46a7-84a1-bbb09e00c149"));
+    CHECK(uuid_is(S2_UUID_INPUT_PRO, "7492866c-ec3e-4619-8258-32755ffcc0f8"));
+    CHECK(uuid_is(S2_UUID_INPUT_GC, "8261cba1-9435-420c-84d6-f0c75a2c8e4d"));
+    CHECK(uuid_is(S2_UUID_VIB_PRO, "cc483f51-9258-427d-a939-630c31f72b05"));
+}
+
+static joycon_side_t jc_side(uint32_t buttons, uint16_t lx, uint16_t ly, uint16_t rx, uint16_t ry) {
+    joycon_side_t s;
+    memset(&s, 0, sizeof s);
+    s.present = true;
+    s.in.buttons = buttons;
+    s.in.stick_l[0] = lx;
+    s.in.stick_l[1] = ly;
+    s.in.stick_r[0] = rx;
+    s.in.stick_r[1] = ry;
+    s2_default_stick_cal(&s.cal);
+    s.gyro_lsb_per_dps = 16.4f;
+    return s;
+}
+
+static void test_joycon(void) {
+    s2_stick_cal_t def;
+    s2_default_stick_cal(&def);
+    uint16_t c = def.center[0];
+    mapping_ctx_t ctx;
+    memset(&ctx, 0, sizeof ctx);
+    s2_input_t out;
+
+    // Pair: each side's own buttons (a stray bit from the other side's
+    // layout is dropped), SL / SR as GL / GR, the (L)'s left stick and the
+    // (R)'s right stick, motion from the (R), the lower battery.
+    joycon_side_t l = jc_side(S2_BTN_UP | S2_BTN_SL_L | S2_BTN_A, c + 500, c, 0, 0);
+    joycon_side_t r = jc_side(S2_BTN_A | S2_BTN_SR_R | S2_BTN_UP, 0, 0, c, c - 400);
+    l.in.battery_mv = 3600;
+    r.in.battery_mv = 3900;
+    r.in.gyro[0] = 77;
+    l.in.gyro[0] = 11;
+    joycon_merge(CTRL_JOYCON_PAIR, &l, &r, &out, &ctx);
+    CHECK(out.buttons == (S2_BTN_UP | S2_BTN_SL_L | S2_BTN_A | S2_BTN_SR_R | S2_BTN_GL | S2_BTN_GR));
+    CHECK(out.stick_l[0] == c + 500 && out.stick_r[1] == c - 400);
+    CHECK(out.gyro[0] == 77);
+    CHECK(out.battery_mv == 3600);
+
+    // Pair with only the (L): its half, motion from it, the right stick centered.
+    r.present = false;
+    joycon_merge(CTRL_JOYCON_PAIR, &l, &r, &out, &ctx);
+    CHECK(out.buttons == (S2_BTN_UP | S2_BTN_SL_L | S2_BTN_GL));
+    CHECK(out.gyro[0] == 11);
+    CHECK(out.stick_r[0] == c && out.stick_r[1] == c);
+
+    // (L) sideways: pushing toward the rail (its right) is up; toward its
+    // bottom (its down) is right.
+    joycon_side_t sl = jc_side(S2_BTN_SR_L, c + 600, c, 0, 0);
+    joycon_merge(CTRL_JOYCON_L, &sl, NULL, &out, &ctx);
+    CHECK(out.stick_l[0] == c && out.stick_l[1] == c + 600);
+    CHECK(out.buttons == (S2_BTN_SR_L | S2_BTN_GR));
+    sl.in.stick_l[0] = c;
+    sl.in.stick_l[1] = c - 300;   // its down
+    joycon_merge(CTRL_JOYCON_L, &sl, NULL, &out, &ctx);
+    CHECK(out.stick_l[0] == c + 300 && out.stick_l[1] == c);
+
+    // (R) sideways: toward its left (the rail) is up, its up is right; its
+    // stick becomes the left stick.
+    joycon_side_t sr = jc_side(0, 0, 0, c - 500, c);
+    joycon_merge(CTRL_JOYCON_R, NULL, &sr, &out, &ctx);
+    CHECK(out.stick_l[0] == c && out.stick_l[1] == c + 500);
+    sr.in.stick_r[0] = c;
+    sr.in.stick_r[1] = c + 200;
+    joycon_merge(CTRL_JOYCON_R, NULL, &sr, &out, &ctx);
+    CHECK(out.stick_l[0] == c + 200 && out.stick_l[1] == c);
+    CHECK(out.stick_r[0] == c && out.stick_r[1] == c);
+
+    // Turned calibration: full range follows the direction.
+    s2_stick_cal_t cal = {{2000, 2100}, {1500, 1400}, {1300, 1200}, true}, rc;
+    uint16_t raw[2] = {2000, 2100}, o[2];
+    joycon_rotate_stick(true, raw, &cal, o, &rc);
+    CHECK(rc.center[0] == 2100 && rc.max[0] == 1200 && rc.min[0] == 1400);
+    CHECK(rc.center[1] == 2000 && rc.max[1] == 1500 && rc.min[1] == 1300);
+    CHECK(o[0] == 2100 && o[1] == 2000);
+    joycon_rotate_stick(false, raw, &cal, o, &rc);
+    CHECK(rc.center[0] == 2100 && rc.max[0] == 1400 && rc.min[0] == 1200);
+    CHECK(rc.center[1] == 2000 && rc.max[1] == 1300 && rc.min[1] == 1500);
+
+    // Mouse: deltas across the 16-bit wrap.
+    joycon_mouse_track_t t;
+    joycon_mouse_reset(&t);
+    int32_t dx, dy;
+    joycon_mouse_delta(&t, 65530, 10, &dx, &dy);
+    CHECK(dx == 0 && dy == 0);
+    joycon_mouse_delta(&t, 4, 3, &dx, &dy);
+    CHECK(dx == 10 && dy == -7);
+
+    profile_t p;
+    memset(&p, 0, sizeof p);
+    p.mouse_speed_pct = 150;
+    p.mouse_flags = MOUSE_INVERT_Y;
+    int32_t ox, oy;
+    joycon_mouse_apply(&p, 10, -7, &ox, &oy);
+    CHECK(ox == 1500 && oy == 1050);
+    p.mouse_flags = MOUSE_SWAP_XY;
+    joycon_mouse_apply(&p, 10, -7, &ox, &oy);
+    CHECK(ox == -1050 && oy == 1500);
+
+    joycon_mouse_buttons_t mb;
+    CHECK(!joycon_mouse_buttons(CTRL_PRO, MOUSE_JOYCON_R, &mb));
+    CHECK(!joycon_mouse_buttons(CTRL_JOYCON_PAIR, MOUSE_OFF, &mb));
+    CHECK(joycon_mouse_buttons(CTRL_JOYCON_PAIR, MOUSE_JOYCON_L, &mb) && mb.left == S2_BTN_L && mb.stick_left);
+    CHECK(joycon_mouse_buttons(CTRL_JOYCON_R, MOUSE_JOYCON_R, &mb) && mb.right == S2_BTN_ZR && !mb.stick_left);
+}
+
+static void test_joycon_profiles(void) {
+    // Sideways maps: the buttons under the thumb by where they end up.
+    uint8_t m[IN_COUNT];
+    settings_default_button_map(CTRL_JOYCON_L, m);
+    CHECK(m[IN_DOWN] == OUT_A && m[IN_LEFT] == OUT_B && m[IN_RIGHT] == OUT_X && m[IN_UP] == OUT_Y);
+    CHECK(m[IN_GL] == OUT_L && m[IN_GR] == OUT_R && m[IN_A] == OUT_NONE && m[IN_MINUS] == OUT_PLUS);
+    settings_default_button_map(CTRL_JOYCON_R, m);
+    CHECK(m[IN_X] == OUT_A && m[IN_A] == OUT_B && m[IN_Y] == OUT_X && m[IN_B] == OUT_Y);
+    CHECK(m[IN_RSTICK] == OUT_LSTICK && m[IN_UP] == OUT_NONE && m[IN_HOME] == OUT_HOME);
+    settings_default_button_map(CTRL_JOYCON_PAIR, m);
+    CHECK(m[IN_A] == OUT_A && m[IN_GL] == OUT_NONE && m[IN_GR] == OUT_NONE);
+    settings_default_mode_map(CTRL_JOYCON_L, USB_MODE_XBOX360, m);
+    CHECK(m[IN_DOWN] == GP_EAST && m[IN_LEFT] == GP_SOUTH && m[IN_GL] == GP_L1 && m[IN_MINUS] == GP_START);
+    settings_default_mode_map(CTRL_JOYCON_R, USB_MODE_GC_ADAPTER, m);
+    CHECK(m[IN_X] == GP_SOUTH && m[IN_A] == GP_WEST && m[IN_ZR] == GP_R1 && m[IN_PLUS] == GP_START);
+
+    // Profiles: an (L) only reaches the D-pad, so its defaults sit there.
+    ctrl_profiles_t c;
+    settings_default_profiles(CTRL_JOYCON_L, &c);
+    CHECK(c.active == MODE_SLOT_UP && c.p[MODE_SLOT_UP].used && c.p[MODE_SLOT_UP].usb_mode == USB_MODE_SWITCH_PRO);
+    CHECK(!c.p[MODE_SLOT_A].used && !c.p[MODE_SLOT_Y].used);
+    CHECK(c.p[MODE_SLOT_DOWN].usb_mode == USB_MODE_DUALSENSE_EDGE);
+    CHECK(c.p[MODE_SLOT_UP].mouse_src == MOUSE_OFF && c.p[MODE_SLOT_UP].mouse_speed_pct == 100);
+    settings_default_profiles(CTRL_JOYCON_R, &c);
+    CHECK(c.active == MODE_SLOT_Y && c.p[MODE_SLOT_A].used);
+
+    // Mouse fields: kept on Joy-Con types (a single one is its own mouse),
+    // cleared on the others.
+    settings_default_profiles(CTRL_JOYCON_L, &c);
+    c.p[MODE_SLOT_UP].mouse_src = MOUSE_JOYCON_R;
+    c.p[MODE_SLOT_UP].mouse_speed_pct = 0;
+    settings_sanitize_profiles(CTRL_JOYCON_L, &c);
+    CHECK(c.p[MODE_SLOT_UP].mouse_src == MOUSE_JOYCON_L && c.p[MODE_SLOT_UP].mouse_speed_pct == 100);
+    CHECK(settings_profile_mouse(&c.p[MODE_SLOT_UP], CTRL_JOYCON_L));
+    settings_default_profiles(CTRL_PRO, &c);
+    c.p[MODE_SLOT_Y].mouse_src = MOUSE_JOYCON_R;
+    settings_sanitize_profiles(CTRL_PRO, &c);
+    CHECK(c.p[MODE_SLOT_Y].mouse_src == MOUSE_OFF);
+    CHECK(!settings_profile_mouse(&c.p[MODE_SLOT_Y], CTRL_PRO));
+
+    // Mapping follows the context's type.
+    mapping_ctx_t ctx;
+    memset(&ctx, 0, sizeof ctx);
+    ctx.type = CTRL_JOYCON_R;
+    CHECK(mapping_ctrl_type(&ctx) == CTRL_JOYCON_R);
+    ctx.is_gamecube = true;
+    CHECK(mapping_ctrl_type(&ctx) == CTRL_GAMECUBE);
+}
+
 int main(void) {
     test_s1_rumble_classic();
     test_s1_rumble_packed();
@@ -816,6 +994,9 @@ int main(void) {
     test_gc_adapter();
     test_bonds();
     test_profiles();
+    test_uuids();
+    test_joycon();
+    test_joycon_profiles();
     printf("%d passed, %d failed\n", g_pass, g_fail);
     return g_fail ? 1 : 0;
 }

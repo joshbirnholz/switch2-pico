@@ -24,15 +24,83 @@ static const uint32_t IN_BITS[IN_COUNT] = {
     [IN_GL] = S2_BTN_GL, [IN_GR] = S2_BTN_GR, [IN_C] = S2_BTN_C,
 };
 
+// A Joy-Con 2 on its own is held sideways, rail up: the four buttons under
+// the thumb act as A / B / X / Y by where they end up, SL / SR are the
+// shoulders (they arrive as GL / GR, see joycon.c), and its stick is the
+// left stick. Indexed by the Nintendo label each button takes:
+// {A, B, X, Y} = {east, south, north, west} once rotated.
+static const in_button_t SIDE_FACE_L[4] = {IN_DOWN, IN_LEFT, IN_RIGHT, IN_UP};   // rotated a quarter left
+static const in_button_t SIDE_FACE_R[4] = {IN_X, IN_A, IN_Y, IN_B};              // rotated a quarter right
+
 // Declared in settings.h (settings_defaults() uses them).
 void settings_default_button_map(ctrl_type_t type, uint8_t map[IN_COUNT]) {
-    (void)type;   // the GameCube controller's buttons arrive as their Switch equivalents
+    // The GameCube controller's buttons arrive as their Switch equivalents.
+    if (type == CTRL_JOYCON_L || type == CTRL_JOYCON_R) {
+        bool l = type == CTRL_JOYCON_L;
+        const in_button_t *face = l ? SIDE_FACE_L : SIDE_FACE_R;
+        memset(map, OUT_NONE, IN_COUNT);
+        map[face[0]] = OUT_A;
+        map[face[1]] = OUT_B;
+        map[face[2]] = OUT_X;
+        map[face[3]] = OUT_Y;
+        map[IN_GL] = OUT_L;   // SL
+        map[IN_GR] = OUT_R;   // SR
+        map[l ? IN_L : IN_R] = OUT_ZL;
+        map[l ? IN_ZL : IN_ZR] = OUT_ZR;
+        map[l ? IN_LSTICK : IN_RSTICK] = OUT_LSTICK;
+        if (l) {
+            map[IN_MINUS] = OUT_PLUS;
+            map[IN_CAPTURE] = OUT_HOME;
+        } else {
+            map[IN_PLUS] = OUT_PLUS;
+            map[IN_HOME] = OUT_HOME;
+            map[IN_C] = OUT_MINUS;
+        }
+        return;
+    }
     // Identity for every button the Switch 1 Pro Controller also has; GL / GR
     // default to the stick clicks (like most back paddle setups), C unassigned.
+    // A Joy-Con 2 pair: SL / SR (as GL / GR) unassigned.
     for (int i = IN_A; i <= IN_RIGHT; i++) map[i] = (uint8_t)(OUT_A + (i - IN_A));
-    map[IN_GL] = OUT_LSTICK;
-    map[IN_GR] = OUT_RSTICK;
+    bool pair = type == CTRL_JOYCON_PAIR;
+    map[IN_GL] = pair ? OUT_NONE : OUT_LSTICK;
+    map[IN_GR] = pair ? OUT_NONE : OUT_RSTICK;
     map[IN_C] = OUT_NONE;
+}
+
+// Sideways Joy-Con 2, non-Switch modes (positional outputs).
+static void side_mode_map(bool l, usb_mode_t mode, uint8_t map[IN_COUNT]) {
+    const in_button_t *face = l ? SIDE_FACE_L : SIDE_FACE_R;
+    memset(map, GP_NONE, IN_COUNT);
+    if (mode == USB_MODE_GC_ADAPTER) {
+        // By label, as for the other controllers.
+        map[face[0]] = GP_SOUTH;
+        map[face[1]] = GP_WEST;
+        map[face[2]] = GP_EAST;
+        map[face[3]] = GP_NORTH;
+        map[IN_GL] = GP_L2;
+        map[IN_GR] = GP_R2;
+        map[l ? IN_ZL : IN_ZR] = GP_R1;   // Z
+        map[l ? IN_MINUS : IN_PLUS] = GP_START;
+        return;
+    }
+    map[face[0]] = GP_EAST;
+    map[face[1]] = GP_SOUTH;
+    map[face[2]] = GP_NORTH;
+    map[face[3]] = GP_WEST;
+    map[IN_GL] = GP_L1;
+    map[IN_GR] = GP_R1;
+    map[l ? IN_L : IN_R] = GP_L2;
+    map[l ? IN_ZL : IN_ZR] = GP_R2;
+    map[l ? IN_LSTICK : IN_RSTICK] = GP_L3;
+    if (l) {
+        map[IN_MINUS] = GP_START;
+        map[IN_CAPTURE] = GP_GUIDE;
+    } else {
+        map[IN_PLUS] = GP_START;
+        map[IN_HOME] = GP_GUIDE;
+        map[IN_C] = GP_SELECT;
+    }
 }
 
 void settings_default_mode_map(ctrl_type_t type, usb_mode_t mode, uint8_t map[IN_COUNT]) {
@@ -45,6 +113,10 @@ void settings_default_mode_map(ctrl_type_t type, usb_mode_t mode, uint8_t map[IN
         [IN_UP] = GP_UP, [IN_DOWN] = GP_DOWN, [IN_LEFT] = GP_LEFT, [IN_RIGHT] = GP_RIGHT,
         [IN_GL] = GP_NONE, [IN_GR] = GP_NONE, [IN_C] = GP_NONE,
     };
+    if (type == CTRL_JOYCON_L || type == CTRL_JOYCON_R) {
+        side_mode_map(type == CTRL_JOYCON_L, mode, map);
+        return;
+    }
     memcpy(map, base, IN_COUNT);
     bool gc = type == CTRL_GAMECUBE;
     if (gc) {

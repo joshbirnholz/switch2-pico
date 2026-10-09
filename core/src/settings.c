@@ -25,6 +25,18 @@ static const char *const OUT_NAMES[OUT_COUNT] = {
     "Home+A (Steam quick access)",
 };
 
+static const char *const CTRL_NAMES[CTRL_TYPE_COUNT] = {
+    [CTRL_PRO] = "Nintendo Switch 2 Pro Controller",
+    [CTRL_GAMECUBE] = "Nintendo GameCube Controller",
+    [CTRL_JOYCON_PAIR] = "Joy-Con 2 (L/R)",
+    [CTRL_JOYCON_L] = "Joy-Con 2 (L)",
+    [CTRL_JOYCON_R] = "Joy-Con 2 (R)",
+};
+
+const char *ctrl_type_name(ctrl_type_t t) {
+    return t < CTRL_TYPE_COUNT ? CTRL_NAMES[t] : "?";
+}
+
 const char *in_button_name(in_button_t b) {
     return b < IN_COUNT ? IN_NAMES[b] : "?";
 }
@@ -237,11 +249,20 @@ void settings_init(void) {
         if (rev < 10) {
             // Profiles: one per mode from that mode's map (after the steps
             // above, which bring the per-mode fields up to date).
-            for (int t = 0; t < CTRL_TYPE_COUNT; t++) profiles_from_legacy(&g_settings, (ctrl_type_t)t);
+            profiles_from_legacy(&g_settings, CTRL_PRO);
+            profiles_from_legacy(&g_settings, CTRL_GAMECUBE);
         }
         if (rev < 11) {
             // One profile per button (after the step above made profiles).
-            for (int t = 0; t < CTRL_TYPE_COUNT; t++) settings_profiles_to_buttons(&g_settings.prof[t]);
+            settings_profiles_to_buttons(&g_settings.prof[CTRL_PRO]);
+            settings_profiles_to_buttons(&g_settings.prof[CTRL_GAMECUBE]);
+        }
+        if (rev < 12) {
+            // Joy-Con 2 types: new (whatever followed the older layout isn't
+            // theirs); the mouse fields of the others were reserved zeros.
+            for (int t = CTRL_JOYCON_PAIR; t < CTRL_TYPE_COUNT; t++) {
+                settings_default_profiles((ctrl_type_t)t, &g_settings.prof[t]);
+            }
         }
         g_settings.ext_rev = SETTINGS_EXT_REV;
         settings_sanitize(&g_settings);

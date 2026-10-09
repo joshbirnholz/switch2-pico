@@ -81,12 +81,14 @@ typedef enum {
     MODE_SLOT_COUNT
 } mode_slot_t;
 #define MODE_SLOT_EMPTY 0
-#define SETTINGS_EXT_REV 11  // 1: mode_map; 2: mode_slot; 3: ble_tx_power; 4: idle_*; 5: pair_button;
+#define SETTINGS_EXT_REV 12  // 1: mode_map; 2: mode_slot; 3: ble_tx_power; 4: idle_*; 5: pair_button;
                              // 6: gc_profile; 7: gc_profile sticks / rumble; 8: bonds;
-                             // 9: gc_usb_mode, last_ctrl; 10: profiles; 11: one profile per button
+                             // 9: gc_usb_mode, last_ctrl; 10: profiles; 11: one profile per button;
+                             // 12: Joy-Con 2 types
 
-// Remembered (paired) controllers. Any of them can connect, one at a time;
-// pairing one more when the list is full forgets the oldest pairing.
+// Remembered (paired) controllers. Any of them can connect, one at a time
+// (or a Joy-Con 2 (L) together with a Joy-Con 2 (R)); pairing one more when
+// the list is full forgets the oldest pairing.
 #define BOND_MAX 8
 typedef struct {
     uint8_t addr[6];                    // BD_ADDR, big-endian (as printed)
@@ -96,12 +98,32 @@ typedef struct {
     uint16_t reserved;
 } bond_t;
 
-// Controller types with their own button maps and mode shortcut buttons.
+// Controller types with their own profiles. A Joy-Con 2 on its own is held
+// sideways; an (L) and an (R) connected together are one controller.
 typedef enum {
-    CTRL_PRO = 0,        // Pro Controller 2
-    CTRL_GAMECUBE = 1,   // NSO GameCube controller
+    CTRL_PRO = 0,          // Nintendo Switch 2 Pro Controller
+    CTRL_GAMECUBE = 1,     // Nintendo GameCube Controller
+    CTRL_JOYCON_PAIR = 2,  // Joy-Con 2 (L/R)
+    CTRL_JOYCON_L = 3,     // Joy-Con 2 (L), sideways
+    CTRL_JOYCON_R = 4,     // Joy-Con 2 (R), sideways
     CTRL_TYPE_COUNT
 } ctrl_type_t;
+
+static inline bool ctrl_is_joycon(ctrl_type_t t) {
+    return t == CTRL_JOYCON_PAIR || t == CTRL_JOYCON_L || t == CTRL_JOYCON_R;
+}
+
+// Joy-Con 2 optical sensor as a USB mouse (profile_t.mouse_src).
+typedef enum {
+    MOUSE_OFF = 0,
+    MOUSE_JOYCON_R = 1,    // Joy-Con 2 (R): R left click, ZR right click, stick click middle
+    MOUSE_JOYCON_L = 2,    // Joy-Con 2 (L): L, ZL, stick click
+} mouse_src_t;
+#define MOUSE_BUTTONS  0x01   // its shoulder / trigger / stick click are mouse buttons (not the gamepad's)
+#define MOUSE_SCROLL   0x02   // its stick scrolls (not the gamepad's)
+#define MOUSE_INVERT_X 0x04
+#define MOUSE_INVERT_Y 0x08
+#define MOUSE_SWAP_XY  0x10   // the sensor's x is up / down
 
 // Profiles: a USB mode with a button map and the options that go with it.
 // Each controller type has one per shortcut button (p[] is indexed by
@@ -120,7 +142,11 @@ typedef struct {
     uint8_t trigger_threshold;          // analog L / R count as pressed past this (GameCube controller)
     uint8_t rumble_enabled;
     uint8_t rumble_strength_pct;        // 0..200
-    uint8_t reserved[8];
+    // Joy-Con 2 types only (zero elsewhere): the USB mouse.
+    uint8_t mouse_src;                  // mouse_src_t
+    uint8_t mouse_speed_pct;            // 10..250
+    uint8_t mouse_flags;                // MOUSE_*
+    uint8_t reserved[5];
 } profile_t;
 
 typedef struct {
@@ -287,8 +313,19 @@ static inline void settings_profile_slots(const settings_t *s, ctrl_type_t t, ui
 }
 // The USB mode the dongle starts in: the active profile of the controller
 // type that connected last.
+static inline ctrl_type_t settings_boot_ctrl(const settings_t *s) {
+    return s->last_ctrl < CTRL_TYPE_COUNT ? (ctrl_type_t)s->last_ctrl : CTRL_PRO;
+}
 static inline uint8_t settings_boot_usb_mode(const settings_t *s) {
-    return settings_active(s, s->last_ctrl == CTRL_GAMECUBE ? CTRL_GAMECUBE : CTRL_PRO)->usb_mode;
+    return settings_active(s, settings_boot_ctrl(s))->usb_mode;
+}
+// Whether a profile adds the USB mouse (only Joy-Con 2 types have one).
+static inline bool settings_profile_mouse(const profile_t *p, ctrl_type_t t) {
+    return ctrl_is_joycon(t) && p->mouse_src != MOUSE_OFF;
+}
+// ... for the profile the dongle starts with (the USB descriptors follow it).
+static inline bool settings_boot_mouse(const settings_t *s) {
+    return settings_profile_mouse(settings_active(s, settings_boot_ctrl(s)), settings_boot_ctrl(s));
 }
 // Sticks, triggers and rumble of a controller type's active profile.
 typedef struct {
@@ -302,6 +339,7 @@ static inline ctrl_tuning_t settings_tuning(const settings_t *s, ctrl_type_t t) 
 }
 
 const char *in_button_name(in_button_t b);
+const char *ctrl_type_name(ctrl_type_t t);
 const char *out_button_name(out_button_t b);
 
 #ifdef __cplusplus

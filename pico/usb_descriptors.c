@@ -4,7 +4,8 @@
 // WebUSB is enabled, interface 1 is a vendor interface for the configuration
 // page and the device advertises USB 2.1 + a BOS descriptor (WebUSB landing
 // page, Microsoft OS 2.0 descriptors for automatic WinUSB on Windows). With
-// WebUSB disabled the descriptors match a genuine controller.
+// WebUSB disabled the descriptors match a genuine controller. A profile that
+// uses the Joy-Con 2 mouse adds a boot mouse interface last.
 
 #include <assert.h>
 #include <string.h>
@@ -64,7 +65,8 @@ uint8_t const *tud_descriptor_bos_cb(void) {
 #define EP_OUT 0x01
 #define EP_VENDOR_IN  0x82
 #define EP_VENDOR_OUT 0x02
-#define CONFIG_MAX (TUD_CONFIG_DESC_LEN + 64 + TUD_VENDOR_DESC_LEN)
+#define EP_MOUSE_IN   0x83
+#define CONFIG_MAX (TUD_CONFIG_DESC_LEN + 64 + TUD_VENDOR_DESC_LEN + USB_MOUSE_ITF_DESC_LEN)
 
 static uint8_t s_config[CONFIG_MAX];
 
@@ -74,14 +76,21 @@ uint8_t const *tud_descriptor_configuration_cb(uint8_t index) {
     // Interface 0: the controller (HID, or XInput in Xbox 360 mode).
     uint16_t n = TUD_CONFIG_DESC_LEN;
     n += usb_mode_interface_desc(s_config + n, (uint16_t)(sizeof s_config - n), 0, EP_IN, EP_OUT);
+    uint8_t itfs = 1;
     if (webusb) {
         // Interface 1: WebUSB configuration (vendor class, bulk)
         const uint8_t vendor[] = {TUD_VENDOR_DESCRIPTOR(1, 4, EP_VENDOR_OUT, EP_VENDOR_IN, 64)};
         memcpy(s_config + n, vendor, sizeof vendor);
         n += sizeof vendor;
+        itfs++;
     }
-    // Configuration: 1 or 2 interfaces, bus powered, remote wakeup, 500 mA
-    const uint8_t head[] = {9, TUSB_DESC_CONFIGURATION, U16_TO_U8S_LE(n), (uint8_t)(webusb ? 2 : 1), 1, 0, 0xA0, 0xFA};
+    if (usb_mode_has_mouse()) {
+        // Last: the Joy-Con 2 mouse (the WebUSB interface keeps its number).
+        n += usb_mouse_interface_desc(s_config + n, (uint16_t)(sizeof s_config - n), itfs, EP_MOUSE_IN);
+        itfs++;
+    }
+    // Configuration: bus powered, remote wakeup, 500 mA
+    const uint8_t head[] = {9, TUSB_DESC_CONFIGURATION, U16_TO_U8S_LE(n), itfs, 1, 0, 0xA0, 0xFA};
     static_assert(sizeof head == TUD_CONFIG_DESC_LEN, "config header length");
     memcpy(s_config, head, sizeof head);
     return s_config;

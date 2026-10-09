@@ -25,6 +25,9 @@ usb_mode_t usb_mode_active(void);
 const usb_identity_t *usb_mode_identity(void);
 const char *usb_mode_name(usb_mode_t m);
 void usb_mode_get_status(procon_status_t *out);
+// Whether the USB mouse interface is there (latched at boot with the mode:
+// the profile the dongle started with uses the Joy-Con 2 mouse).
+bool usb_mode_has_mouse(void);
 // False for vendor-class modes (Xbox 360).
 bool usb_mode_is_hid(void);
 // Name of a generic output in mode `m`, NULL if the mode doesn't have it.

@@ -38,7 +38,7 @@ main.wrap{padding-top:20px;padding-bottom:40px;display:flex;flex-direction:colum
 .stack{display:flex;flex-direction:column;gap:12px}
 .caps{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
 /* Controller type tabs (segmented) */
-.seg{display:inline-flex;padding:4px;background:var(--seg);border-radius:10px;gap:4px;align-self:flex-start}
+.seg{display:inline-flex;flex-wrap:wrap;padding:4px;background:var(--seg);border-radius:10px;gap:4px;align-self:flex-start}
 .seg button{border:0;border-radius:7px;background:transparent;padding:8px 16px;min-height:40px;color:var(--muted)}
 .seg button[aria-selected="true"]{background:var(--card);color:var(--fg);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.12)}
 .seg .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-left:8px;vertical-align:middle}
@@ -230,10 +230,13 @@ body.offline #usb-help{display:flex}
   <div class="seg" role="tablist" aria-label="Controller type">
     <button role="tab" data-tabbtn="0" onclick="setTab(0)">Nintendo Switch 2 Pro Controller</button>
     <button role="tab" data-tabbtn="1" onclick="setTab(1)">Nintendo GameCube Controller</button>
+    <button role="tab" data-tabbtn="2" onclick="setTab(2)" hidden>Joy-Con 2 (L/R)</button>
+    <button role="tab" data-tabbtn="3" onclick="setTab(3)" hidden>Joy-Con 2 (L)</button>
+    <button role="tab" data-tabbtn="4" onclick="setTab(4)" hidden>Joy-Con 2 (R)</button>
   </div>
 
   <section class="card stack" aria-label="Profiles">
-    <div class="row" style="align-items:baseline;gap:6px 12px"><h2>Profiles</h2><span class="note">Hold C + Home until you hear a click, then press a button to activate its profile. Drag a profile onto another button to swap them.</span></div>
+    <div class="row" style="align-items:baseline;gap:6px 12px"><h2>Profiles</h2><span class="note">Hold <span id="combo-name">C + Home</span> until you hear a click, then press a button to activate its profile. Drag a profile onto another button to swap them.</span></div>
     <div class="pbar" id="dup-bar" role="status" hidden><span>Click the button to copy <b id="dup-name"></b> to.</span><button onclick="dupCancel()">Cancel</button></div>
     <div class="pbar danger" id="ovr-bar" role="alertdialog" aria-label="Overwrite profile" hidden><span id="ovr-text"></span><button class="ovr" onclick="dupOverwrite()">Overwrite</button><button onclick="dupCancel()">Cancel</button></div>
     <div class="pgrid">
@@ -258,6 +261,7 @@ body.offline #usb-help{display:flex}
         <button role="tab" data-sub="buttons" onclick="showSub('buttons')">Buttons</button>
         <button role="tab" data-sub="sticks" onclick="showSub('sticks')">Sticks &amp; triggers</button>
         <button role="tab" data-sub="rumble" onclick="showSub('rumble')">Rumble</button>
+        <button role="tab" data-sub="mouse" data-tab="2,3,4" onclick="showSub('mouse')">Mouse</button>
       </div>
       <div class="panel" data-panel="buttons">
         <div class="pad" id="map"></div>
@@ -285,11 +289,23 @@ body.offline #usb-help{display:flex}
           <span class="slider"><input type="range" min="0" max="200" id="pf-strength"><b><span id="v-pf-strength"></span>%</b></span></label>
         <p class="note" style="grid-column:1/-1">Try it under Tools → Haptics test.</p>
       </div>
+      <div class="panel fields" data-panel="mouse" hidden>
+        <label>Mouse <span class="hint">Lay the Joy-Con 2 on its side and move it like a mouse</span>
+          <select id="pf-mouse" onchange="mouseFields()"><option value="0">Off</option><option value="1">Joy-Con 2 (R)</option><option value="2">Joy-Con 2 (L)</option></select></label>
+        <label>Speed
+          <span class="slider"><input type="range" min="10" max="250" id="pf-mouse-speed"><b><span id="v-pf-mouse-speed"></span>%</b></span></label>
+        <label class="check"><input type="checkbox" id="pf-mouse-buttons"><span id="pf-mouse-buttons-label">R clicks, ZR right-clicks, stick click middle-clicks</span></label>
+        <label class="check"><input type="checkbox" id="pf-mouse-scroll"><span>Its stick scrolls</span></label>
+        <label class="check"><input type="checkbox" id="pf-mouse-invx"><span>Invert left / right</span></label>
+        <label class="check"><input type="checkbox" id="pf-mouse-invy"><span>Invert up / down</span></label>
+        <label class="check"><input type="checkbox" id="pf-mouse-swap"><span>Swap the two directions</span></label>
+        <p class="note" style="grid-column:1/-1">The dongle adds a USB mouse next to the controller. Buttons and stick used by the mouse aren't sent to the controller. Turning the mouse on or off restarts the dongle; some consoles may not accept the extra device.</p>
+      </div>
     </section>
 
     <aside class="narrow">
       <section class="card stack" aria-label="Motion">
-        <div><h2>Motion</h2><p class="note" style="margin-top:2px">Shared by every profile of both controllers.</p></div>
+        <div><h2>Motion</h2><p class="note" style="margin-top:2px">Shared by every profile of every controller.</p></div>
         <label class="kvrow">Gyro scale<select data-k="gyro_range"><option value="0">Auto-detect</option><option value="1">16.4 LSB/°/s</option><option value="2">14.3 LSB/°/s</option></select></label>
         <label class="kvrow">Gyro sensitivity<span class="slider" style="width:170px"><input type="range" min="10" max="400" data-k="gyro_scale"><b><span id="v-gyro_scale"></span>%</b></span></label>
         <label class="kvrow">Accelerometer<span class="slider" style="width:170px"><input type="range" min="10" max="400" data-k="accel_scale"><b><span id="v-accel_scale"></span>%</b></span></label>
@@ -514,15 +530,17 @@ async function playSample(n){
 // Paired controllers (newest pairing first); redrawn only when something changes.
 let BONDS_KEY='';
 function renderBonds(s){
-  const list=(s.bond&&s.bond.list)||[],L=s.link||{},cur=L.state==='ready'?L.addr:'';
-  $('disc-btn').hidden=!cur;
-  const key=JSON.stringify(list)+cur;if(key===BONDS_KEY)return;BONDS_KEY=key;
-  $('bond-count').textContent=list.length?`${list.length} of ${s.bond.max||list.length} · any of them reconnects with a button press, one at a time`:'';
+  const list=(s.bond&&s.bond.list)||[],L=s.link||{};
+  // Connected: every ready link (a Joy-Con 2 pair has two).
+  const cur=s.links?s.links.filter(k=>k.state==='ready').map(k=>k.addr):(L.state==='ready'?[L.addr]:[]);
+  $('disc-btn').hidden=!cur.length;
+  const key=JSON.stringify(list)+cur.join();if(key===BONDS_KEY)return;BONDS_KEY=key;
+  $('bond-count').textContent=list.length?`${list.length} of ${s.bond.max||list.length} · any of them reconnects with a button press, one at a time (or a Joy-Con 2 (L) and (R) together)`:'';
   const el=$('bonds');el.innerHTML='';
   if(!list.length){el.innerHTML='<div class="empty">None yet. Hold the Sync button on a controller to pair it.</div>';return}
   list.forEach((b,i)=>{
     const row=document.createElement('div');row.className='b';
-    const conn=b.addr===cur;
+    const conn=cur.includes(b.addr);
     row.innerHTML=`<b>${PIDS[b.pid]||('Controller 0x'+b.pid.toString(16))}</b><code>${b.addr}</code>`+
       (conn?'<span class="tag">Connected</span>':'');
     const btns=[];
@@ -624,7 +642,7 @@ const PAD_GROUPS={
 // The tab (MAP_CTRL) picks the controller type, CUR[t] the button edited;
 // edits stay in S until saved, which sends every profile of both types.
 let MAP_CTRL=0;
-const CUR=[0,0];
+const CUR=[0,0,0,0,0];
 const TYPE=()=>S.types[MAP_CTRL];
 const prof=()=>TYPE().profiles[CUR[MAP_CTRL]];
 const EMU=['Nintendo Switch Pro Controller','DualSense Edge Wireless Controller','DualSense Wireless Controller','Xbox 360 Controller','Nintendo GameCube Controller Adapter'];
@@ -635,6 +653,10 @@ const BTN_LABEL={A:'A',B:'B',X:'X',Y:'Y',Up:'D-pad up',Down:'D-pad down',Left:'D
 // buttons as on that controller (GameCube: Y on top, then B, A, X).
 const DPAD_POS={Up:[2,1],Left:[1,2],Right:[3,2],Down:[2,3]};
 const FACE_POS=[{X:[2,1],Y:[1,2],A:[3,2],B:[2,3]},{Y:[2,1],B:[1,2],A:[2,2],X:[3,2]}];
+// Controller types: 0 Pro, 1 GameCube, 2 Joy-Con 2 (L/R), 3 (L) and 4 (R) on their own (sideways).
+const isGC=()=>MAP_CTRL===1,isJC=()=>MAP_CTRL>=2,isSingle=()=>MAP_CTRL===3||MAP_CTRL===4;
+// Buttons a single Joy-Con 2 doesn't have.
+const JC_ABSENT={3:['A','B','X','Y','R','ZR','Plus','RStick','Home','C'],4:['Up','Down','Left','Right','L','ZL','Minus','LStick','Capture']};
 const FACE_SHAPE=[{},{A:'big',B:'small',X:'kidneyV',Y:'kidneyH'}];
 // Who takes over when the profile in use is removed (as the firmware does).
 const FALLBACK=['Y','A','X','B','Up','Right','Down','Left'];
@@ -651,7 +673,7 @@ function renderMap(mode){
     `<div class="col g-lsh">${cell('L','L')}${cell('ZL','ZL')}${cell('GL','GL')}</div>`+
     `<div class="cen g-cen">${[['Minus','minus'],['Plus','plus'],['Capture','cap'],['Home','home'],['C','c']].map(([n,a])=>cell(n,n,a)).join('')}</div>`+
     `<div class="col g-rsh">${cell('R','R')}${cell('ZR','ZR')}${cell('GR','GR')}</div>`+
-    `<div class="g-img">${MAP_CTRL===1?GC_SVG:PAD_SVG}</div>`;
+    `<div class="g-img">${isGC()?GC_SVG:isSingle()?'':PAD_SVG}</div>`;
   // Light up the drawing for the button being edited.
   m.querySelectorAll('select[data-map]').forEach(sel=>{
     const lit=on=>{const b=m.querySelector(`svg [data-b="${sel.dataset.map}"]`);if(b)b.classList.toggle('sel',on)};
@@ -659,10 +681,17 @@ function renderMap(mode){
     sel.parentElement.onmouseenter=()=>lit(true);sel.parentElement.onmouseleave=()=>{if(document.activeElement!==sel)lit(false)};
   });
   IN.forEach((n,i)=>m.querySelector(`[data-map="${n}"]`).value=M.map[i]);
-  $('preset-swap').style.display=M.family==='switch'?'':'none';
+  $('preset-swap').style.display=M.family==='switch'&&!isSingle()?'':'none';
   $('preset-reset').textContent=M.family==='switch'?'Reset to labels':'Reset to defaults';
   // GameCube controller: no Minus, stick clicks or GL / GR (their maps stay
   // stored, just not shown); Z and Start are its names for ZR and Plus.
+  // Joy-Con 2: SL / SR arrive as GL / GR; a single one has half the buttons.
+  if(isJC()){
+    [['GL','SL'],['GR','SR']].forEach(([n,lab])=>m.querySelector(`[data-map="${n}"]`).parentElement.firstChild.textContent=lab);
+    (JC_ABSENT[MAP_CTRL]||[]).forEach(n=>m.querySelector(`[data-map="${n}"]`).parentElement.style.display='none');
+    if(MAP_CTRL===3)m.querySelectorAll('.g-face,.g-rs').forEach(g=>g.style.display='none');
+    if(MAP_CTRL===4)m.querySelectorAll('.g-dpad,.g-ls').forEach(g=>g.style.display='none');
+  }
   if(MAP_CTRL===1){
     ['Minus','LStick','RStick','GL','GR'].forEach(n=>m.querySelector(`[data-map="${n}"]`).parentElement.style.display='none');
     m.querySelectorAll('.g-ls,.g-rs').forEach(g=>g.style.display='none');
@@ -682,6 +711,16 @@ function stashProfile(){
   const P=prof();
   P.deadzone=+$('pf-deadzone').value;P.outer=+$('pf-outer').value;P.swap=$('pf-swap').checked?1:0;
   P.threshold=+$('pf-threshold').value;P.rumble=$('pf-rumble').checked?1:0;P.strength=+$('pf-strength').value;
+  if(isJC()){
+    P.mouse=+$('pf-mouse').value;P.mouse_speed=+$('pf-mouse-speed').value;
+    P.mouse_flags=($('pf-mouse-buttons').checked?1:0)|($('pf-mouse-scroll').checked?2:0)|($('pf-mouse-invx').checked?4:0)|($('pf-mouse-invy').checked?8:0)|($('pf-mouse-swap').checked?16:0);
+  }
+}
+// The mouse's options apply once it is on; its buttons are that Joy-Con's.
+function mouseFields(){
+  const src=+$('pf-mouse').value,l=src===2;
+  $('pf-mouse-buttons-label').textContent=l?'L clicks, ZL right-clicks, stick click middle-clicks':'R clicks, ZR right-clicks, stick click middle-clicks';
+  document.querySelectorAll('[data-panel="mouse"] input').forEach(e=>e.disabled=!src);
 }
 // Button icons for the profile tiles.
 function btnIcon(key){
@@ -690,7 +729,7 @@ function btnIcon(key){
     return `<svg width="34" height="34" viewBox="0 0 30 30" aria-hidden="true"><rect x="11" y="1" width="8" height="11" rx="2" fill="${f('Up')}"/><rect x="11" y="18" width="8" height="11" rx="2" fill="${f('Down')}"/><rect x="1" y="11" width="11" height="8" rx="2" fill="${f('Left')}"/><rect x="18" y="11" width="11" height="8" rx="2" fill="${f('Right')}"/><rect x="11" y="11" width="8" height="8" fill="var(--off)"/></svg>`;
   }
   const t=(x,y,sz)=>`<text x="${x}" y="${y}" fill="var(--card)" font-size="${sz}" font-weight="700" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif">${key}</text>`;
-  const shape=FACE_SHAPE[MAP_CTRL][key]||'circle';
+  const shape=FACE_SHAPE[isGC()?1:0][key]||'circle';
   const body={circle:'<circle cx="18" cy="18" r="16" fill="currentColor"/>'+t(18,18.5,15),
     big:'<circle cx="18" cy="18" r="17.5" fill="currentColor"/>'+t(18,18.5,17),
     small:'<circle cx="18" cy="18" r="12" fill="currentColor"/>'+t(18,18.5,12),
@@ -716,7 +755,10 @@ function tileHTML(key,pos){
 function renderProfile(){
   const T=TYPE(),cur=CUR[MAP_CTRL],P=T.profiles[cur];
   $('dia-dpad').innerHTML=Object.entries(DPAD_POS).map(([k,pos])=>tileHTML(k,pos)).join('');
-  $('dia-face').innerHTML=Object.entries(FACE_POS[MAP_CTRL]).map(([k,pos])=>tileHTML(k,pos)).join('');
+  $('dia-face').innerHTML=Object.entries(FACE_POS[isGC()?1:0]).map(([k,pos])=>tileHTML(k,pos)).join('');
+  // A single Joy-Con 2 reaches only its own buttons' profiles.
+  $('dia-dpad').hidden=MAP_CTRL===4;$('dia-face').hidden=MAP_CTRL===3;
+  $('combo-name').textContent=MAP_CTRL===3?'Minus + Capture':'C + Home';
   $('dup-bar').hidden=DUP<0||OVR>=0;
   if(DUP>=0&&T.profiles[DUP])$('dup-name').textContent=T.profiles[DUP].name;
   $('ovr-bar').hidden=OVR<0;
@@ -731,11 +773,25 @@ function renderProfile(){
   // GL / GR remap from the controller: only where GL / GR exist and the host
   // doesn't remap them itself (DualSense Edge paddles).
   $('remap-row').hidden=!(MAP_CTRL===0&&P&&P.mode!==1);
+  // Mouse: Joy-Con 2 types only (a single one can only be its own mouse).
+  document.querySelector('[data-sub="mouse"]').hidden=!isJC();
+  if(!isJC()&&SUB==='mouse')showSub('buttons');
   if(!P)return;
   const set=(id,v)=>{$(id).value=v;const l=$('v-'+id);if(l)l.textContent=v;$(id).oninput=()=>{if(l)l.textContent=$(id).value}};
   set('pf-deadzone',P.deadzone);set('pf-outer',P.outer);set('pf-threshold',P.threshold);set('pf-strength',P.strength);
   $('pf-swap').checked=!!P.swap;$('pf-rumble').checked=!!P.rumble;
-  $('pf-swap-label').textContent=MAP_CTRL===1?'Swap main stick and C-stick':'Swap left and right sticks';
+  $('pf-swap-label').textContent=isGC()?'Swap main stick and C-stick':'Swap left and right sticks';
+  $('pf-swap').closest('label').hidden=isSingle();
+  if(isJC()){
+    const mo=$('pf-mouse');
+    [...mo.options].forEach(o=>o.hidden=MAP_CTRL===3&&o.value==='1'||MAP_CTRL===4&&o.value==='2');
+    mo.value=P.mouse||0;
+    set('pf-mouse-speed',P.mouse_speed||100);
+    const f=P.mouse_flags||0;
+    $('pf-mouse-buttons').checked=!!(f&1);$('pf-mouse-scroll').checked=!!(f&2);
+    $('pf-mouse-invx').checked=!!(f&4);$('pf-mouse-invy').checked=!!(f&8);$('pf-mouse-swap').checked=!!(f&16);
+    mouseFields();
+  }
   renderMap(P.mode);
 }
 function esc(t){return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
@@ -746,7 +802,7 @@ function profName(v){
   const P=prof();if(!P)return;P.name=v.slice(0,19);setDirty(true);
   const t=document.querySelector(`.ptile[data-i="${CUR[MAP_CTRL]}"] .pname`);if(t)t.textContent=P.name||' ';
 }
-function newProfile(m){return {name:SHORT[m],mode:m,deadzone:6,outer:95,swap:0,threshold:120,rumble:1,strength:100,map:TYPE().defaults[m].slice()}}
+function newProfile(m){return {name:SHORT[m],mode:m,deadzone:6,outer:95,swap:0,threshold:120,rumble:1,strength:100,mouse:0,mouse_speed:100,mouse_flags:3,map:TYPE().defaults[m].slice()}}
 // Emulated Controller: None clears the button; on an empty button a mode makes
 // a profile; another mode starts the mapping over from that mode's defaults.
 function profMode(m){
@@ -804,10 +860,11 @@ function tileClick(i){
 });
 // Controller tabs: sections only for one controller type (data-tab) show / hide.
 function showTab(t){
-  document.querySelectorAll('[data-tab]').forEach(e=>e.classList.toggle('tab-hidden',+e.dataset.tab!==t));
+  document.querySelectorAll('[data-tab]').forEach(e=>e.classList.toggle('tab-hidden',!e.dataset.tab.split(',').map(Number).includes(t)));
   document.querySelectorAll('[data-tabbtn]').forEach(b=>{
     const i=+b.dataset.tabbtn;b.setAttribute('aria-selected',i===t?'true':'false');
-    const conn=ST&&ST.link&&ST.link.state==='ready'&&(ST.link.pid===8307?1:0)===i;
+    b.hidden=!(S&&S.types&&i<S.types.length);
+    const conn=ST&&ST.link&&ST.link.state==='ready'&&connType(ST)===i;
     b.innerHTML=esc(S&&S.types?S.types[i].name:b.textContent)+(conn?'<span class="dot" title="connected"></span>':'');
   });
 }
@@ -833,23 +890,29 @@ function render(){
   // What runs now: the active profiles as saved (a restart is needed when
   // the in-use type's profile changes mode).
   S.saved_active=S.types.map(T=>T.active);
-  S.boot_mode=S.types[S.last_ctrl||0].profiles[S.types[S.last_ctrl||0].active].mode;
+  S.boot_mode=bootOf(S).mode;S.boot_mouse=bootOf(S).mouse;
   MAP_CTRL=S.last_ctrl??S.ctrl_type??0;
-  CUR[0]=S.types[0].active;CUR[1]=S.types[1].active;
+  S.types.forEach((T,t)=>CUR[t]=T.active);
   showTab(MAP_CTRL);
   renderProfile();
   detachNote();
   setDirty(false);
 }
+// The profile the dongle runs with: the one in use for the controller type
+// that connected last (its USB mode, and the mouse on Joy-Con 2 types).
+function bootOf(S){const t=S.last_ctrl||0,T=S.types[t],P=T.profiles[T.active]||{};return {mode:P.mode,mouse:t>=2&&P.mouse?1:0}}
 function detachNote(){$('usb-detach-note').hidden=!$('usb-detach').checked}
 async function loadSettings(){S=(await api('/api/settings')).json();render()}
 async function save(){
   stashProfile();
   const p=new URLSearchParams();
-  // Every profile of both controller types (one per button; empty: none) and
-  // the one in use.
+  // Every profile of every controller type (one per button; empty: none)
+  // and the one in use. Commas stay as they are (half the size: the request
+  // must fit the dongle's buffer); the "m" group is the Joy-Con 2 mouse.
+  const prof=[];
   S.types.forEach((T,t)=>{
-    T.profiles.forEach((P,i)=>p.append(`prof_${t}_${i}`,P?[P.mode,P.deadzone,P.outer,P.swap,P.threshold,P.rumble,P.strength,...P.map,P.name].join(','):''));
+    T.profiles.forEach((P,i)=>prof.push(`prof_${t}_${i}=`+(P?[P.mode,P.deadzone,P.outer,P.swap,P.threshold,P.rumble,P.strength,...P.map].join(',')+
+      (S.profile_mouse?`,m${P.mouse||0},${P.mouse_speed||100},${P.mouse_flags??3}`:'')+','+encodeURIComponent(P.name):'')));
     p.append(`active_${t}`,T.active);
   });
   document.querySelectorAll('[data-k]').forEach(el=>p.append(el.dataset.k,el.type==='checkbox'?(el.checked?1:0):el.value));
@@ -858,11 +921,12 @@ async function save(){
   // The profile in use for the controller type that connects (or connected
   // last) now has another USB mode: the dongle restarts.
   const lt=S.last_ctrl||0,T=S.types[lt];
-  if(T.profiles[T.active].mode!==S.boot_mode&&!confirm('The profile in use for the '+T.name+' has another USB mode: the dongle restarts. Continue?'))return;
-  const r=await api('/api/settings',{method:'POST',body:p.toString()});
+  const b=bootOf(S);
+  if((b.mode!==S.boot_mode||b.mouse!==S.boot_mouse)&&!confirm('The profile in use for the '+T.name+(b.mode!==S.boot_mode?' has another USB mode':(b.mouse?' adds':' removes')+' the USB mouse')+': the dongle restarts. Continue?'))return;
+  const r=await api('/api/settings',{method:'POST',body:prof.join('&')+'&'+p.toString()});
   if(r.ok){const keep=MAP_CTRL,cur=CUR.slice();S=r.json();PNOTE='';SAVED=true;render();
     // Stay where the user was.
-    MAP_CTRL=keep;CUR[0]=S.types[0].profiles[cur[0]]?cur[0]:S.types[0].active;CUR[1]=S.types[1].profiles[cur[1]]?cur[1]:S.types[1].active;
+    MAP_CTRL=keep;S.types.forEach((T,t)=>CUR[t]=T.profiles[cur[t]]?cur[t]:T.active);
     showTab(MAP_CTRL);renderProfile();$('wifi_pass').value='';toast('Saved')}
   else toast('Save failed');
 }
@@ -881,7 +945,9 @@ function gcTriggers(tr,raw){
 function kv(el,rows){el.innerHTML=rows.map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join('')}
 // Stick head in the drawing, moved by the stick output (12-bit, y up).
 function stick(el,x,y){if(el)el.setAttribute('transform',`translate(${((x-2048)/2048*50).toFixed(1)} ${(-(y-2048)/2048*50).toFixed(1)})`)}
-const PIDS={8297:'Nintendo Switch 2 Pro Controller',8307:'Nintendo GameCube Controller'};
+const PIDS={8297:'Nintendo Switch 2 Pro Controller',8307:'Nintendo GameCube Controller',8295:'Joy-Con 2 (L)',8294:'Joy-Con 2 (R)'};
+// The connected controller's type (older firmware: from its product ID).
+function connType(s){return s.ctrl_type??(s.link.pid===8307?1:0)}
 async function poll(){
   try{
     if(!USE_HTTP && !usbDev) return;
@@ -893,13 +959,18 @@ async function poll(){
     pbtn.textContent=P.open?'Stop pairing ('+Math.ceil(P.left_ms/1000)+' s)':'Pair a controller';
     const L=s.link,ready=L.state==='ready';
     const MODES={switch_pro:EMU[0],dualsense_edge:EMU[1],dualsense:EMU[2],xbox360:EMU[3],gc_adapter:EMU[4]};
-    const sl=$('st-link');sl.textContent=ready?(PIDS[L.pid]||'Controller')+' connected':L.state==='scanning'?(s.bond.bonded?'Waiting for controller':'Waiting for pairing'):L.state;
+    const links=s.links||[],ct=connType(s);
+    // A Joy-Con 2 pair with one half connected says which.
+    const half=ct===2&&links.length===1?' ('+(links[0].pid===8295?'L':'R')+' only)':'';
+    const cname=S&&S.types&&S.types[ct]?S.types[ct].name:(PIDS[L.pid]||'Controller');
+    const sl=$('st-link');sl.textContent=ready?cname+half+' connected':L.state==='scanning'?(s.bond.bonded?'Waiting for controller':'Waiting for pairing'):L.state;
     sl.className='chip '+(ready?'ok':'warn');
     const sb=$('st-batt');sb.hidden=!(ready&&L.battery_mv);
     if(!sb.hidden){$('batt-text').textContent=`${L.battery_pct}%`+(L.charging?' · charging':'');$('batt-fill').setAttribute('width',(11.2*Math.max(0,Math.min(100,L.battery_pct))/100).toFixed(1));sb.title='Controller battery'}
     const su=$('st-usb');su.textContent=s.usb.mounted?'USB: '+(s.profile||MODES[s.usb_mode]||s.usb_mode):'USB not connected';su.title=s.usb.mounted?'Emulating: '+(MODES[s.usb_mode]||s.usb_mode):'';su.className='chip'+(s.usb.mounted?'':' warn');
     kv($('ctrl'),[
-      ['Type',PIDS[L.pid]||(L.pid?('0x'+L.pid.toString(16)):'—')],['Serial',L.serial||'—'],['Address',ready?L.addr:'—'],
+      ['Type',ready?cname+half:(PIDS[L.pid]||(L.pid?('0x'+L.pid.toString(16)):'—'))],['Serial',L.serial||'—'],['Address',ready?L.addr:'—'],
+      ...(links.length>1?links.map(k=>[PIDS[k.pid]||'Controller',`${k.addr} · ${k.state}`+(k.power_level>=0?` · battery level ${k.power_level}/9`:'')+(k.charging?' · charging':'')+` · ${k.report_hz} Hz`]):[]),
       ['Battery',L.battery_mv?`${L.battery_pct}%${L.charging?' (charging)':''} · `+(L.power_level>=0?`controller level ${L.power_level}/9 · `:'estimated from voltage · ')+`${(L.battery_mv/1000).toFixed(2)} V · charge state 0x${(L.charge_state||0).toString(16).padStart(2,'0')}`:'—'],
       ['Report rate',ready?L.report_hz+' Hz ('+L.conn_interval_ms+' ms interval)':'—'],
       ['Gyro scale',['not detected','16.4','14.3'][L.gyro_range]||'—'],
@@ -908,7 +979,7 @@ async function poll(){
       ['Host',s.usb.mounted?`handshake ${s.usb.handshake?'yes':'no'}, mode 0x${s.usb.report_mode.toString(16)}, IMU ${s.usb.imu?'on':'off'}, ${s.usb.subcommands} subcommands, ${s.usb.reports} reports sent, rumble frames ${s.usb.rumble_frames}`:'—'],
     ]);
     // Live input only on the tab of the controller type that is connected.
-    if(s.input&&ready&&(L.pid===8307?1:0)===MAP_CTRL){
+    if(s.input&&ready&&ct===MAP_CTRL){
       for(const n of IN){const d=document.querySelector(`#map svg [data-b="${n}"]`);if(d)d.classList.toggle('on',!!(s.input.raw_buttons>>>S2BIT[n]&1))}
       stick($('dot-l'),s.input.out_l[0],s.input.out_l[1]);stick($('dot-r'),s.input.out_r[0],s.input.out_r[1]);
       if(MAP_CTRL===1)gcTriggers(s.input.triggers,s.input.raw_buttons);

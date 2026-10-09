@@ -89,7 +89,22 @@ public:
     }
 };
 
+// The Joy-Con 2 mouse (core/src/usb_hid.c drives it), when the profile the
+// dongle started with uses it.
+class MouseInterface : public Adafruit_USBD_Interface {
+public:
+    uint16_t getInterfaceDescriptor(uint8_t itfnum_deprecated, uint8_t *buf, uint16_t bufsize) override {
+        (void)itfnum_deprecated;
+        if (!buf) return USB_MOUSE_ITF_DESC_LEN;
+        if (bufsize < USB_MOUSE_ITF_DESC_LEN) return 0;
+        uint8_t itf = TinyUSBDevice.allocInterface(1);
+        uint8_t ep_in = TinyUSBDevice.allocEndpoint(TUSB_DIR_IN);
+        return usb_mouse_interface_desc(buf, bufsize, itf, ep_in);
+    }
+};
+
 static ProControllerInterface s_pro_itf;
+static MouseInterface s_mouse_itf;
 static Adafruit_USBD_WebUSB s_webusb;
 WEBUSB_URL_DEF(s_landing_page, 1 /* https */, "joshbirnholz.github.io/switch2-pico/");
 
@@ -118,6 +133,8 @@ static void usb_setup(void) {
         TinyUSBDevice.setVersion(0x0200);
         TinyUSBDevice.setDeviceVersion(id->bcd_device);
     }
+    // Last, so the WebUSB interface keeps its number.
+    if (usb_mode_has_mouse()) TinyUSBDevice.addInterface(s_mouse_itf);
     if (!g_settings.usb_detach_when_idle) TinyUSBDevice.attach();
 }
 

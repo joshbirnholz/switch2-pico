@@ -28,48 +28,61 @@ typedef enum {
 } gatt_phase_t;
 
 static btstack_packet_callback_registration_t s_hci_cb;
-static hci_con_handle_t s_con = HCI_CON_HANDLE_INVALID;
-static bool s_connecting;
-static gatt_phase_t s_phase;
+static int s_connecting = -1;      // link of the connection attempt running
 
-static gatt_client_service_t s_service;
-static bool s_have_service;
-static gatt_client_characteristic_t s_ch_input, s_ch_cmd, s_ch_cmd_rsp, s_ch_vib;
-static bool s_have_input, s_have_cmd, s_have_cmd_rsp, s_have_vib;
-static gatt_client_notification_t s_notif_input, s_notif_cmd;
-// Controller-specific input report, read now and then for its Power Info byte.
-static gatt_client_characteristic_t s_ch_power;
-static bool s_have_power, s_power_got;
-static uint8_t s_power_info;
-static uint32_t s_power_deadline;
-static gatt_client_notification_t s_notif_power;
+// Per link (see s2_transport.h): its connection and what GATT discovery found.
+typedef struct {
+    hci_con_handle_t con;
+    gatt_phase_t phase;
+    gatt_client_service_t service;
+    bool have_service;
+    gatt_client_characteristic_t ch_input, ch_cmd, ch_cmd_rsp, ch_vib;
+    bool have_input, have_cmd, have_cmd_rsp, have_vib;
+    gatt_client_notification_t notif_input, notif_cmd;
+    // Controller-specific input report, read now and then for its Power Info byte.
+    gatt_client_characteristic_t ch_power;
+    bool have_power, power_got;
+    uint8_t power_info;
+    uint32_t power_deadline;
+    gatt_client_notification_t notif_power;
+    // Commands go out as ATT Write Requests when the characteristic allows
+    // it (the controller ignores Write Commands there). BTstack runs one
+    // request at a time per connection and needs the buffer until it completes.
+    bool cmd_use_req;
+    bool req_pending;
+    bool input_cccd_wanted;   // enable input once the pending write completes
+    uint8_t req_buf[256];
+} blink_t;
 
-// Commands go out as ATT Write Requests when the characteristic allows it
-// (the controller ignores Write Commands there). BTstack runs one request at a
-// time and needs the buffer until it completes.
-static bool s_cmd_use_req;
-static bool s_req_pending;
-static bool s_input_cccd_wanted;   // enable input once the pending write completes
-static void start_input_cccd(void);
-static uint8_t s_req_buf[256];
+static blink_t s_links[S2T_LINKS];
 
+static void start_input_cccd(uint8_t l);
 static void gatt_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size);
 
 static bool uuid_eq(const uint8_t *a, const uint8_t *b) {
     return memcmp(a, b, 16) == 0;
 }
 
-static void reset_gatt(void) {
-    if (s_con != HCI_CON_HANDLE_INVALID) {
-        gatt_client_stop_listening_for_characteristic_value_updates(&s_notif_input);
-        gatt_client_stop_listening_for_characteristic_value_updates(&s_notif_cmd);
-        gatt_client_stop_listening_for_characteristic_value_updates(&s_notif_power);
+static int link_of(hci_con_handle_t con) {
+    if (con == HCI_CON_HANDLE_INVALID) return -1;
+    for (int i = 0; i < S2T_LINKS; i++) {
+        if (s_links[i].con == con) return i;
     }
-    s_con = HCI_CON_HANDLE_INVALID;
-    s_phase = GP_NONE;
-    s_req_pending = false;
-    s_input_cccd_wanted = false;
-    s_have_service = s_have_input = s_have_cmd = s_have_cmd_rsp = s_have_vib = s_have_power = false;
+    return -1;
+}
+
+static void reset_gatt(uint8_t l) {
+    blink_t *b = &s_links[l];
+    if (b->con != HCI_CON_HANDLE_INVALID) {
+        gatt_client_stop_listening_for_characteristic_value_updates(&b->notif_input);
+        gatt_client_stop_listening_for_characteristic_value_updates(&b->notif_cmd);
+        gatt_client_stop_listening_for_characteristic_value_updates(&b->notif_power);
+    }
+    b->con = HCI_CON_HANDLE_INVALID;
+    b->phase = GP_NONE;
+    b->req_pending = false;
+    b->input_cccd_wanted = false;
+    b->have_service = b->have_input = b->have_cmd = b->have_cmd_rsp = b->have_vib = b->have_power = false;
 }
 
 // Enable notifications by writing the CCCD with a Write Request at
@@ -80,24 +93,25 @@ static void reset_gatt(void) {
 static uint8_t s_cccd_value[2] = {0x01, 0x00};   // notifications on
 static uint8_t s_cccd_off[2] = {0x00, 0x00};
 
-static uint8_t write_cccd(gatt_client_characteristic_t *c) {
-    return gatt_client_write_value_of_characteristic(gatt_handler, s_con, (uint16_t)(c->value_handle + 1),
+static uint8_t write_cccd(blink_t *b, gatt_client_characteristic_t *c) {
+    return gatt_client_write_value_of_characteristic(gatt_handler, b->con, (uint16_t)(c->value_handle + 1),
                                                      sizeof s_cccd_value, s_cccd_value);
 }
 
-static void power_unsubscribe(void) {
-    s_phase = GP_POWER_OFF;
-    if (gatt_client_write_value_of_characteristic(gatt_handler, s_con, (uint16_t)(s_ch_power.value_handle + 1),
+static void power_unsubscribe(uint8_t l) {
+    blink_t *b = &s_links[l];
+    b->phase = GP_POWER_OFF;
+    if (gatt_client_write_value_of_characteristic(gatt_handler, b->con, (uint16_t)(b->ch_power.value_handle + 1),
                                                   sizeof s_cccd_off, s_cccd_off) != ERROR_CODE_SUCCESS) {
-        s_phase = GP_IDLE;
-        gatt_client_stop_listening_for_characteristic_value_updates(&s_notif_power);
-        s2c_on_power_info(s_power_got, s_power_info);
+        b->phase = GP_IDLE;
+        gatt_client_stop_listening_for_characteristic_value_updates(&b->notif_power);
+        s2c_on_power_info(l, b->power_got, b->power_info);
     }
 }
 
-static void gatt_fail(const char *why) {
-    s_phase = GP_IDLE;
-    s2c_on_gatt_ready(false, why);
+static void gatt_fail(uint8_t l, const char *why) {
+    s_links[l].phase = GP_IDLE;
+    s2c_on_gatt_ready(l, false, why);
 }
 
 static void gatt_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size) {
@@ -107,98 +121,115 @@ static void gatt_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet,
     uint8_t ev = hci_event_packet_get_type(packet);
 
     if (ev == GATT_EVENT_NOTIFICATION) {
+        int l = link_of(gatt_event_notification_get_handle(packet));
+        if (l < 0) return;
+        blink_t *b = &s_links[l];
         uint16_t h = gatt_event_notification_get_value_handle(packet);
         const uint8_t *v = gatt_event_notification_get_value(packet);
         uint16_t len = gatt_event_notification_get_value_length(packet);
-        if (s_have_input && h == s_ch_input.value_handle) s2c_on_input_report(v, len);
-        else if (s_have_power && h == s_ch_power.value_handle) {
-            if (s_phase == GP_POWER_WAIT && len >= 2 && !s_power_got) {
-                s_power_got = true;
-                s_power_info = v[1];
-                power_unsubscribe();
+        if (b->have_input && h == b->ch_input.value_handle) s2c_on_input_report((uint8_t)l, v, len);
+        else if (b->have_power && h == b->ch_power.value_handle) {
+            if (b->phase == GP_POWER_WAIT && len >= 2 && !b->power_got) {
+                b->power_got = true;
+                b->power_info = v[1];
+                power_unsubscribe((uint8_t)l);
             }
         }
-        else if (s_have_cmd_rsp && h == s_ch_cmd_rsp.value_handle) s2c_on_command_response(v, len);
+        else if (b->have_cmd_rsp && h == b->ch_cmd_rsp.value_handle) s2c_on_command_response((uint8_t)l, v, len);
         return;
     }
 
     switch (ev) {
-    case GATT_EVENT_SERVICE_QUERY_RESULT:
-        gatt_event_service_query_result_get_service(packet, &s_service);
-        s_have_service = true;
+    case GATT_EVENT_SERVICE_QUERY_RESULT: {
+        int l = link_of(gatt_event_service_query_result_get_handle(packet));
+        if (l < 0) break;
+        gatt_event_service_query_result_get_service(packet, &s_links[l].service);
+        s_links[l].have_service = true;
         break;
+    }
     case GATT_EVENT_CHARACTERISTIC_QUERY_RESULT: {
+        int l = link_of(gatt_event_characteristic_query_result_get_handle(packet));
+        if (l < 0) break;
+        blink_t *b = &s_links[l];
         gatt_client_characteristic_t c;
         gatt_event_characteristic_query_result_get_characteristic(packet, &c);
-        if (uuid_eq(c.uuid128, S2_UUID_INPUT_COMMON)) { s_ch_input = c; s_have_input = true; }
-        else if (uuid_eq(c.uuid128, S2_UUID_CMD_WRITE)) { s_ch_cmd = c; s_have_cmd = true; }
-        else if (uuid_eq(c.uuid128, S2_UUID_CMD_RESPONSE)) { s_ch_cmd_rsp = c; s_have_cmd_rsp = true; }
+        if (uuid_eq(c.uuid128, S2_UUID_INPUT_COMMON)) { b->ch_input = c; b->have_input = true; }
+        else if (uuid_eq(c.uuid128, S2_UUID_CMD_WRITE)) { b->ch_cmd = c; b->have_cmd = true; }
+        else if (uuid_eq(c.uuid128, S2_UUID_CMD_RESPONSE)) { b->ch_cmd_rsp = c; b->have_cmd_rsp = true; }
         else if (uuid_eq(c.uuid128, S2_UUID_VIB_PRO) || uuid_eq(c.uuid128, S2_UUID_VIB_JOYCON_L) ||
-                 uuid_eq(c.uuid128, S2_UUID_VIB_JOYCON_R) || uuid_eq(c.uuid128, S2_UUID_VIB_GC)) { s_ch_vib = c; s_have_vib = true; }
-        else if (uuid_eq(c.uuid128, S2_UUID_INPUT_PRO) || uuid_eq(c.uuid128, S2_UUID_INPUT_GC)) { s_ch_power = c; s_have_power = true; }
+                 uuid_eq(c.uuid128, S2_UUID_VIB_JOYCON_R) || uuid_eq(c.uuid128, S2_UUID_VIB_GC)) { b->ch_vib = c; b->have_vib = true; }
+        else if (uuid_eq(c.uuid128, S2_UUID_INPUT_PRO) || uuid_eq(c.uuid128, S2_UUID_INPUT_GC) ||
+                 uuid_eq(c.uuid128, S2_UUID_INPUT_JOYCON_L) || uuid_eq(c.uuid128, S2_UUID_INPUT_JOYCON_R)) {
+            b->ch_power = c;
+            b->have_power = true;
+        }
         break;
     }
     case GATT_EVENT_QUERY_COMPLETE: {
+        int li = link_of(gatt_event_query_complete_get_handle(packet));
+        if (li < 0) break;
+        uint8_t l = (uint8_t)li;
+        blink_t *b = &s_links[l];
         uint8_t status = gatt_event_query_complete_get_att_status(packet);
-        if (s_req_pending) {
-            s_req_pending = false;
-            if (status != ATT_ERROR_SUCCESS) LOG("s2: command write rejected, ATT status 0x%02x", status);
-            if (s_input_cccd_wanted) {
-                s_input_cccd_wanted = false;
-                start_input_cccd();
+        if (b->req_pending) {
+            b->req_pending = false;
+            if (status != ATT_ERROR_SUCCESS) LOG("s2: link %u command write rejected, ATT status 0x%02x", l, status);
+            if (b->input_cccd_wanted) {
+                b->input_cccd_wanted = false;
+                start_input_cccd(l);
             }
             break;
         }
-        switch (s_phase) {
+        switch (b->phase) {
         case GP_SERVICES:
-            if (!s_have_service) {
-                gatt_fail("Switch 2 HID service not found");
+            if (!b->have_service) {
+                gatt_fail(l, "Switch 2 HID service not found");
                 break;
             }
-            s_phase = GP_CHARACTERISTICS;
-            gatt_client_discover_characteristics_for_service(gatt_handler, s_con, &s_service);
+            b->phase = GP_CHARACTERISTICS;
+            gatt_client_discover_characteristics_for_service(gatt_handler, b->con, &b->service);
             break;
         case GP_CHARACTERISTICS:
-            if (!s_have_input || !s_have_cmd || !s_have_cmd_rsp) {
-                gatt_fail("required characteristics missing");
+            if (!b->have_input || !b->have_cmd || !b->have_cmd_rsp) {
+                gatt_fail(l, "required characteristics missing");
                 break;
             }
-            s_cmd_use_req = (s_ch_cmd.properties & ATT_PROPERTY_WRITE) != 0;
-            LOG("s2: handles input=%04x cmd=%04x rsp=%04x vib=%04x, props cmd=%02x rsp=%02x vib=%02x",
-                s_ch_input.value_handle, s_ch_cmd.value_handle, s_ch_cmd_rsp.value_handle,
-                s_have_vib ? s_ch_vib.value_handle : 0, s_ch_cmd.properties, s_ch_cmd_rsp.properties,
-                s_have_vib ? s_ch_vib.properties : 0);
-            LOG("s2: commands use %s", s_cmd_use_req ? "write requests" : "write commands");
-            s_phase = GP_CMD_CCCD;
-            gatt_client_listen_for_characteristic_value_updates(&s_notif_cmd, gatt_handler, s_con, &s_ch_cmd_rsp);
-            if (write_cccd(&s_ch_cmd_rsp) != ERROR_CODE_SUCCESS) gatt_fail("could not enable command responses");
+            b->cmd_use_req = (b->ch_cmd.properties & ATT_PROPERTY_WRITE) != 0;
+            LOG("s2: link %u handles input=%04x cmd=%04x rsp=%04x vib=%04x power=%04x, props cmd=%02x rsp=%02x vib=%02x",
+                l, b->ch_input.value_handle, b->ch_cmd.value_handle, b->ch_cmd_rsp.value_handle,
+                b->have_vib ? b->ch_vib.value_handle : 0, b->have_power ? b->ch_power.value_handle : 0,
+                b->ch_cmd.properties, b->ch_cmd_rsp.properties, b->have_vib ? b->ch_vib.properties : 0);
+            LOG("s2: link %u commands use %s", l, b->cmd_use_req ? "write requests" : "write commands");
+            b->phase = GP_CMD_CCCD;
+            gatt_client_listen_for_characteristic_value_updates(&b->notif_cmd, gatt_handler, b->con, &b->ch_cmd_rsp);
+            if (write_cccd(b, &b->ch_cmd_rsp) != ERROR_CODE_SUCCESS) gatt_fail(l, "could not enable command responses");
             break;
         case GP_CMD_CCCD:
             if (status != ATT_ERROR_SUCCESS) {
-                gatt_fail("could not enable command responses");
+                gatt_fail(l, "could not enable command responses");
                 break;
             }
-            s_phase = GP_IDLE;
-            s2c_on_gatt_ready(true, NULL);
+            b->phase = GP_IDLE;
+            s2c_on_gatt_ready(l, true, NULL);
             break;
         case GP_INPUT_CCCD:
-            s_phase = GP_IDLE;
-            s2c_on_input_enabled(status == ATT_ERROR_SUCCESS);
+            b->phase = GP_IDLE;
+            s2c_on_input_enabled(l, status == ATT_ERROR_SUCCESS);
             break;
         case GP_POWER_ON:
             if (status != ATT_ERROR_SUCCESS) {
-                s_phase = GP_IDLE;
-                gatt_client_stop_listening_for_characteristic_value_updates(&s_notif_power);
-                s2c_on_power_info(false, 0);
+                b->phase = GP_IDLE;
+                gatt_client_stop_listening_for_characteristic_value_updates(&b->notif_power);
+                s2c_on_power_info(l, false, 0);
                 break;
             }
-            s_phase = GP_POWER_WAIT;   // s2t_task() gives up after a second
-            s_power_deadline = platform_deadline_ms(1000);
+            b->phase = GP_POWER_WAIT;   // s2t_task() gives up after a second
+            b->power_deadline = platform_deadline_ms(1000);
             break;
         case GP_POWER_OFF:
-            s_phase = GP_IDLE;
-            gatt_client_stop_listening_for_characteristic_value_updates(&s_notif_power);
-            s2c_on_power_info(s_power_got, s_power_info);
+            b->phase = GP_IDLE;
+            gatt_client_stop_listening_for_characteristic_value_updates(&b->notif_power);
+            s2c_on_power_info(l, b->power_got, b->power_info);
             break;
         default:
             break;
@@ -229,32 +260,37 @@ static void hci_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, 
         break;
     }
     case HCI_EVENT_META_GAP:
-        if (hci_event_gap_meta_get_subevent_code(packet) == GAP_SUBEVENT_LE_CONNECTION_COMPLETE && s_connecting) {
-            s_connecting = false;
+        if (hci_event_gap_meta_get_subevent_code(packet) == GAP_SUBEVENT_LE_CONNECTION_COMPLETE && s_connecting >= 0) {
+            uint8_t l = (uint8_t)s_connecting;
+            s_connecting = -1;
             uint8_t status = gap_subevent_le_connection_complete_get_status(packet);
             if (status != ERROR_CODE_SUCCESS) {
-                s2c_on_connect_failed(status);
+                s2c_on_connect_failed(l, status);
                 break;
             }
-            reset_gatt();
-            s_con = gap_subevent_le_connection_complete_get_connection_handle(packet);
-            s2c_on_link_up(gap_subevent_le_connection_complete_get_conn_interval(packet));
-            s_phase = GP_SERVICES;
-            gatt_client_discover_primary_services_by_uuid128(gatt_handler, s_con, S2_UUID_HID_SERVICE);
+            reset_gatt(l);
+            blink_t *b = &s_links[l];
+            b->con = gap_subevent_le_connection_complete_get_connection_handle(packet);
+            s2c_on_link_up(l, gap_subevent_le_connection_complete_get_conn_interval(packet));
+            b->phase = GP_SERVICES;
+            gatt_client_discover_primary_services_by_uuid128(gatt_handler, b->con, S2_UUID_HID_SERVICE);
         }
         break;
     case HCI_EVENT_LE_META:
         if (hci_event_le_meta_get_subevent_code(packet) == HCI_SUBEVENT_LE_CONNECTION_UPDATE_COMPLETE) {
-            s2c_on_conn_interval(hci_subevent_le_connection_update_complete_get_conn_interval(packet));
+            int l = link_of(hci_subevent_le_connection_update_complete_get_connection_handle(packet));
+            if (l >= 0) s2c_on_conn_interval((uint8_t)l, hci_subevent_le_connection_update_complete_get_conn_interval(packet));
         }
         break;
-    case HCI_EVENT_DISCONNECTION_COMPLETE:
-        if (hci_event_disconnection_complete_get_connection_handle(packet) == s_con) {
+    case HCI_EVENT_DISCONNECTION_COMPLETE: {
+        int l = link_of(hci_event_disconnection_complete_get_connection_handle(packet));
+        if (l >= 0) {
             uint8_t reason = hci_event_disconnection_complete_get_reason(packet);
-            reset_gatt();
-            s2c_on_disconnected(reason);
+            reset_gatt((uint8_t)l);
+            s2c_on_disconnected((uint8_t)l, reason);
         }
         break;
+    }
     default:
         break;
     }
@@ -284,6 +320,7 @@ void s2t_init(void) {
     gatt_client_init();
     gatt_client_set_required_security_level(LEVEL_0);
 
+    for (uint8_t l = 0; l < S2T_LINKS; l++) s_links[l].con = HCI_CON_HANDLE_INVALID;
     s_hci_cb.callback = hci_handler;
     hci_add_event_handler(&s_hci_cb);
     hci_power_control(HCI_POWER_ON);
@@ -291,17 +328,21 @@ void s2t_init(void) {
 
 void s2t_task(void) {
     // BTstack runs from cyw43_arch_poll() in the main loop.
-    if (s_phase == GP_POWER_WAIT && platform_time_reached(s_power_deadline)) power_unsubscribe();
+    for (uint8_t l = 0; l < S2T_LINKS; l++) {
+        if (s_links[l].phase == GP_POWER_WAIT && platform_time_reached(s_links[l].power_deadline)) power_unsubscribe(l);
+    }
 }
 
-bool s2t_poll_power(void) {
-    if (s_con == HCI_CON_HANDLE_INVALID || !s_have_power || s_phase != GP_IDLE || s_req_pending) return false;
-    s_power_got = false;
-    s_phase = GP_POWER_ON;
-    gatt_client_listen_for_characteristic_value_updates(&s_notif_power, gatt_handler, s_con, &s_ch_power);
-    if (write_cccd(&s_ch_power) != ERROR_CODE_SUCCESS) {
-        gatt_client_stop_listening_for_characteristic_value_updates(&s_notif_power);
-        s_phase = GP_IDLE;
+bool s2t_poll_power(uint8_t l) {
+    if (l >= S2T_LINKS) return false;
+    blink_t *b = &s_links[l];
+    if (b->con == HCI_CON_HANDLE_INVALID || !b->have_power || b->phase != GP_IDLE || b->req_pending) return false;
+    b->power_got = false;
+    b->phase = GP_POWER_ON;
+    gatt_client_listen_for_characteristic_value_updates(&b->notif_power, gatt_handler, b->con, &b->ch_power);
+    if (write_cccd(b, &b->ch_power) != ERROR_CODE_SUCCESS) {
+        gatt_client_stop_listening_for_characteristic_value_updates(&b->notif_power);
+        b->phase = GP_IDLE;
         return false;
     }
     return true;
@@ -314,7 +355,8 @@ bool s2t_ready(void) {
 void s2t_start_scan(bool low_duty) {
     // Passive scan. The CYW43 shares its radio between Bluetooth and Wi-Fi, so
     // scan at 50% duty normally and much less while the configuration access
-    // point is up, otherwise Wi-Fi clients get almost no airtime.
+    // point is up (or a Joy-Con 2 is connected), otherwise the others get
+    // almost no airtime.
     gap_stop_scan();
     if (low_duty) gap_set_scan_parameters(0, 0x0200, 0x0030);
     else gap_set_scan_parameters(0, 0x0060, 0x0030);
@@ -325,55 +367,60 @@ void s2t_stop_scan(void) {
     gap_stop_scan();
 }
 
-bool s2t_connect(const uint8_t addr[6], uint8_t addr_type) {
+bool s2t_connect(uint8_t l, const uint8_t addr[6], uint8_t addr_type) {
+    if (l >= S2T_LINKS || s_connecting >= 0) return false;
     bd_addr_t a;
     memcpy(a, addr, 6);
     gap_set_connection_parameters(0x0030, 0x0030, CONN_INTERVAL_MIN, CONN_INTERVAL_MAX, 0, CONN_SUPERVISION, 0, 0);
     if (gap_connect(a, (bd_addr_type_t)addr_type) != ERROR_CODE_SUCCESS) return false;
-    s_connecting = true;
+    s_connecting = l;
     return true;
 }
 
 void s2t_cancel_connect(void) {
-    s_connecting = false;
+    s_connecting = -1;
     gap_connect_cancel();
 }
 
-void s2t_disconnect(void) {
-    if (s_con != HCI_CON_HANDLE_INVALID) gap_disconnect(s_con);
+void s2t_disconnect(uint8_t l) {
+    if (l < S2T_LINKS && s_links[l].con != HCI_CON_HANDLE_INVALID) gap_disconnect(s_links[l].con);
 }
 
-bool s2t_has_char(s2t_char_t ch) {
-    return ch == S2T_CHAR_COMMAND ? s_have_cmd : s_have_vib;
+bool s2t_has_char(uint8_t l, s2t_char_t ch) {
+    if (l >= S2T_LINKS) return false;
+    return ch == S2T_CHAR_COMMAND ? s_links[l].have_cmd : s_links[l].have_vib;
 }
 
-s2t_write_result_t s2t_write(s2t_char_t ch, const uint8_t *data, uint16_t len) {
-    if (s_con == HCI_CON_HANDLE_INVALID || !s2t_has_char(ch)) return S2T_WRITE_ERROR;
-    uint16_t handle = ch == S2T_CHAR_COMMAND ? s_ch_cmd.value_handle : s_ch_vib.value_handle;
-    if (ch == S2T_CHAR_COMMAND && s_cmd_use_req) {
-        if (s_req_pending || s_phase != GP_IDLE) return S2T_WRITE_BUSY;
-        if (len > sizeof s_req_buf) return S2T_WRITE_ERROR;
-        memcpy(s_req_buf, data, len);
-        uint8_t st = gatt_client_write_value_of_characteristic(gatt_handler, s_con, handle, len, s_req_buf);
+s2t_write_result_t s2t_write(uint8_t l, s2t_char_t ch, const uint8_t *data, uint16_t len) {
+    if (l >= S2T_LINKS) return S2T_WRITE_ERROR;
+    blink_t *b = &s_links[l];
+    if (b->con == HCI_CON_HANDLE_INVALID || !s2t_has_char(l, ch)) return S2T_WRITE_ERROR;
+    uint16_t handle = ch == S2T_CHAR_COMMAND ? b->ch_cmd.value_handle : b->ch_vib.value_handle;
+    if (ch == S2T_CHAR_COMMAND && b->cmd_use_req) {
+        if (b->req_pending || b->phase != GP_IDLE) return S2T_WRITE_BUSY;
+        if (len > sizeof b->req_buf) return S2T_WRITE_ERROR;
+        memcpy(b->req_buf, data, len);
+        uint8_t st = gatt_client_write_value_of_characteristic(gatt_handler, b->con, handle, len, b->req_buf);
         if (st == ERROR_CODE_SUCCESS) {
-            s_req_pending = true;
+            b->req_pending = true;
             return S2T_WRITE_OK;
         }
         if (st == GATT_CLIENT_VALUE_TOO_LONG) return S2T_WRITE_ERROR;
         return S2T_WRITE_BUSY;
     }
-    uint8_t st = gatt_client_write_value_of_characteristic_without_response(s_con, handle, len, (uint8_t *)data);
+    uint8_t st = gatt_client_write_value_of_characteristic_without_response(b->con, handle, len, (uint8_t *)data);
     if (st == ERROR_CODE_SUCCESS) return S2T_WRITE_OK;
     if (st == GATT_CLIENT_VALUE_TOO_LONG) return S2T_WRITE_ERROR;
     return S2T_WRITE_BUSY;
 }
 
-static void start_input_cccd(void) {
-    s_phase = GP_INPUT_CCCD;
-    gatt_client_listen_for_characteristic_value_updates(&s_notif_input, gatt_handler, s_con, &s_ch_input);
-    if (write_cccd(&s_ch_input) != ERROR_CODE_SUCCESS) {
-        s_phase = GP_IDLE;
-        s2c_on_input_enabled(false);
+static void start_input_cccd(uint8_t l) {
+    blink_t *b = &s_links[l];
+    b->phase = GP_INPUT_CCCD;
+    gatt_client_listen_for_characteristic_value_updates(&b->notif_input, gatt_handler, b->con, &b->ch_input);
+    if (write_cccd(b, &b->ch_input) != ERROR_CODE_SUCCESS) {
+        b->phase = GP_IDLE;
+        s2c_on_input_enabled(l, false);
     }
 }
 
@@ -383,14 +430,15 @@ void s2t_local_address(uint8_t out[6]) {
     memcpy(out, a, 6);
 }
 
-uint16_t s2t_mtu(void) {
+uint16_t s2t_mtu(uint8_t l) {
     uint16_t mtu = 23;
-    if (s_con != HCI_CON_HANDLE_INVALID) gatt_client_get_mtu(s_con, &mtu);
+    if (l < S2T_LINKS && s_links[l].con != HCI_CON_HANDLE_INVALID) gatt_client_get_mtu(s_links[l].con, &mtu);
     return mtu;
 }
 
-void s2t_enable_input(void) {
-    // BTstack runs one GATT request at a time.
-    if (s_req_pending) s_input_cccd_wanted = true;
-    else start_input_cccd();
+void s2t_enable_input(uint8_t l) {
+    if (l >= S2T_LINKS) return;
+    // BTstack runs one GATT request at a time per connection.
+    if (s_links[l].req_pending) s_links[l].input_cccd_wanted = true;
+    else start_input_cccd(l);
 }

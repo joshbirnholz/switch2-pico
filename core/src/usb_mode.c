@@ -35,6 +35,12 @@ usb_mode_t usb_mode_active(void) {
     return (usb_mode_t)mode;
 }
 
+bool usb_mode_has_mouse(void) {
+    static int mouse = -1;
+    if (mouse < 0) mouse = settings_boot_mouse(&g_settings) ? 1 : 0;
+    return mouse == 1;
+}
+
 const usb_identity_t *usb_mode_identity(void) {
     return &IDENTITIES[usb_mode_active()];
 }

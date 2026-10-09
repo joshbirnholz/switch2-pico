@@ -2,7 +2,8 @@
 
 Firmware that turns a **Raspberry Pi Pico 2 W** or an **nRF52840 board**
 (Pro Micro nRF52840 / nice!nano, Adafruit Feather nRF52840, ...) into a
-wireless USB dongle for the **Nintendo Switch 2 Pro Controller**. The
+wireless USB dongle for the **Nintendo Switch 2 Pro Controller** (and the
+Nintendo GameCube Controller and **Joy-Con 2**, alone or as a pair). The
 controller pairs to the dongle over Bluetooth LE, and the dongle shows up over
 USB as a wired
 **Nintendo Switch (1) Pro Controller**. That means it works anywhere a Pro
@@ -35,6 +36,8 @@ Switch 2 Pro Controller  ──BLE──▶  dongle    ──USB──▶  PC / 
 | Battery | Reported to the host. |
 | USB modes | **Switch Pro Controller** (default; Switch consoles and PCs), **DualSense Edge** (GL, GR and C become its back paddles and Fn button, so Steam Input can map them), **DualSense**, or **Xbox 360 controller**. Each mode has its own button map. |
 | Nintendo GameCube Controller | Basic support: buttons, sticks, analog triggers acting as L/R past a threshold, and rumble on its motor (strength by switching it on and off every 12 ms, as SDL does). |
+| Joy-Con 2 | A **Joy-Con 2 (L)** and a **Joy-Con 2 (R)** connected together are one controller, **Joy-Con 2 (L/R)**. A single one is held sideways (SL / SR are its shoulders). Each of the three has its own profiles. **Untested on hardware** (see [Joy-Con 2](#joy-con-2)). |
+| Mouse | A Joy-Con 2's optical sensor can be a USB mouse next to the controller (a profile option). |
 | Configuration page | Over **WebUSB** in Chrome/Edge with the dongle plugged in, or (Pico 2 W only) over the dongle's own Wi-Fi from any phone or computer. |
 
 ## Hardware
@@ -111,6 +114,44 @@ each and **Forget all**; holding the Pico's BOOTSEL button for 5 seconds also
 forgets all. A forgotten controller no longer reconnects by itself (it still
 remembers the dongle, but the dongle ignores it); hold Sync on it to pair it
 again.
+
+### Joy-Con 2
+
+Pair each Joy-Con 2 like any controller (hold its Sync button). Only one
+controller connects at a time, with one exception: a **Joy-Con 2 (L)** and a
+**Joy-Con 2 (R)** connect together. Once one Joy-Con 2 is connected, the
+dongle keeps looking for the other side and connects it when it wakes up;
+nothing else connects meanwhile (not a second (L) or (R), not a Pro or
+GameCube Controller).
+
+* **Both connected: Joy-Con 2 (L/R).** One controller with the (L)'s left
+  stick and buttons and the (R)'s; motion comes from the (R). The battery
+  shown is the lower one. Rumble goes to each side's own motor. SL / SR (of
+  either side) can be mapped as SL and SR.
+* **One on its own: Joy-Con 2 (L) or (R)**, held sideways with the rail on
+  top. Its stick is the left stick, turned to match; the four buttons under
+  the thumb act as A / B / X / Y by where they end up (an (L): Down = A,
+  Left = B, Right = X, Up = Y; an (R): X = A, A = B, Y = X, B = Y); SL / SR
+  are L / R. Motion isn't turned (the axes are as the Joy-Con reports them).
+* When a Joy-Con 2 connects and the dongle last ran a pair whose other half
+  is paired too, it starts as the pair and waits for the other side. If that
+  doesn't connect within 30 seconds, the one that did is used on its own.
+  When the other side connects to a single one, they become the pair.
+  A pair stays a pair if one side drops; the dongle reconnects it when it
+  wakes up.
+* The profile shortcut: **C + Home** on a pair and on an (R) alone; an (L)
+  alone has neither, so it uses **Minus + Capture**. A single Joy-Con can
+  only reach the profiles on its own buttons (the D-pad diamond for an (L),
+  the face buttons for an (R)).
+
+**Mouse.** On the Joy-Con 2 tabs, a profile's **Mouse** tab turns one Joy-Con
+2 (either side of a pair, or the single one) into a USB mouse: lay it on its
+side on a surface and move it. Its shoulder button clicks, its trigger
+right-clicks, its stick click middle-clicks, and its stick scrolls (each
+optional; what the mouse uses isn't sent to the controller). Speed and the
+direction of each axis can be set (the sensor's axes haven't been checked
+on hardware yet). The mouse is a second USB device next to the controller,
+so turning it on or off restarts the dongle; some consoles may not accept it.
 
 **Pairing only on request (Pico, on by default).** The Pico ignores
 controllers in pairing mode unless its pairing window is open: a short
@@ -209,16 +250,18 @@ profiles. One profile per controller type is **in use**, and it applies
 whenever that controller connects. Several profiles can share a mode, for
 example two Xbox 360 Controller profiles with different mappings.
 
-The configuration page's **Controller** section has a tab per controller type.
-It opens on the connected controller's tab, marked with a green dot. Each tab
-shows its profiles as two diamonds of tiles, the D-pad and the face buttons
-(laid out as on that controller), each with the button's icon, the profile's
-name and its emulated controller. A green check marks the profile in use. Tiles keep their size and place: a long name is cut off with
-"…". Below the diamonds are the chosen button's **Name**, **Emulated
-Controller** (its USB mode, or **None**), **Use this profile**,
-**Duplicate…** and **Delete**. Then come its **Buttons**, **Sticks &
-triggers** and **Rumble** tabs and **Motion**, which is shared by every
-profile of both controllers (both report motion).
+The configuration page's **Controller** section has a tab per controller type
+(Nintendo Switch 2 Pro Controller, Nintendo GameCube Controller, Joy-Con 2
+(L/R), Joy-Con 2 (L), Joy-Con 2 (R)). It opens on the connected controller's
+tab, marked with a green dot. Each tab shows its profiles as two diamonds of
+tiles, the D-pad and the face buttons (laid out as on that controller), each
+with the button's icon, the profile's name and its emulated controller. A
+green check marks the profile in use. Tiles keep their size and place: a long
+name is cut off with "…". Below the diamonds are the chosen button's
+**Name**, **Emulated Controller** (its USB mode, or **None**), **Use this
+profile**, **Duplicate…** and **Delete**. Then come its **Buttons**,
+**Sticks & triggers**, **Rumble** and (Joy-Con 2 tabs) **Mouse** tabs, and
+**Motion**, which is shared by every profile of every controller.
 
 * Pick an emulated controller on an empty button to make a profile there.
 * **None** or **Delete** empties the button. If that was the profile in use,
@@ -434,6 +477,9 @@ reconnect, and work with a Switch 1 console and with Steam on SteamOS.
 | Switch 1 Pro Controller USB protocol (handshake, subcommands, SPI calibration) | ✅ confirmed with a Switch 1 and with Linux/Steam |
 | IMU axis mapping and units | Medium: derived from SDL's Switch 1 and Switch 2 drivers. Use the gyro settings if an axis feels wrong. |
 | HD rumble **amplitude** | Medium-high |
+| Joy-Con 2: connection, pairing, input, sideways use, pairs | **Untested.** Built from the published report layouts (the same report 0x05 as the Pro Controller, SL / SR bits, the Joy-Con-specific reports and rumble characteristics). |
+| Joy-Con 2 mouse | **Untested.** The sensor's position (report 0x05, offset 0x10) is read as relative movement; axes and scale may need the profile's invert / speed options. |
+| Two Bluetooth connections at once | **Untested** on both boards (nRF52840: two central links; Pico: BTstack with two connections on the CYW43439). |
 | HD rumble **frequency** translation | **Low.** The Switch 2 frequency encoding hasn't been published. It is anchored on the console's idle frame (verified bit-exact in tests) with a scale and a *Fixed* fallback mode in the settings (no longer on the configuration page). |
 
 If something doesn't work, the log on the configuration page usually shows
@@ -444,8 +490,10 @@ where it stopped. Please include it in bug reports.
 * **No amiibo.** The Switch doesn't use a Pro Controller's NFC reader over a
   wired USB connection, so the dongle doesn't read tags. It answers the
   NFC/IR chip setup commands like an idle controller.
-* One controller connected at a time (up to 8 remembered).
-* Joy-Con 2 are not supported yet.
+* One controller connected at a time (up to 8 remembered), except a Joy-Con
+  2 (L) together with a Joy-Con 2 (R).
+* A single sideways Joy-Con 2's motion isn't turned to match how it's held.
+* No drawing of the Joy-Con 2 on the configuration page yet.
 * The Switch 1 report carries three IMU samples per report. The controller
   provides one per BLE report, so the latest sample is repeated.
 * The connection interval requested is 7.5 ms (the Bluetooth minimum). The
@@ -492,14 +540,15 @@ sketch.
 
 | File | Purpose |
 | --- | --- |
-| `core/src/s2_link.c` | Switch 2 controller logic: which adverts to connect to, init and Nintendo pairing commands, input, rumble pacing, LEDs, gyro calibration |
+| `core/src/s2_link.c` | Switch 2 controller logic: which adverts to connect to (one controller, or a Joy-Con 2 pair on two links), init and Nintendo pairing commands, input, rumble pacing, LEDs, gyro calibration |
+| `core/src/joycon.c` | Joy-Con 2: one controller from an (L) and (R), a single one turned sideways, the optical sensor as a mouse |
 | `core/src/s2_transport.h` | Interface each board's Bluetooth stack implements |
 | `core/src/s2_proto.c` | Switch 2 protocol: adverts, command framing, report and calibration parsing |
 | `core/src/procon.c` | Emulated Switch 1 Pro Controller: USB handshake, subcommands, SPI flash, input reports |
-| `core/src/usb_hid.c`, `usb_pro_desc.c` | TinyUSB HID class driver and the Pro Controller report descriptor |
+| `core/src/usb_hid.c`, `usb_pro_desc.c` | TinyUSB HID class drivers (the controller, the Joy-Con 2 mouse) and the Pro Controller report descriptor |
 | `core/src/hd_rumble.c` | Switch 1 HD rumble decoder and Switch 2 encoder |
 | `core/src/mapping.c` | Button remapping, stick calibration and deadzones, IMU conversion |
-| `core/src/mode_select.c` | Profile shortcut on the controller (C + Home, then a button) |
+| `core/src/mode_select.c` | Profile shortcut on the controller (C + Home, or Minus + Capture on a Joy-Con 2 (L) alone, then a button) |
 | `core/src/profiles.c` | Profiles per controller type: defaults, checks |
 | `core/src/web_api.c`, `webusb.c` | Configuration API, served over HTTP or WebUSB |
 | `core/src/app_core.c`, `settings.c` | Glue, USB suspend / wakeup, settings |

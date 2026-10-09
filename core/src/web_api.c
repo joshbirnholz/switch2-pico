@@ -22,6 +22,7 @@
 #include "mapping.h"
 #include "procon.h"
 #include "s2_link.h"
+#include "s2_transport.h"
 #include "platform.h"
 #include "settings.h"
 #include "usb_mode.h"
@@ -95,7 +96,7 @@ static void addr_str(char *out, const uint8_t a[6]) {
 // ---------------------------------------------------------------------------
 static void api_status(http_response_t *r) {
     jbuf_t j;
-    if (!jb_init(&j, 4096)) return respond_text(r, 500, "oom");
+    if (!jb_init(&j, 6144)) return respond_text(r, 500, "oom");
     s2_link_info_t li;
     s2_link_get_info(&li);
     procon_status_t ps;
@@ -109,7 +110,9 @@ static void api_status(http_response_t *r) {
     // The profile running now: the one in use for the controller type the
     // dongle started for (or switched to).
     jb_printf(&j, ",\"profile\":");
-    jb_str(&j, settings_active(&g_settings, (ctrl_type_t)g_settings.last_ctrl)->name);
+    jb_str(&j, settings_active(&g_settings, settings_boot_ctrl(&g_settings))->name);
+    jb_printf(&j, ",\"usb_mouse\":%s,\"ctrl_type\":%u", usb_mode_has_mouse() ? "true" : "false",
+              s2_link_ctrl_type());
     platform_supply_t sup;
     if (platform_supply(&sup)) {
         jb_printf(&j, ",\"supply\":{\"vdd\":%u,\"vbus\":%u,\"vdd_min\":%u,\"vbus_min\":%u}", sup.vdd, sup.vbus,
@@ -130,6 +133,20 @@ static void api_status(http_response_t *r) {
               li.paired_this_session ? "true" : "false", li.pairing_ok ? "true" : "false",
               li.gyro_range_detected, li.last_rssi, (unsigned long)li.reports,
               (unsigned long)li.rumble_packets, li.gyro_cal_busy ? "true" : "false", li.power_level);
+    // Each connected controller (two for a Joy-Con 2 pair).
+    jb_printf(&j, ",\"links\":[");
+    bool first = true;
+    for (int i = 0; i < S2T_LINKS; i++) {
+        s2_link_info_t k;
+        if (!s2_link_get_link_info(i, &k)) continue;
+        addr_str(a, k.addr);
+        jb_printf(&j, "%s{\"state\":\"%s\",\"addr\":\"%s\",\"pid\":%u,\"battery_mv\":%u,\"power_level\":%d,"
+                      "\"charging\":%s,\"report_hz\":%.0f,\"rumble_packets\":%lu}",
+                  first ? "" : ",", s2_link_state_name(k.state), a, k.pid, k.battery_mv, k.power_level,
+                  (k.power_info & 2) ? "true" : "false", (double)k.report_rate_hz, (unsigned long)k.rumble_packets);
+        first = false;
+    }
+    jb_printf(&j, "]");
 
     addr_str(a, g_settings.ctrl_addr);
     jb_printf(&j, ",\"bond\":{\"bonded\":%s,\"addr\":\"%s\",\"pid\":%u,\"max\":%d,\"list\":[", g_settings.bonded ? "true" : "false", a,
@@ -173,7 +190,7 @@ static void api_status(http_response_t *r) {
 // ---------------------------------------------------------------------------
 static void api_settings_get(http_response_t *r) {
     jbuf_t j;
-    if (!jb_init(&j, 12288)) return respond_text(r, 500, "oom");
+    if (!jb_init(&j, 24576)) return respond_text(r, 500, "oom");
     const settings_t *s = &g_settings;
     // Every mode's output names (null: the mode lacks it), then per
     // controller type every mode's map, its defaults and the mode shortcut
@@ -195,13 +212,14 @@ static void api_settings_get(http_response_t *r) {
     // Per controller type: its profiles, one per button in mode_slot_t order
     // (A, B, X, Y, Up, Down, Left, Right; null: none), the one in use and
     // every mode's default map.
-    static const char *const CTRL_NAMES[CTRL_TYPE_COUNT] = {"Nintendo Switch 2 Pro Controller", "Nintendo GameCube Controller"};
-    jb_printf(&j, "],\"ctrl_type\":%u,\"last_ctrl\":%u,\"profile_max\":%d,\"types\":[",
-              mapping_ctrl_type(s2_link_mapping_ctx()), s->last_ctrl, PROFILE_MAX);
+    // Profiles carry the Joy-Con 2 mouse fields (prof_ keys take them; see
+    // parse_profile()).
+    jb_printf(&j, "],\"ctrl_type\":%u,\"last_ctrl\":%u,\"profile_max\":%d,\"profile_mouse\":true,\"types\":[",
+              s2_link_ctrl_type(), s->last_ctrl, PROFILE_MAX);
     for (int t = 0; t < CTRL_TYPE_COUNT; t++) {
         const ctrl_profiles_t *c = settings_profiles(s, (ctrl_type_t)t);
         jb_printf(&j, "%s{\"name\":", t ? "," : "");
-        jb_str(&j, CTRL_NAMES[t]);
+        jb_str(&j, ctrl_type_name((ctrl_type_t)t));
         jb_printf(&j, ",\"active\":%u,\"profiles\":[", c->active);
         for (int i = 0; i < PROFILE_MAX; i++) {
             const profile_t *p = &c->p[i];
@@ -213,9 +231,9 @@ static void api_settings_get(http_response_t *r) {
             jb_printf(&j, "{\"name\":");
             jb_str(&j, p->name);
             jb_printf(&j, ",\"mode\":%u,\"deadzone\":%u,\"outer\":%u,\"swap\":%u,\"threshold\":%u,\"rumble\":%u,"
-                          "\"strength\":%u,\"map\":[",
+                          "\"strength\":%u,\"mouse\":%u,\"mouse_speed\":%u,\"mouse_flags\":%u,\"map\":[",
                       p->usb_mode, p->stick_deadzone_pct, p->stick_outer_pct, p->swap_sticks, p->trigger_threshold,
-                      p->rumble_enabled, p->rumble_strength_pct);
+                      p->rumble_enabled, p->rumble_strength_pct, p->mouse_src, p->mouse_speed_pct, p->mouse_flags);
             for (int k = 0; k < IN_COUNT; k++) jb_printf(&j, "%s%u", k ? "," : "", p->map[k]);
             jb_printf(&j, "]}");
         }
@@ -282,11 +300,14 @@ typedef struct {
     bool usb;         // changing it requires USB re-enumeration
 } num_field_t;
 
-// Profile keys (controller type t, profile i, slot name n):
-//   prof_<t>_<i>=<mode>,<deadzone>,<outer>,<swap>,<threshold>,<rumble>,<strength>,<map x IN_COUNT>,<name>
-//                (empty: no profile there)
+// Profile keys (controller type t, profile i):
+//   prof_<t>_<i>=<mode>,<deadzone>,<outer>,<swap>,<threshold>,<rumble>,<strength>,<map x IN_COUNT>,
+//                m<mouse>,<mouse speed>,<mouse flags>,<name>
+//                (empty: no profile there; the "m" group, Joy-Con 2 mouse, may be left out)
 //   active_<t>=<i>        (i: the button, mode_slot_t; a cleared profile in
 //                          use is replaced by another, see profiles.c)
+static int s_parse_type, s_parse_index;   // the profile parse_profile() reads
+
 static bool parse_profile(const char *v, profile_t *p) {
     memset(p, 0, sizeof *p);
     if (!*v) return true;   // unused
@@ -307,6 +328,28 @@ static bool parse_profile(const char *v, profile_t *p) {
     p->rumble_enabled = num[5];
     p->rumble_strength_pct = num[6];
     memcpy(p->map, num + 7, IN_COUNT);
+    if (*v == 'm') {
+        // Mouse fields (marked, so an older page's name never reads as them).
+        v++;
+        uint8_t mo[3];
+        for (size_t k = 0; k < sizeof mo; k++) {
+            long n = strtol(v, &end, 10);
+            if (end == v || *end != ',') return false;
+            mo[k] = (uint8_t)(n < 0 ? 0 : n > 255 ? 255 : n);
+            v = end + 1;
+        }
+        p->mouse_src = mo[0];
+        p->mouse_speed_pct = mo[1];
+        p->mouse_flags = mo[2];
+    } else {
+        // An older page: the profile's mouse fields stay as they are.
+        const profile_t *old = &settings_profiles(&g_settings, (ctrl_type_t)s_parse_type)->p[s_parse_index];
+        if (old->used) {
+            p->mouse_src = old->mouse_src;
+            p->mouse_speed_pct = old->mouse_speed_pct;
+            p->mouse_flags = old->mouse_flags;
+        }
+    }
     snprintf(p->name, sizeof p->name, "%s", v);
     return true;
 }
@@ -315,6 +358,8 @@ static bool apply_kv(settings_t *s, const char *k, const char *v, bool *usb_reco
     int t, i, n = 0;
     if (sscanf(k, "prof_%d_%d%n", &t, &i, &n) == 2 && !k[n]) {
         if (t < 0 || t >= CTRL_TYPE_COUNT || i < 0 || i >= PROFILE_MAX) return false;
+        s_parse_type = t;
+        s_parse_index = i;
         return parse_profile(v, &settings_profiles(s, (ctrl_type_t)t)->p[i]);
     }
     if (sscanf(k, "active_%d%n", &t, &n) == 1 && !k[n]) {
@@ -394,12 +439,13 @@ static void api_settings_post(const http_request_t *req, http_response_t *r) {
     }
     free(body);
     settings_sanitize(&s);
-    bool mode_changed = settings_boot_usb_mode(&s) != usb_mode_active();
+    bool mode_changed = settings_boot_usb_mode(&s) != usb_mode_active() || settings_boot_mouse(&s) != usb_mode_has_mouse();
     g_settings = s;
     if (mode_changed) {
         // The host must see a different device: save and restart.
         settings_save_now();
-        LOG("web: USB mode -> %s, restarting", usb_mode_name((usb_mode_t)settings_boot_usb_mode(&s)));
+        LOG("web: USB mode -> %s%s, restarting", usb_mode_name((usb_mode_t)settings_boot_usb_mode(&s)),
+            settings_boot_mouse(&s) ? " with the mouse" : "");
         app_request_reboot(false);
     } else {
         settings_save_later();

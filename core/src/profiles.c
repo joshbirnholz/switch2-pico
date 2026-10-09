@@ -35,6 +35,11 @@ void settings_default_profile_for(ctrl_type_t type, usb_mode_t mode, profile_t *
     p->trigger_threshold = 120;
     p->rumble_enabled = 1;
     p->rumble_strength_pct = 100;
+    if (ctrl_is_joycon(type)) {
+        // The mouse stays off until chosen; these are its starting options.
+        p->mouse_speed_pct = 100;
+        p->mouse_flags = MOUSE_BUTTONS | MOUSE_SCROLL;
+    }
 }
 
 // One profile per mode, on the buttons the shortcut used before profiles:
@@ -49,6 +54,23 @@ void settings_default_profiles(ctrl_type_t type, ctrl_profiles_t *c) {
     memset(c, 0, sizeof *c);
     for (int m = 0; m < USB_MODE_COUNT; m++) settings_default_profile_for(type, (usb_mode_t)m, &c->p[BUTTON_OF_MODE[m]]);
     c->active = BUTTON_OF_MODE[type == CTRL_GAMECUBE ? USB_MODE_GC_ADAPTER : USB_MODE_SWITCH_PRO];
+    // A single sideways Joy-Con 2 reaches only one diamond (its own buttons):
+    // the D-pad for the (L), the face buttons for the (R).
+    if (type == CTRL_JOYCON_L) {
+        // Sideways, Up is in Y's place, Down A's, Right X's, Left B's.
+        static const uint8_t DPAD_OF_MODE[USB_MODE_COUNT] = {
+            [USB_MODE_SWITCH_PRO] = MODE_SLOT_UP, [USB_MODE_DUALSENSE_EDGE] = MODE_SLOT_DOWN,
+            [USB_MODE_DUALSENSE] = MODE_SLOT_RIGHT, [USB_MODE_XBOX360] = MODE_SLOT_LEFT,
+        };
+        ctrl_profiles_t d;
+        memset(&d, 0, sizeof d);
+        for (int m = 0; m < USB_MODE_COUNT; m++) {
+            if (m == USB_MODE_GC_ADAPTER) continue;   // four buttons: the gamepad modes
+            d.p[DPAD_OF_MODE[m]] = c->p[BUTTON_OF_MODE[m]];
+        }
+        d.active = MODE_SLOT_UP;
+        *c = d;
+    }
 }
 
 // When the profile in use is gone, the first of these takes over.
@@ -118,6 +140,16 @@ void settings_sanitize_profiles(ctrl_type_t type, ctrl_profiles_t *c) {
         p->swap_sticks = p->swap_sticks ? 1 : 0;
         p->rumble_enabled = p->rumble_enabled ? 1 : 0;
         p->rumble_strength_pct = clamp(p->rumble_strength_pct, 0, 200);
+        if (ctrl_is_joycon(type)) {
+            // A single Joy-Con 2 can only be its own mouse.
+            if (p->mouse_src > MOUSE_JOYCON_L) p->mouse_src = MOUSE_OFF;
+            if (type == CTRL_JOYCON_L && p->mouse_src) p->mouse_src = MOUSE_JOYCON_L;
+            if (type == CTRL_JOYCON_R && p->mouse_src) p->mouse_src = MOUSE_JOYCON_R;
+            p->mouse_speed_pct = clamp(p->mouse_speed_pct ? p->mouse_speed_pct : 100, 10, 250);
+            p->mouse_flags &= MOUSE_BUTTONS | MOUSE_SCROLL | MOUSE_INVERT_X | MOUSE_INVERT_Y | MOUSE_SWAP_XY;
+        } else {
+            p->mouse_src = p->mouse_speed_pct = p->mouse_flags = 0;
+        }
     }
     if (!used) {
         settings_default_profiles(type, c);

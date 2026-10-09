@@ -13,8 +13,8 @@
 #define ENABLE_PRINTF_HEXDUMP
 
 // Single controller per dongle.
-#define MAX_NR_GATT_CLIENTS 1
-#define MAX_NR_HCI_CONNECTIONS 1
+#define MAX_NR_GATT_CLIENTS 2       // a Joy-Con 2 (L) and (R) at once
+#define MAX_NR_HCI_CONNECTIONS 2
 #define MAX_NR_SM_LOOKUP_ENTRIES 3
 #define MAX_NR_WHITELIST_ENTRIES 4
 #define MAX_NR_LE_DEVICE_DB_ENTRIES 4

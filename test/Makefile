@@ -2,7 +2,7 @@
 CC ?= cc
 CFLAGS ?= -std=c11 -Wall -Wextra -Wno-unused-parameter -O1 -g
 SRC = ../core/src
-OBJS = test_main.c $(SRC)/hd_rumble.c $(SRC)/s2_proto.c $(SRC)/mapping.c $(SRC)/ds5.c $(SRC)/x360.c $(SRC)/gc_adapter.c $(SRC)/mode_select.c $(SRC)/battery.c $(SRC)/bonds.c $(SRC)/profiles.c
+OBJS = test_main.c $(SRC)/hd_rumble.c $(SRC)/s2_proto.c $(SRC)/mapping.c $(SRC)/ds5.c $(SRC)/x360.c $(SRC)/gc_adapter.c $(SRC)/mode_select.c $(SRC)/battery.c $(SRC)/bonds.c $(SRC)/profiles.c $(SRC)/joycon.c
 
 run: test_runner
 	./test_runner

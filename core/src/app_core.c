@@ -14,6 +14,7 @@
 #include "ds5.h"
 #include "x360.h"
 #include "gc_adapter.h"
+#include "joycon.h"
 #include "log.h"
 #include "mapping.h"
 #include "mode_select.h"
@@ -126,9 +127,10 @@ static void mode_select_step(uint32_t raw) {
     ctrl_profiles_t *profiles = settings_profiles(&g_settings, type);
     uint8_t slots[MODE_SLOT_COUNT];
     settings_profile_slots(&g_settings, type, slots);
+    s_msel.combo = mode_select_combo(type);
     switch (mode_select_update(&s_msel, slots, raw, now, &chosen)) {
     case MODE_SELECT_ENTER:
-        LOG("profile select: press a button with a profile (C + Home again to leave)");
+        LOG("profile select: press a button with a profile (the shortcut again to leave)");
         s2_link_haptic(S2_HAPTIC_BA_THUMP);
         s_blink_on = true;
         s_blink_at = now;
@@ -146,8 +148,8 @@ static void mode_select_step(uint32_t raw) {
             LOG("profile select: already %s", p->name);
             s2_link_haptic(S2_HAPTIC_TICK);
             s2_link_set_led_override(-1);
-        } else if (p->usb_mode == usb_mode_active()) {
-            // Same USB mode: only the map and options change, right away.
+        } else if (p->usb_mode == usb_mode_active() && settings_profile_mouse(p, type) == usb_mode_has_mouse()) {
+            // Same USB device: only the map and options change, right away.
             LOG("profile select: %s", p->name);
             profiles->active = chosen;
             settings_save_later();
@@ -174,18 +176,20 @@ static void mode_select_step(uint32_t raw) {
 }
 
 // A controller of type t is about to connect. Each type has its own active
-// profile: when its USB mode differs from the one the dongle runs in,
-// remember t and restart into that mode (the controller keeps advertising meanwhile and
-// connects after the restart). True while restarting: don't connect.
+// profile: when its USB mode (or whether it uses the USB mouse) differs from
+// what the dongle runs as, remember t and restart into it (the controller
+// keeps advertising meanwhile and connects after the restart). True while
+// restarting: don't connect.
 bool app_controller_type(ctrl_type_t t) {
     static bool restarting;
     if (restarting) return true;
     if (g_settings.last_ctrl != t) {
         g_settings.last_ctrl = (uint8_t)t;
-        uint8_t m = settings_active(&g_settings, t)->usb_mode;
-        if (m != usb_mode_active()) {
-            LOG("usb: %s controller: its mode is %s, restarting", t == CTRL_GAMECUBE ? "GameCube" : "Pro",
-                usb_mode_name((usb_mode_t)m));
+        const profile_t *p = settings_active(&g_settings, t);
+        uint8_t m = p->usb_mode;
+        if (m != usb_mode_active() || settings_profile_mouse(p, t) != usb_mode_has_mouse()) {
+            LOG("usb: %s: its profile is %s%s, restarting", ctrl_type_name(t), usb_mode_name((usb_mode_t)m),
+                settings_profile_mouse(p, t) ? " with the mouse" : "");
             restarting = true;
             settings_save_now();
             app_request_reboot(false);
@@ -239,11 +243,14 @@ static uint32_t host_buttons(uint32_t raw) {
     raw &= ~s_swallow;
     // C + Home is a shortcut (mode selection; on Wi-Fi boards also the access
     // point): keep Home from the host while C is held, so holding it doesn't
-    // open the host's home menu first.
+    // open the host's home menu first. (A Joy-Con 2 (L) alone: Capture while
+    // Minus is held.)
+    ctrl_type_t t = mapping_ctrl_type(s2_link_mapping_ctx());
     uint8_t slots[MODE_SLOT_COUNT];
-    settings_profile_slots(&g_settings, mapping_ctrl_type(s2_link_mapping_ctx()), slots);
+    settings_profile_slots(&g_settings, t, slots);
     bool shortcut = mode_select_enabled(slots) || (g_settings.hotkey_enabled && platform_has_wifi());
-    if (shortcut && (raw & S2_BTN_C)) raw &= ~S2_BTN_HOME;
+    uint32_t mod = mode_select_combo_modifier(t);
+    if (shortcut && (raw & mod)) raw &= ~(mode_select_combo(t) & ~mod);
     return raw;
 }
 
@@ -295,6 +302,92 @@ static void neutral_input(s2_input_t *in) {
 }
 
 // ---------------------------------------------------------------------------
+// Joy-Con 2 mouse (USB mouse interface, see usb_hid.h): the optical sensor
+// moves it; that Joy-Con's shoulder, trigger and stick click are its buttons
+// and its stick scrolls (each optional: then they stay the gamepad's).
+// ---------------------------------------------------------------------------
+#define MOUSE_SCROLL_HZ      12.0f   // wheel steps per second at full deflection
+#define MOUSE_SCROLL_DEAD    0.25f
+
+// The mouse in use, if any: the profile asks for it and the USB interface is there.
+static const profile_t *mouse_profile(joycon_mouse_buttons_t *mb) {
+    ctrl_type_t t = mapping_ctrl_type(s2_link_mapping_ctx());
+    const profile_t *p = settings_active(&g_settings, t);
+    if (!usb_mode_has_mouse() || !joycon_mouse_buttons(t, p->mouse_src, mb)) return NULL;
+    return p;
+}
+
+// What the mouse takes, the gamepad doesn't get.
+static void mouse_take_from_gamepad(s2_input_t *in) {
+    joycon_mouse_buttons_t mb;
+    const profile_t *p = mouse_profile(&mb);
+    if (!p) return;
+    if (p->mouse_flags & MOUSE_BUTTONS) in->buttons &= ~(mb.left | mb.right | mb.middle);
+    if (p->mouse_flags & MOUSE_SCROLL) {
+        // A single Joy-Con 2's stick is the (turned) left stick.
+        const mapping_ctx_t *c = s2_link_mapping_ctx();
+        ctrl_type_t t = mapping_ctrl_type(c);
+        if (t != CTRL_JOYCON_PAIR || mb.stick_left) memcpy(in->stick_l, c->cal_l.center, sizeof in->stick_l);
+        else memcpy(in->stick_r, c->cal_r.center, sizeof in->stick_r);
+    }
+}
+
+static void mouse_task(void) {
+    static int32_t acc_x, acc_y;     // hundredths of a count, not sent yet
+    static float acc_wheel;
+    static uint8_t sent_buttons;
+    static uint32_t last_ms;
+    uint32_t now = platform_millis();
+    float dt = (float)(now - last_ms) / 1000.0f;
+    last_ms = now;
+    if (dt > 0.1f) dt = 0.1f;
+
+    joycon_mouse_buttons_t mb;
+    const profile_t *p = mouse_profile(&mb);
+    int32_t dx = 0, dy = 0;
+    uint8_t buttons = 0;
+    if (p && s2_link_mouse_take(p->mouse_src, &dx, &dy)) {
+        int32_t ox, oy;
+        joycon_mouse_apply(p, dx, dy, &ox, &oy);
+        acc_x += ox;
+        acc_y += oy;
+        if ((p->mouse_flags & MOUSE_BUTTONS) && !s_msel.active) {
+            if (s_raw_buttons & mb.left) buttons |= USB_MOUSE_LEFT;
+            if (s_raw_buttons & mb.right) buttons |= USB_MOUSE_RIGHT;
+            if (s_raw_buttons & mb.middle) buttons |= USB_MOUSE_MIDDLE;
+        }
+        if (p->mouse_flags & MOUSE_SCROLL) {
+            uint16_t pid = p->mouse_src == MOUSE_JOYCON_L ? S2_PID_JOYCON2_L : S2_PID_JOYCON2_R;
+            s2_input_t side;
+            s2_stick_cal_t cal;
+            if (s2_link_side_input(pid, &side, &cal)) {
+                const uint16_t *raw = pid == S2_PID_JOYCON2_L ? side.stick_l : side.stick_r;
+                float y = s2_stick_axis(&cal, 1, raw[1]);
+                if (y > MOUSE_SCROLL_DEAD || y < -MOUSE_SCROLL_DEAD) acc_wheel += y * MOUSE_SCROLL_HZ * dt;
+            }
+        }
+    } else {
+        acc_x = acc_y = 0;
+        acc_wheel = 0.0f;
+    }
+    int32_t x = acc_x / 100, y = acc_y / 100, w = (int32_t)acc_wheel;
+    if (x > 127) x = 127;
+    if (x < -127) x = -127;
+    if (y > 127) y = 127;
+    if (y < -127) y = -127;
+    if (w > 127) w = 127;
+    if (w < -127) w = -127;
+    if (!x && !y && !w && buttons == sent_buttons) return;
+    if (!usb_mouse_ready()) return;
+    if (usb_mouse_send(buttons, (int8_t)x, (int8_t)y, (int8_t)w)) {
+        acc_x -= x * 100;
+        acc_y -= y * 100;
+        acc_wheel -= (float)w;
+        sent_buttons = buttons;
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Input path: latest Switch 2 report -> Pro Controller report fields
 // ---------------------------------------------------------------------------
 static void update_input(void) {
@@ -325,6 +418,7 @@ static void update_input(void) {
         in.buttons = host_prev = host_buttons(in.buttons);
         // Selecting a mode: sticks centered, triggers released.
         if (s_msel.active || s_mode_switch >= 0) neutral_input(&in);
+        mouse_take_from_gamepad(&in);
         usb_mode_t mode = usb_mode_active();
         if (mode != USB_MODE_SWITCH_PRO) {
             // Generic modes: the mode's own map (gp_out_t), same shortcuts.
@@ -472,6 +566,7 @@ void app_core_task(void) {
     s2_link_task();
     update_input();
     mode_select_task();
+    if (usb_mode_has_mouse()) mouse_task();
     usb_hid_task();
     switch (usb_mode_active()) {
     case USB_MODE_DUALSENSE_EDGE:

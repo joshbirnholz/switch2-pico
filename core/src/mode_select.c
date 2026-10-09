@@ -3,6 +3,15 @@
 #include "s2_proto.h"
 
 #define COMBO (S2_BTN_C | S2_BTN_HOME)
+#define COMBO_JOYCON_L (S2_BTN_MINUS | S2_BTN_CAPTURE)
+
+uint32_t mode_select_combo(ctrl_type_t t) {
+    return t == CTRL_JOYCON_L ? COMBO_JOYCON_L : COMBO;
+}
+
+uint32_t mode_select_combo_modifier(ctrl_type_t t) {
+    return t == CTRL_JOYCON_L ? S2_BTN_MINUS : S2_BTN_C;
+}
 
 static const uint32_t SLOT_BITS[MODE_SLOT_COUNT] = {
     [MODE_SLOT_A] = S2_BTN_A,       [MODE_SLOT_B] = S2_BTN_B,
@@ -29,6 +38,7 @@ void mode_select_init(mode_select_t *m) {
     m->since = 0;
     m->prev = 0;
     m->idle_since = 0;
+    m->combo = COMBO;
 }
 
 bool mode_select_enabled(const uint8_t slots[MODE_SLOT_COUNT]) {
@@ -55,7 +65,8 @@ mode_select_event_t mode_select_update(mode_select_t *m, const uint8_t slots[MOD
                                        uint32_t now_ms, uint8_t *chosen) {
     uint32_t prev = m->prev;
     m->prev = raw;
-    bool combo = (raw & COMBO) == COMBO;
+    uint32_t want = m->combo ? m->combo : COMBO;
+    bool combo = (raw & want) == want;
     if (!combo) {
         m->held = false;
         m->armed = true;
@@ -74,7 +85,7 @@ mode_select_event_t mode_select_update(mode_select_t *m, const uint8_t slots[MOD
     }
 
     if (raw) m->idle_since = now_ms;
-    // C + Home pressed again (after releasing it) leaves.
+    // The shortcut pressed again (after releasing it) leaves.
     if (combo && m->armed) {
         mode_select_cancel(m);
         return MODE_SELECT_CANCEL;

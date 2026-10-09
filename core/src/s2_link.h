@@ -6,7 +6,9 @@ extern "C" {
 #endif
 
 // Bluetooth LE central that finds, pairs with and talks to a Nintendo Switch 2
-// controller (Pro Controller 2, NSO GameCube controller) using BTstack.
+// controller: a Pro Controller, a GameCube Controller, or Joy-Con 2 (one,
+// or an (L) and an (R) together, which the rest of the firmware sees as one
+// controller). See s2_transport.h for the radio side.
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -48,13 +50,25 @@ typedef struct {
 void s2_link_init(void);
 void s2_link_task(void);
 
+// The controller as a whole: ready once any of its links is.
 s2_link_state_t s2_link_state(void);
 const char *s2_link_state_name(s2_link_state_t st);
 void s2_link_get_info(s2_link_info_t *out);
+// One link (0 .. S2T_LINKS-1); false when it is free.
+bool s2_link_get_link_info(int link, s2_link_info_t *out);
+// Whose profiles apply: the connected controller's type (a Joy-Con 2 pair
+// when both halves are, or are expected), else the last one's.
+ctrl_type_t s2_link_ctrl_type(void);
 
-// Latest input; returns false while not connected. `seq` increments per report.
+// Latest input (a Joy-Con 2 pair merged, a single one turned sideways);
+// returns false while not connected. `seq` increments per report.
 bool s2_link_get_input(s2_input_t *out, uint32_t *seq);
 const mapping_ctx_t *s2_link_mapping_ctx(void);
+// One Joy-Con 2's own input (pid S2_PID_JOYCON2_L / _R) and stick calibration.
+bool s2_link_side_input(uint16_t pid, s2_input_t *out, s2_stick_cal_t *cal);
+// Optical sensor movement of the Joy-Con 2 `src` (mouse_src_t) since the
+// last call; false when it isn't connected.
+bool s2_link_mouse_take(uint8_t src, int32_t *dx, int32_t *dy);
 
 // Rumble from the host, decoded (see hd_rumble.h).
 void s2_link_rumble_submit(const rumble_sample_t *left, int nl, const rumble_sample_t *right, int nr);

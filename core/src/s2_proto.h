@@ -38,6 +38,8 @@ extern const uint8_t S2_UUID_VIB_GC[16];           // 3f8fb670-... GameCube rumb
 // controller's own battery level 0-9.
 extern const uint8_t S2_UUID_INPUT_PRO[16];        // 7492866c-...-0f8
 extern const uint8_t S2_UUID_INPUT_GC[16];         // 8261cba1-...-d8e4d
+extern const uint8_t S2_UUID_INPUT_JOYCON_L[16];   // cc1bbbb5-... (report 0x07)
+extern const uint8_t S2_UUID_INPUT_JOYCON_R[16];   // d5a9e01e-... (report 0x08)
 extern const uint8_t S2_UUID_VIB_JOYCON_L[16];
 extern const uint8_t S2_UUID_VIB_JOYCON_R[16];
 extern const uint8_t S2_UUID_REPORT_RATE_DESC[16]; // 679d5510-... "set report rate?" descriptor
@@ -164,7 +166,17 @@ typedef struct {
     int16_t gyro[3];            // raw
     uint8_t trigger_l;          // GameCube analog triggers (raw)
     uint8_t trigger_r;
+    // Joy-Con 2 optical sensor (feature S2_FEATURE_MOUSE): an absolute
+    // position that wraps; deltas between reports are the movement.
+    uint16_t mouse_x, mouse_y;
+    uint16_t mouse_unk1, mouse_unk2;   // surface quality / lift-off distance? (not understood)
 } s2_input_t;
+
+// Buttons that are on each Joy-Con 2 (report 0x05 uses one layout for all).
+#define S2_BTNS_JOYCON_L (S2_BTN_DOWN | S2_BTN_UP | S2_BTN_RIGHT | S2_BTN_LEFT | S2_BTN_SR_L | S2_BTN_SL_L | \
+                          S2_BTN_L | S2_BTN_ZL | S2_BTN_MINUS | S2_BTN_LSTICK | S2_BTN_CAPTURE)
+#define S2_BTNS_JOYCON_R (S2_BTN_Y | S2_BTN_X | S2_BTN_B | S2_BTN_A | S2_BTN_SR_R | S2_BTN_SL_R | S2_BTN_R | \
+                          S2_BTN_ZR | S2_BTN_PLUS | S2_BTN_RSTICK | S2_BTN_HOME | S2_BTN_C)
 
 bool s2_parse_input_report(const uint8_t *data, size_t len, s2_input_t *out);
 

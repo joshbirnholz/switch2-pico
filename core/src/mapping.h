@@ -59,11 +59,14 @@ typedef struct {
     bool is_gamecube;
     uint8_t gc_trigger_neutral[2];
     float gyro_lsb_per_dps;     // native scale of the connected controller
+    ctrl_type_t type;           // whose profiles apply (CTRL_PRO when zeroed)
 } mapping_ctx_t;
 
-// Which controller's maps apply (GameCube controller or the rest).
+// Which controller's profiles apply.
 static inline ctrl_type_t mapping_ctrl_type(const mapping_ctx_t *ctx) {
-    return ctx && ctx->is_gamecube ? CTRL_GAMECUBE : CTRL_PRO;
+    if (!ctx) return CTRL_PRO;
+    if (ctx->is_gamecube) return CTRL_GAMECUBE;
+    return ctx->type < CTRL_TYPE_COUNT ? ctx->type : CTRL_PRO;
 }
 
 typedef struct {
