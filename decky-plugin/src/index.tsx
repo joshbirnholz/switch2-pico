@@ -32,7 +32,16 @@ const ellipsis: CSSProperties = { overflow: "hidden", textOverflow: "ellipsis", 
 // A label on the left and a compact control on the right.
 function Row(props: { label: ReactNode; description?: ReactNode; children: ReactNode }) {
   return (
-    <Field label={props.label} description={props.description} childrenContainerWidth="min" padding="compact">
+    <Field label={props.label} description={props.description} childrenContainerWidth="min">
+      {props.children}
+    </Field>
+  );
+}
+
+// Custom content in a row, with the same side padding as Decky's own rows.
+function Block(props: { children: ReactNode; separator?: boolean }) {
+  return (
+    <Field childrenLayout="below" childrenContainerWidth="max" bottomSeparator={props.separator ? "standard" : "none"}>
       {props.children}
     </Field>
   );
@@ -40,6 +49,7 @@ function Row(props: { label: ReactNode; description?: ReactNode; children: React
 
 function Banner(props: { text: string; action: string; onAction(): void; onLater(): void }) {
   return (
+    <Block>
     <div style={{ ...card, background: "#2e2611" }}>
       <div style={{ fontWeight: 600, color: "#f5c35a" }}>{props.text}</div>
       <Focusable style={btnRow}>
@@ -47,6 +57,7 @@ function Banner(props: { text: string; action: string; onAction(): void; onLater
         <DialogButton style={half} onClick={props.onLater}>Later</DialogButton>
       </Focusable>
     </div>
+    </Block>
   );
 }
 
@@ -144,7 +155,8 @@ function Content() {
       <PanelSection>
         {pluginBanner}
         <PanelSectionRow>
-          <div style={{ textAlign: "center", padding: "16px 0 8px", boxSizing: "border-box", width: "100%" }}>
+          <Block>
+          <div style={{ textAlign: "center", padding: "8px 0", boxSizing: "border-box", width: "100%" }}>
             <div style={{ fontSize: 17, fontWeight: 600, marginBottom: 6 }}>
               {restarting ? "Dongle restarting…" : busy ? "Dongle busy" : "Dongle not found"}
             </div>
@@ -156,6 +168,7 @@ function Content() {
                   : "Plug the Switch2-Pico dongle into the Steam Deck or dock. With “Only appear on USB while a controller is connected” on, it hides until a controller connects: press a button on your controller."}
             </div>
           </div>
+          </Block>
         </PanelSectionRow>
         {!restarting && (
           <PanelSectionRow>
@@ -247,6 +260,7 @@ function Content() {
           </PanelSectionRow>
         )}
         <PanelSectionRow>
+          <Block>
           <div style={{ ...card, background: "#1f252e", gap: 4 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <span style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 600, minWidth: 0 }}>
@@ -261,10 +275,12 @@ function Content() {
             </div>
             <div style={hint}>{MODE_NAMES[runMode]}</div>
           </div>
+          </Block>
         </PanelSectionRow>
         {(pairing.required || ready.length > 0) && (
           <PanelSectionRow>
-            <Focusable style={{ ...btnRow, padding: "4px 0" }}>
+            <Block>
+            <Focusable style={btnRow}>
               {pairing.required && (
                 <DialogButton style={half} onClick={() => action("pair").then(poll)}>
                   {pairing.open ? `Stop (${Math.ceil(pairing.left_ms / 1000)} s)` : "Pair controller"}
@@ -274,6 +290,7 @@ function Content() {
                 <DialogButton style={half} onClick={() => action("disconnect").then(poll)}>Disconnect</DialogButton>
               )}
             </Focusable>
+            </Block>
           </PanelSectionRow>
         )}
         {upd?.available && !later && (
@@ -411,11 +428,13 @@ function Content() {
           </ButtonItem>
         </PanelSectionRow>
         <PanelSectionRow>
-          <div style={{ ...hint, paddingTop: 4 }}>
+          <Block>
+          <div style={hint}>
             Firmware {st.version} ({st.platform})
             {upd?.ok && !upd.available && upd.latest ? " · up to date" : ""}
             {pupd?.installed ? ` · plugin ${pupd.installed}` : ""}
           </div>
+          </Block>
         </PanelSectionRow>
       </PanelSection>
     </>
