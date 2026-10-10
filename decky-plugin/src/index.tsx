@@ -138,15 +138,7 @@ function Content() {
         text={`Plugin ${pupd.latest} is available`}
         action="Update"
         onLater={() => setPLater(true)}
-        onAction={() =>
-          confirm(`Update the plugin to ${pupd.latest}?`, "Decky will restart to load it.", "Update", async () => {
-            const r = await installPluginUpdate();
-            toaster.toast({
-              title: "Switch2-Pico",
-              body: r.ok ? `Plugin ${r.version} installed. Decky is restarting…` : `Plugin update failed: ${r.error}`,
-            });
-          })
-        }
+        onAction={() => updatePlugin(pupd)}
       />
     </PanelSectionRow>
   );
@@ -454,6 +446,28 @@ function Content() {
       </PanelSection>
     </>
   );
+}
+
+// Decky's own installer (as for its store and "Install from URL"): it may
+// replace the plugin's files and reloads the plugin; it asks to confirm.
+// Older loaders without it: the backend does it (and restarts Decky).
+async function updatePlugin(u: PluginUpdate) {
+  const backend = (window as unknown as { DeckyBackend?: { call(route: string, ...args: unknown[]): Promise<unknown> } }).DeckyBackend;
+  if (backend && u.url) {
+    try {
+      await backend.call("utilities/install_plugin", u.url, "Switch2-Pico", u.latest, u.sha256 ?? "", 2 /* update */);
+      return;
+    } catch (e) {
+      console.warn("Switch2-Pico: Decky's installer failed, trying the plugin's own", e);
+    }
+  }
+  confirm(`Update the plugin to ${u.latest}?`, "Decky will restart to load it.", "Update", async () => {
+    const r = await installPluginUpdate();
+    toaster.toast({
+      title: "Switch2-Pico",
+      body: r.ok ? `Plugin ${r.version} installed. Decky is restarting…` : `Plugin update failed: ${r.error}`,
+    });
+  });
 }
 
 // Toasts for the backend's "notify" events (also while the menu is closed).

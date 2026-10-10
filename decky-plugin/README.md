@@ -16,8 +16,9 @@ menu (Decky Loader), on a Steam Deck or any SteamOS / Linux machine with Decky.
 * **Reboot dongle**.
 * **Firmware updates**: checks GitHub on start and once a day, and installs
   the update over USB.
-* **Plugin updates**: checks for a newer version of itself the same way,
-  installs it and restarts Decky to load it.
+* **Plugin updates**: checks for a newer version of itself the same way and
+  installs it through Decky's own installer (as Decky's store does), which
+  reloads the plugin.
 * Notifications: a profile switch (C + Home), a firmware or plugin update
   available (Steam itself shows controller connects and low batteries).
 

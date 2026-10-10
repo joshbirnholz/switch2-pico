@@ -29,6 +29,8 @@ export interface PluginUpdate extends Result {
   installed?: string;
   latest?: string;
   available?: boolean;
+  url?: string;
+  sha256?: string;
 }
 export const checkPluginUpdate = callable<[force: boolean], PluginUpdate>("check_plugin_update");
 export const installPluginUpdate = callable<[], Result & { version?: string }>("install_plugin_update");

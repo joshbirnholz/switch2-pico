@@ -346,7 +346,10 @@ class Plugin:
         except Exception as e:
             return {"ok": False, "installed": installed, "error": "Couldn't reach GitHub (%s)" % e}
         latest = self.plugin_latest.get("version", "0")
-        return {"ok": True, "installed": installed, "latest": latest, "available": vcmp(latest, installed) > 0}
+        # The frontend hands url / sha256 to Decky's own installer.
+        return {"ok": True, "installed": installed, "latest": latest, "available": vcmp(latest, installed) > 0,
+                "url": PLUGIN_BASE + self.plugin_latest.get("file", "Switch2-Pico.zip"),
+                "sha256": self.plugin_latest.get("sha256", "")}
 
     def _installed_version(self):
         # package.json next to this file is what was installed (and what an
@@ -358,8 +361,9 @@ class Plugin:
             return getattr(decky, "DECKY_PLUGIN_VERSION", "0")
 
     async def install_plugin_update(self):
-        """Download the latest plugin, put its files in place and restart
-        Decky (which reloads every plugin, this one included)."""
+        """Fallback when Decky's installer isn't reachable from the frontend:
+        download the latest plugin, put its files in place and restart Decky.
+        (Decky may not let a plugin write its own folder.)"""
         try:
             up = await self.check_plugin_update(force=True)
             if not up.get("ok"):
