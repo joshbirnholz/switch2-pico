@@ -36,6 +36,10 @@ ICONS = {
         "playstation5_elite_fn_l", "playstation5_elite_fn_r",
         "playstation_dpad_up", "playstation_dpad_down", "playstation_dpad_left", "playstation_dpad_right",
     ],
+    "Steam Deck": [
+        "steamdeck_button_l4", "steamdeck_button_l5", "steamdeck_button_r4", "steamdeck_button_r5",
+        "steamdeck_button_quickaccess",
+    ],
     "Nintendo Gamecube": [
         "gamecube_button_color_a", "gamecube_button_color_b", "gamecube_button_x", "gamecube_button_y",
         "gamecube_button_z", "gamecube_trigger_l", "gamecube_trigger_r", "gamecube_button_start",

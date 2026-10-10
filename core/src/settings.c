@@ -36,7 +36,7 @@ static void v1_mode_map(ctrl_type_t t, usb_mode_t mode, uint8_t out[IN_COUNT_V1]
 static const char *const OUT_NAMES[OUT_COUNT] = {
     "None", "A", "B", "X", "Y", "L", "R", "ZL", "ZR", "Minus", "Plus", "LStick", "RStick",
     "Home", "Capture", "Up", "Down", "Left", "Right",
-    "Home+A (Steam quick access)", "Home+R (Steam screenshot)",
+    "Home+A (Steam quick access)", "Home+R (Steam screenshot)", "Quick Access Menu (Decky)",
 };
 
 static const char *const CTRL_NAMES[CTRL_TYPE_COUNT] = {
@@ -157,6 +157,7 @@ void settings_sanitize(settings_t *s) {
     settings_bond_sync(s);
     if (s->last_ctrl >= CTRL_TYPE_COUNT) s->last_ctrl = CTRL_PRO;
     s->joycon_single = s->joycon_single ? 1 : 0;
+    s->decky_options = s->decky_options ? 1 : 0;
     s->last_ctrl = (uint8_t)settings_boot_ctrl(s);
     if (s->ble_tx_power > 3) s->ble_tx_power = 0;
     s->idle_disconnect_off = s->idle_disconnect_off ? 1 : 0;
@@ -275,6 +276,7 @@ void settings_init(void) {
             size_t tail = at + (size_t)n * CTRL_PROFILES_V13_SIZE;
             // joycon_single came with 0.11.0 (ext_rev 13, a larger size).
             g_settings.joycon_single = tail + 4u <= stored->size - 4u ? raw[tail] : 0;
+            g_settings.decky_options = 0;
             memset(g_settings.reserved_end, 0, sizeof g_settings.reserved_end);
         }
         if (rev < 10) {

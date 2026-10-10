@@ -22,6 +22,9 @@ bool app_controller_type(ctrl_type_t t);
 void app_wifi_stop(void);
 // Raw Switch 2 buttons of the last report (for the live view).
 uint32_t app_raw_buttons(void);
+// Presses of a button mapped to "Quick Access Menu (Decky)" (the Decky
+// plugin polls it, see GET /api/events).
+uint32_t app_decky_qam_presses(void);
 
 #ifdef __cplusplus
 }

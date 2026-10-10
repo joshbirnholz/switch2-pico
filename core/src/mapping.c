@@ -139,6 +139,22 @@ void settings_default_mode_map(ctrl_type_t type, usb_mode_t mode, uint8_t map[IN
     case USB_MODE_DUALSENSE:
         map[IN_CAPTURE] = GP_TOUCHPAD;
         break;
+    case USB_MODE_SINPUT:
+        // Paddles as on the controller, top to bottom: GL / GR on the Pro
+        // Controller; on a pair, the (L)'s SL then SR (L4, L5) and the (R)'s
+        // SR then SL (R4, R5). Capture, and C as the extra button.
+        map[IN_CAPTURE] = GP_MIC;
+        map[IN_C] = GP_MISC;
+        if (type == CTRL_JOYCON_PAIR) {
+            map[IN_GL] = GP_PADDLE_L;
+            map[IN_GR] = GP_FN_L;
+            map[IN_SR_R] = GP_PADDLE_R;
+            map[IN_SL_R] = GP_FN_R;
+        } else if (!gc) {
+            map[IN_GL] = GP_PADDLE_L;
+            map[IN_GR] = GP_PADDLE_R;
+        }
+        break;
     case USB_MODE_GC_ADAPTER:
         // By label; buttons a GameCube controller lacks are unassigned.
         memset(map, GP_NONE, IN_COUNT);
@@ -363,6 +379,25 @@ bool mapping_quick_remap_map(uint8_t map[IN_COUNT], uint32_t prev, uint32_t raw,
     return false;
 }
 
+bool mapping_tap(mapping_tap_t *t, const uint8_t map[IN_COUNT], uint8_t value, uint32_t prev, uint32_t raw) {
+    uint32_t pressed = raw & ~prev;
+    if (t->held) {
+        if (pressed & ~t->held) t->spoiled = true;
+        if (raw & t->held) return false;
+        t->held = 0;
+        return !t->spoiled;
+    }
+    for (int i = 0; i < IN_COUNT; i++) {
+        if (map[i] == value && (pressed & IN_BITS[i])) {
+            t->held = IN_BITS[i];
+            // Pressed together with others (e.g. Home already held): not a tap.
+            t->spoiled = (raw & ~IN_BITS[i]) != 0;
+            break;
+        }
+    }
+    return false;
+}
+
 bool mapping_macro_busy(const mapping_macro_t *m) {
     return m->running || m->held;
 }
@@ -422,7 +457,7 @@ uint32_t mapping_gp_buttons(const settings_t *s, const uint8_t map[IN_COUNT], co
     uint32_t out = 0;
     for (int i = 0; i < IN_COUNT; i++) {
         uint8_t o = map[i];
-        if ((raw & IN_BITS[i]) && o != GP_NONE && o != GP_MACRO_QAM && o != GP_MACRO_SHOT && o < GP_COUNT) out |= GP_BIT(o);
+        if ((raw & IN_BITS[i]) && o != GP_NONE && o != GP_MACRO_QAM && o != GP_MACRO_SHOT && o != GP_DECKY_QAM && o < GP_COUNT) out |= GP_BIT(o);
     }
     return out;
 }

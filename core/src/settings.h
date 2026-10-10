@@ -36,6 +36,7 @@ typedef enum {
     // Macros (no single Pro Controller button; see mapping_macro_step()).
     OUT_HOME_A,         // tap: Home, then Home + A (Steam quick access menu)
     OUT_HOME_R,         // tap: Home, then Home + R (Steam screenshot)
+    OUT_DECKY_QAM,      // opens the Quick Access menu through the Decky plugin (SteamOS)
     OUT_COUNT
 } out_button_t;
 
@@ -57,6 +58,7 @@ typedef enum {
     USB_MODE_DUALSENSE = 2,       // DualSense
     USB_MODE_XBOX360 = 3,         // wired Xbox 360 controller (XInput)
     USB_MODE_GC_ADAPTER = 4,      // Wii U / Switch GameCube controller adapter (WUP-028), port 1
+    USB_MODE_SINPUT = 5,          // SInput (2E8A:10C6): paddles, Capture and an extra button for Steam Input
     USB_MODE_COUNT
 } usb_mode_t;
 
@@ -76,6 +78,8 @@ typedef enum {
     GP_FN_L, GP_FN_R,
     GP_MACRO_QAM,       // tap: Guide, then Guide + South (Steam quick access)
     GP_MACRO_SHOT,      // tap: Guide, then Guide + R1 (Steam screenshot)
+    GP_DECKY_QAM,       // opens the Quick Access menu through the Decky plugin (SteamOS)
+    GP_MISC,            // an extra button of its own (SInput)
     GP_COUNT
 } gp_out_t;
 
@@ -270,7 +274,8 @@ typedef struct {
     // the Joy-Con 2 (L) / (R) profiles); off (default, and zero in older
     // saves): it is its half of the Joy-Con 2 (L/R).
     uint8_t joycon_single;
-    uint8_t reserved_end[3];
+    uint8_t decky_options;              // the page shows the outputs that need the Decky plugin
+    uint8_t reserved_end[2];
 
     uint32_t crc;
 } settings_t;
@@ -353,11 +358,14 @@ static inline uint8_t settings_boot_usb_mode(const settings_t *s) {
     return settings_active(s, settings_boot_ctrl(s))->usb_mode;
 }
 // Whether a profile adds the USB mouse: Joy-Con 2 types, emulating an Xbox
-// 360 controller only (in the Switch Pro and DualSense modes, Linux's
-// drivers for those controllers claim the mouse interface too and it gets
-// no driver). Otherwise the mouse setting is kept but does nothing.
+// 360 or an SInput controller only (in the Switch Pro and DualSense modes,
+// Linux's drivers for those controllers claim the mouse interface too and it
+// gets no driver). Otherwise the mouse setting is kept but does nothing.
+static inline bool settings_mode_has_mouse(uint8_t usb_mode) {
+    return usb_mode == USB_MODE_XBOX360 || usb_mode == USB_MODE_SINPUT;
+}
 static inline bool settings_profile_mouse(const profile_t *p, ctrl_type_t t) {
-    return ctrl_is_joycon(t) && p->mouse_src != MOUSE_OFF && p->usb_mode == USB_MODE_XBOX360;
+    return ctrl_is_joycon(t) && p->mouse_src != MOUSE_OFF && settings_mode_has_mouse(p->usb_mode);
 }
 // ... for the profile the dongle starts with (the USB descriptors follow it).
 static inline bool settings_boot_mouse(const settings_t *s) {

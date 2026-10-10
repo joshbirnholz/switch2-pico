@@ -94,6 +94,14 @@ static void addr_str(char *out, const uint8_t a[6]) {
 // ---------------------------------------------------------------------------
 // GET /api/status
 // ---------------------------------------------------------------------------
+// GET /api/events: small and cheap, for the Decky plugin to poll often.
+static void api_events(http_response_t *r) {
+    jbuf_t j;
+    if (!jb_init(&j, 64)) return respond_text(r, 500, "oom");
+    jb_printf(&j, "{\"qam\":%lu}", (unsigned long)app_decky_qam_presses());
+    respond_json(r, &j);
+}
+
 static void api_status(http_response_t *r) {
     jbuf_t j;
     if (!jb_init(&j, 6144)) return respond_text(r, 500, "oom");
@@ -273,9 +281,11 @@ static void api_settings_get(http_response_t *r) {
               s->wifi_autostart, s->wifi_channel);
     jb_str(&j, s->wifi_ssid);
     jb_printf(&j, ",\"wifi_has_pass\":%s,\"ble_tx_power\":%u,\"idle_disconnect\":%u,\"idle_minutes\":%u,"
-                  "\"pair_button\":%u,\"joycon_single\":%u,\"sync_button\":%s}",
+                  "\"pair_button\":%u,\"joycon_single\":%u,\"sync_button\":%s,"
+                  "\"decky_options\":%u,\"decky_outputs\":{\"switch\":[%d],\"gp\":[%d]}}",
               s->wifi_pass[0] ? "true" : "false", s->ble_tx_power, !s->idle_disconnect_off, s->idle_minutes,
-              s->pair_button, s->joycon_single, platform_has_sync_button() ? "true" : "false");
+              s->pair_button, s->joycon_single, platform_has_sync_button() ? "true" : "false",
+              s->decky_options, OUT_DECKY_QAM, GP_DECKY_QAM);
     respond_json(r, &j);
 }
 
@@ -430,6 +440,7 @@ static bool apply_kv(settings_t *s, const char *k, const char *v, bool *usb_reco
         {"idle_minutes", &s->idle_minutes, 1, false},
         {"pair_button", &s->pair_button, 1, false},
         {"joycon_single", &s->joycon_single, 1, false},
+        {"decky_options", &s->decky_options, 1, false},
         {"wifi_autostart", &s->wifi_autostart, 1, false},
         {"wifi_channel", &s->wifi_channel, 1, false},
     };
@@ -642,6 +653,7 @@ void web_api_handle(const http_request_t *req, http_response_t *r) {
     if (post && !strcmp(req->path, "/api/settings")) return api_settings_post(req, r);
     if (post && !strcmp(req->path, "/api/action")) return api_action(req, r);
     if (!strncmp(req->path, "/api/fw/", 8)) return api_fw(req, r, get, post);
+    if (get && !strcmp(req->path, "/api/events")) return api_events(r);
     if (get && !strcmp(req->path, "/api/log")) {
         // Saved log from before this boot (boards that keep one), then this boot's.
         static const char sep[] = "===== saved log from before this start is above =====\n";

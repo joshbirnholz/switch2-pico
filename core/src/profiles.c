@@ -12,6 +12,7 @@ static const char *const MODE_PROFILE_NAMES[USB_MODE_COUNT] = {
     [USB_MODE_DUALSENSE] = "DualSense",
     [USB_MODE_XBOX360] = "Xbox 360",
     [USB_MODE_GC_ADAPTER] = "GameCube adapter",
+    [USB_MODE_SINPUT] = "SInput",
 };
 
 const char *settings_mode_profile_name(usb_mode_t mode) {
@@ -43,12 +44,12 @@ void settings_default_profile_for(ctrl_type_t type, usb_mode_t mode, profile_t *
 
 // One profile per mode, on the buttons the shortcut used before profiles:
 // Y Switch Pro, A DualSense Edge, X DualSense, B Xbox 360, D-pad up GameCube
-// adapter; the rest empty.
+// adapter; then D-pad down SInput; the rest empty.
 void settings_default_profiles(ctrl_type_t type, ctrl_profiles_t *c) {
     static const uint8_t BUTTON_OF_MODE[USB_MODE_COUNT] = {
         [USB_MODE_SWITCH_PRO] = MODE_SLOT_Y, [USB_MODE_DUALSENSE_EDGE] = MODE_SLOT_A,
         [USB_MODE_DUALSENSE] = MODE_SLOT_X,  [USB_MODE_XBOX360] = MODE_SLOT_B,
-        [USB_MODE_GC_ADAPTER] = MODE_SLOT_UP,
+        [USB_MODE_GC_ADAPTER] = MODE_SLOT_UP, [USB_MODE_SINPUT] = MODE_SLOT_DOWN,
     };
     memset(c, 0, sizeof *c);
     for (int m = 0; m < USB_MODE_COUNT; m++) settings_default_profile_for(type, (usb_mode_t)m, &c->p[BUTTON_OF_MODE[m]]);

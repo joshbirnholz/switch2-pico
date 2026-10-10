@@ -4,6 +4,7 @@
 
 #include "ds5.h"
 #include "gc_adapter.h"
+#include "sinput.h"
 #include "usb_hid.h"
 #include "x360.h"
 
@@ -15,6 +16,8 @@ static const usb_identity_t IDENTITIES[USB_MODE_COUNT] = {
                             "DualSense Wireless Controller"},
     [USB_MODE_XBOX360] = {0x045E, 0x028E, 0x0114, 0xFF, "Microsoft", "Controller"},
     [USB_MODE_GC_ADAPTER] = {0x057E, 0x0337, 0x0100, 0x00, "Nintendo", "WUP-028"},
+    // Hand Held Legend's generic SInput ID (SDL picks the protocol by it).
+    [USB_MODE_SINPUT] = {0x2E8A, 0x10C6, 0x0100, 0x00, "Switch2-Pico", "Switch2-Pico SInput"},
 };
 
 // pid.codes' test ID (1209:0001): a plain device, nothing binds a driver to it.
@@ -35,6 +38,7 @@ static const char *const NAMES[USB_MODE_COUNT] = {
     [USB_MODE_DUALSENSE] = "dualsense",
     [USB_MODE_XBOX360] = "xbox360",
     [USB_MODE_GC_ADAPTER] = "gc_adapter",
+    [USB_MODE_SINPUT] = "sinput",
 };
 
 usb_mode_t usb_mode_active(void) {
@@ -90,12 +94,49 @@ static const char *gc_output_name(gp_out_t g) {
     case GP_DOWN: return "Down";
     case GP_LEFT: return "Left";
     case GP_RIGHT: return "Right";
+    case GP_DECKY_QAM: return "Quick Access Menu (Decky)";
+    default: return NULL;
+    }
+}
+
+// SInput: Nintendo labels (by position: South B, East A, West Y, North X),
+// four paddles, Capture and an extra button.
+static const char *sinput_output_name(gp_out_t g) {
+    switch (g) {
+    case GP_NONE: return "None";
+    case GP_SOUTH: return "B";
+    case GP_EAST: return "A";
+    case GP_WEST: return "Y";
+    case GP_NORTH: return "X";
+    case GP_L1: return "L";
+    case GP_R1: return "R";
+    case GP_L2: return "ZL";
+    case GP_R2: return "ZR";
+    case GP_SELECT: return "Minus";
+    case GP_START: return "Plus";
+    case GP_L3: return "LStick";
+    case GP_R3: return "RStick";
+    case GP_GUIDE: return "Home";
+    case GP_UP: return "Up";
+    case GP_DOWN: return "Down";
+    case GP_LEFT: return "Left";
+    case GP_RIGHT: return "Right";
+    case GP_MIC: return "Capture";
+    case GP_PADDLE_L: return "L4 (left paddle 1)";
+    case GP_FN_L: return "L5 (left paddle 2)";
+    case GP_PADDLE_R: return "R4 (right paddle 1)";
+    case GP_FN_R: return "R5 (right paddle 2)";
+    case GP_MISC: return "Misc (an extra button)";
+    case GP_MACRO_QAM: return "Home+B (Steam quick access)";
+    case GP_MACRO_SHOT: return "Home+R (Steam screenshot)";
+    case GP_DECKY_QAM: return "Quick Access Menu (Decky)";
     default: return NULL;
     }
 }
 
 const char *usb_mode_output_name(usb_mode_t m, gp_out_t g) {
     if (m == USB_MODE_GC_ADAPTER) return gc_output_name(g);
+    if (m == USB_MODE_SINPUT) return sinput_output_name(g);
     bool ds = is_ds(m), x = m == USB_MODE_XBOX360;
     switch (g) {
     case GP_NONE: return "None";
@@ -126,6 +167,7 @@ const char *usb_mode_output_name(usb_mode_t m, gp_out_t g) {
     case GP_FN_R: return m == USB_MODE_DUALSENSE_EDGE ? "Right Fn" : NULL;
     case GP_MACRO_QAM: return ds ? "PS+Cross (Steam quick access)" : x ? "Guide+A (Steam quick access)" : NULL;
     case GP_MACRO_SHOT: return ds ? "PS+R1 (Steam screenshot)" : x ? "Guide+RB (Steam screenshot)" : NULL;
+    case GP_DECKY_QAM: return "Quick Access Menu (Decky)";
     default: return NULL;
     }
 }
@@ -136,6 +178,7 @@ void usb_mode_get_status(procon_status_t *out) {
     case USB_MODE_DUALSENSE: ds5_get_status(out); break;
     case USB_MODE_XBOX360: x360_get_status(out); break;
     case USB_MODE_GC_ADAPTER: gc_adapter_get_status(out); break;
+    case USB_MODE_SINPUT: sinput_get_status(out); break;
     default: procon_get_status(out); break;
     }
 }
@@ -171,6 +214,7 @@ uint16_t usb_mode_interface_desc_len(void) {
 const uint8_t *usb_hid_report_descriptor(uint16_t *len) {
     if (is_ds(usb_mode_active())) return ds5_report_descriptor(len);
     if (usb_mode_active() == USB_MODE_GC_ADAPTER) return gc_adapter_report_descriptor(len);
+    if (usb_mode_active() == USB_MODE_SINPUT) return sinput_report_descriptor(len);
     return procon_report_descriptor(len);
 }
 
@@ -190,6 +234,7 @@ void usb_hid_on_output(const uint8_t *buf, uint16_t len, bool via_control, uint8
         if (!via_control) x360_on_output(buf, len);
         break;
     case USB_MODE_GC_ADAPTER: gc_adapter_on_output(buf, len); break;
+    case USB_MODE_SINPUT: sinput_on_output(buf, len, via_control, control_report_id); break;
     default: procon_on_output(buf, len, via_control, control_report_id); break;
     }
 }

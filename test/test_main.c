@@ -16,6 +16,7 @@
 #include "mapping.h"
 #include "s2_proto.h"
 #include "settings.h"
+#include "sinput.h"
 
 static int g_fail, g_pass;
 
@@ -510,6 +511,22 @@ static void test_gp_map(void) {
     memset(&sin, 0, sizeof sin);
     sin.buttons = S2_BTN_C;
     CHECK(mapping_gp_buttons(&s, map, NULL, &sin) == 0);   // sets nothing directly
+    // Quick Access Menu (Decky): a press is counted elsewhere, never a host button.
+    map[IN_C] = GP_DECKY_QAM;
+    CHECK(mapping_gp_buttons(&s, map, NULL, &sin) == 0);
+    // Counted on a clean tap (released, nothing else pressed meanwhile).
+    mapping_tap_t tap = {0};
+    CHECK(!mapping_tap(&tap, map, GP_DECKY_QAM, 0, S2_BTN_C));
+    CHECK(!mapping_tap(&tap, map, GP_DECKY_QAM, S2_BTN_C, S2_BTN_C));
+    CHECK(mapping_tap(&tap, map, GP_DECKY_QAM, S2_BTN_C, 0));
+    // C + Home (profile switch) or C + GL: not a tap.
+    CHECK(!mapping_tap(&tap, map, GP_DECKY_QAM, 0, S2_BTN_C));
+    CHECK(!mapping_tap(&tap, map, GP_DECKY_QAM, S2_BTN_C, S2_BTN_C | S2_BTN_HOME));
+    CHECK(!mapping_tap(&tap, map, GP_DECKY_QAM, S2_BTN_C | S2_BTN_HOME, S2_BTN_HOME));
+    CHECK(!mapping_tap(&tap, map, GP_DECKY_QAM, S2_BTN_HOME, S2_BTN_HOME | S2_BTN_C));   // Home first
+    CHECK(!mapping_tap(&tap, map, GP_DECKY_QAM, S2_BTN_HOME | S2_BTN_C, 0));
+    CHECK(!mapping_tap(&tap, map, GP_DECKY_QAM, 0, S2_BTN_A) && !mapping_tap(&tap, map, GP_DECKY_QAM, S2_BTN_A, 0));
+    CHECK(mapping_out_button_bit(OUT_DECKY_QAM) == 0);
 }
 
 static void test_imu_sdl(void) {
@@ -745,12 +762,13 @@ static void test_profiles(void) {
     CHECK(pro->p[MODE_SLOT_Y].usb_mode == USB_MODE_SWITCH_PRO && pro->p[MODE_SLOT_A].usb_mode == USB_MODE_DUALSENSE_EDGE);
     CHECK(pro->p[MODE_SLOT_X].usb_mode == USB_MODE_DUALSENSE && pro->p[MODE_SLOT_B].usb_mode == USB_MODE_XBOX360);
     CHECK(pro->p[MODE_SLOT_UP].usb_mode == USB_MODE_GC_ADAPTER && strcmp(pro->p[MODE_SLOT_UP].name, "GameCube adapter") == 0);
-    CHECK(!pro->p[MODE_SLOT_DOWN].used && !pro->p[MODE_SLOT_LEFT].used && !pro->p[MODE_SLOT_RIGHT].used);
+    CHECK(pro->p[MODE_SLOT_DOWN].usb_mode == USB_MODE_SINPUT && strcmp(pro->p[MODE_SLOT_DOWN].name, "SInput") == 0);
+    CHECK(!pro->p[MODE_SLOT_LEFT].used && !pro->p[MODE_SLOT_RIGHT].used);
     CHECK(pro->active == MODE_SLOT_Y && gc->active == MODE_SLOT_UP);
     // The shortcut sees the buttons that have a profile.
     uint8_t slots[MODE_SLOT_COUNT];
     settings_profile_slots(&st, CTRL_PRO, slots);
-    CHECK(slots[MODE_SLOT_A] == MODE_SLOT_A + 1 && slots[MODE_SLOT_DOWN] == MODE_SLOT_EMPTY && mode_select_enabled(slots));
+    CHECK(slots[MODE_SLOT_A] == MODE_SLOT_A + 1 && slots[MODE_SLOT_LEFT] == MODE_SLOT_EMPTY && mode_select_enabled(slots));
     // Per controller type: the GameCube controller's Xbox map has its triggers on L / R.
     CHECK(gc->p[MODE_SLOT_B].map[IN_L] == GP_L2 && pro->p[MODE_SLOT_B].map[IN_L] == GP_L1);
     // The profile in use gives the map, options and the boot mode.
@@ -1013,7 +1031,7 @@ static void test_joycon_profiles(void) {
     ctrl_profiles_t c;
     settings_default_profiles(CTRL_JOYCON_L, &c);
     CHECK(c.active == 0 && c.p[0].used && c.p[0].usb_mode == USB_MODE_SWITCH_PRO);
-    CHECK(c.p[1].usb_mode == USB_MODE_DUALSENSE_EDGE && c.p[4].usb_mode == USB_MODE_GC_ADAPTER && !c.p[5].used);
+    CHECK(c.p[1].usb_mode == USB_MODE_DUALSENSE_EDGE && c.p[4].usb_mode == USB_MODE_GC_ADAPTER && c.p[5].usb_mode == USB_MODE_SINPUT && !c.p[6].used);
     CHECK(c.p[0].mouse_src == MOUSE_OFF && c.p[0].mouse_speed_pct == 100);
     settings_default_profiles(CTRL_JOYCON_PAIR, &c);
     CHECK(c.active == MODE_SLOT_Y && c.p[MODE_SLOT_A].used);
@@ -1073,6 +1091,73 @@ static void test_joycon_profiles(void) {
     CHECK(mapping_ctrl_type(&ctx) == CTRL_GAMECUBE);
 }
 
+
+static int16_t le16s(const uint8_t *p) { return (int16_t)(p[0] | (p[1] << 8)); }
+
+static void test_sinput(void) {
+    // Input report: buttons by SInput bit, sticks / triggers / IMU as SDL reads them.
+    sinput_state_t st;
+    memset(&st, 0, sizeof st);
+    st.stick_l[0] = st.stick_l[1] = st.stick_r[0] = st.stick_r[1] = S1_STICK_CENTER;
+    st.gp = GP_BIT(GP_SOUTH) | GP_BIT(GP_NORTH) | GP_BIT(GP_PADDLE_L) | GP_BIT(GP_FN_R) | GP_BIT(GP_MIC) | GP_BIT(GP_MISC) |
+            GP_BIT(GP_GUIDE) | GP_BIT(GP_DECKY_QAM);
+    st.stick_l[1] = S1_STICK_CENTER + S1_STICK_RANGE;   // full up
+    st.trigger_r = 255;
+    st.accel_g[1] = 1.0f;                               // SDL y
+    st.gyro_dps[0] = 100.0f;                            // SDL x
+    st.battery_pct = 55;
+    uint8_t r[SINPUT_REPORT_LEN];
+    sinput_build_input(&st, 1234, r);
+    uint32_t b = (uint32_t)r[3] | (uint32_t)r[4] << 8 | (uint32_t)r[5] << 16 | (uint32_t)r[6] << 24;
+    CHECK(r[0] == 0x01 && r[1] == 4 && r[2] == 55);
+    CHECK(b == ((1u << 0) | (1u << 3) | (1u << 14) | (1u << 21) | (1u << 19) | (1u << 24) | (1u << 18)));
+    CHECK(le16s(r + 7) == 0 && le16s(r + 9) == -32767 && le16s(r + 11) == 0);
+    CHECK(le16s(r + 15) == -32768 && le16s(r + 17) == 32767);
+    CHECK(r[19] == (1234 & 0xFF) && r[20] == (1234 >> 8));
+    // SDL: x = -X, y = Z, z = -Y, scaled by the ranges in the features reply.
+    CHECK(le16s(r + 27) == 4096 && le16s(r + 23) == 0 && le16s(r + 25) == 0);
+    CHECK_NEAR(-le16s(r + 29) * (float)SINPUT_GYRO_RANGE_DPS / 32768.0f, 100.0f, 0.1f);
+
+    // Features reply: what SDL needs to build the mapping.
+    uint8_t mac[6] = {1, 2, 3, 4, 5, 6};
+    sinput_build_features(mac, r);
+    const uint8_t *d = r + 2;
+    CHECK(r[0] == 0x02 && r[1] == 0x02 && d[0] == 1 && d[2] == 0xFF && d[4] == 7 && (d[5] >> 5) == 3);
+    CHECK(le16s(d + 8) == SINPUT_ACCEL_RANGE_G && le16s(d + 10) == SINPUT_GYRO_RANGE_DPS);
+    // Four paddles, Back / Guide / Capture, one extra button; no digital triggers.
+    CHECK(d[12] == 0xFF && d[13] == 0xCF && d[14] == 0x3F && d[15] == 0x01 && memcmp(d + 18, mac, 6) == 0);
+
+    // Commands.
+    sinput_command_t c;
+    uint8_t feat[48] = {0x03, 0x02};
+    CHECK(sinput_parse_output(feat, sizeof feat, &c) && c.features && !c.rumble);
+    uint8_t erm[48] = {0x03, 0x01, 2, 200, 0, 50, 0};
+    CHECK(sinput_parse_output(erm, sizeof erm, &c) && c.rumble && c.motor_left == 200 && c.motor_right == 50);
+    uint8_t precise[48] = {0x03, 0x01, 1, 0, 0, 0x00, 0x40, 0, 0, 0x10, 0x00, 0, 0, 0x00, 0x00, 0, 0, 0x80, 0x00};
+    CHECK(sinput_parse_output(precise, sizeof precise, &c) && c.rumble && c.motor_left == 0x40 && c.motor_right == 0x80);
+    uint8_t led[48] = {0x03, 0x03, 2};
+    CHECK(sinput_parse_output(led, sizeof led, &c) && c.player && c.player_num == 2);
+    CHECK(!sinput_parse_output(erm, 1, &c) && !sinput_parse_output((const uint8_t[]){0x01, 0x02}, 2, &c));
+
+    // Default maps: paddles top to bottom, Capture, C as the extra button.
+    uint8_t m[IN_COUNT];
+    settings_default_mode_map(CTRL_PRO, USB_MODE_SINPUT, m);
+    CHECK(m[IN_GL] == GP_PADDLE_L && m[IN_GR] == GP_PADDLE_R && m[IN_CAPTURE] == GP_MIC && m[IN_C] == GP_MISC);
+    CHECK(m[IN_A] == GP_EAST && m[IN_B] == GP_SOUTH && m[IN_HOME] == GP_GUIDE);
+    settings_default_mode_map(CTRL_JOYCON_PAIR, USB_MODE_SINPUT, m);
+    CHECK(m[IN_GL] == GP_PADDLE_L && m[IN_GR] == GP_FN_L && m[IN_SR_R] == GP_PADDLE_R && m[IN_SL_R] == GP_FN_R);
+    settings_default_mode_map(CTRL_GAMECUBE, USB_MODE_SINPUT, m);
+    CHECK(m[IN_C] == GP_MISC && m[IN_GL] == GP_NONE && m[IN_L] == GP_L2);
+
+    // Mouse Mode works alongside SInput (no kernel driver claims the device).
+    profile_t pr;
+    settings_default_profile_for(CTRL_JOYCON_PAIR, USB_MODE_SINPUT, &pr);
+    pr.mouse_src = MOUSE_ON;
+    CHECK(settings_profile_mouse(&pr, CTRL_JOYCON_PAIR));
+    pr.usb_mode = USB_MODE_DUALSENSE;
+    CHECK(!settings_profile_mouse(&pr, CTRL_JOYCON_PAIR));
+}
+
 int main(void) {
     test_s1_rumble_classic();
     test_s1_rumble_packed();
@@ -1096,6 +1181,7 @@ int main(void) {
     test_uuids();
     test_joycon();
     test_joycon_profiles();
+    test_sinput();
     printf("%d passed, %d failed\n", g_pass, g_fail);
     return g_fail ? 1 : 0;
 }

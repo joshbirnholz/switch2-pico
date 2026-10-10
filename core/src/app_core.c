@@ -15,6 +15,7 @@
 #include "ds5.h"
 #include "x360.h"
 #include "gc_adapter.h"
+#include "sinput.h"
 #include "joycon.h"
 #include "log.h"
 #include "mapping.h"
@@ -38,6 +39,12 @@ static uint32_t s_reboot_at;
 
 uint32_t app_raw_buttons(void) {
     return s_raw_buttons;
+}
+
+static uint32_t s_decky_qam;
+
+uint32_t app_decky_qam_presses(void) {
+    return s_decky_qam;
 }
 
 void app_request_usb_reconnect(void) {
@@ -480,6 +487,17 @@ static void update_input(void) {
         // i.e. within SUSPEND_DISCONNECT_MS) wakes it.
         if ((in.buttons & ~raw_prev) && tud_suspended()) s2_link_hook_controller_seen();
         mode_select_step(in.buttons);
+        // "Quick Access Menu (Decky)": counted on a tap of the controller's
+        // own buttons (the host's view hides Home while C is held).
+        {
+            static mapping_tap_t qam_tap;
+            usb_mode_t m = usb_mode_active();
+            if (first) memset(&qam_tap, 0, sizeof qam_tap);
+            if (mapping_tap(&qam_tap, settings_active_map(&g_settings, mapping_ctrl_type(s2_link_mapping_ctx())),
+                            m == USB_MODE_SWITCH_PRO ? OUT_DECKY_QAM : GP_DECKY_QAM, raw_prev, in.buttons)) {
+                s_decky_qam++;
+            }
+        }
         // From here on, `in` holds what the host may see.
         uint32_t prev = host_prev;
         in.buttons = host_prev = host_buttons(in.buttons);
@@ -492,9 +510,9 @@ static void update_input(void) {
             const mapping_ctx_t *ctx = s2_link_mapping_ctx();
             // The active profile's map (its mode is the one we run in).
             uint8_t *map = settings_active_map(&g_settings, mapping_ctrl_type(ctx));
-            // Not in DualSense Edge mode: GL/GR/C are its paddles and Fn
-            // buttons, which the host's software remaps itself.
-            bool quick = !g_settings.quick_remap_off && mode != USB_MODE_DUALSENSE_EDGE;
+            // Not in DualSense Edge or SInput mode: GL/GR/C are their paddles
+            // and extra buttons, which the host's software remaps itself.
+            bool quick = !g_settings.quick_remap_off && mode != USB_MODE_DUALSENSE_EDGE && mode != USB_MODE_SINPUT;
             if (quick) {
                 in_button_t back;
                 if (mapping_quick_remap_map(map, prev, in.buttons, &back)) {
@@ -527,6 +545,7 @@ static void update_input(void) {
             }
             if (mode == USB_MODE_XBOX360) x360_set_input(&in, ctx, gp, true);
             else if (mode == USB_MODE_GC_ADAPTER) gc_adapter_set_input(&in, ctx, gp, true);
+            else if (mode == USB_MODE_SINPUT) sinput_set_input(&in, ctx, gp, true);
             else ds5_set_input(&in, ctx, gp, true);
             return;
         }
@@ -563,6 +582,7 @@ static void update_input(void) {
         ds5_set_input(NULL, NULL, 0, false);
         x360_set_input(NULL, NULL, 0, false);
         gc_adapter_set_input(NULL, NULL, 0, false);
+        sinput_set_input(NULL, NULL, 0, false);
     }
 }
 
@@ -632,6 +652,7 @@ void app_core_init(void) {
     ds5_init();
     x360_init();
     gc_adapter_init();
+    sinput_init();
     s2_link_init();
 }
 
@@ -647,6 +668,7 @@ void app_core_task(void) {
     case USB_MODE_DUALSENSE: ds5_task(); break;
     case USB_MODE_XBOX360: x360_task(); break;
     case USB_MODE_GC_ADAPTER: gc_adapter_task(); break;
+    case USB_MODE_SINPUT: sinput_task(); break;
     default: procon_task(); break;
     }
     webusb_task();

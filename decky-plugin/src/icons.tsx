@@ -1,8 +1,8 @@
 // Button icons: Kenney's Input Prompts (CC0, kenney.nl; see src/kenney.ts),
-// plus a few drawn here that the pack doesn't have (Capture, PS).
+// plus a few drawn here that the pack doesn't have (Capture, PS, Misc).
 import { ReactNode } from "react";
 import { KENNEY } from "./kenney";
-import { MODE_DS, MODE_DS_EDGE, MODE_GC, MODE_SWITCH } from "./model";
+import { deckyQam, MODE_DS, MODE_DS_EDGE, MODE_GC, MODE_SINPUT, MODE_SWITCH } from "./model";
 
 const SIZE = 30;
 const INK = "#e6e9ed";
@@ -56,6 +56,7 @@ const DIRS = ["up", "down", "left", "right"];
 // in USB mode `mode`.
 export function OutputIcon({ mode, idx }: { mode: number; idx: number }) {
   if (idx === 0) return <None />;
+  if (idx === deckyQam(mode)) return <K name="steamdeck_button_quickaccess" />;
   if (mode === MODE_SWITCH) {
     const names: Record<number, string> = {
       1: "switch_button_a", 2: "switch_button_b", 3: "switch_button_x", 4: "switch_button_y",
@@ -68,6 +69,23 @@ export function OutputIcon({ mode, idx }: { mode: number; idx: number }) {
     if (idx >= 15 && idx <= 18) return <K name={"switch_dpad_" + DIRS[idx - 15]} />;
     if (idx === 19) return <Combo a={<K name="switch_button_home" />} b={<K name="switch_button_a" />} />;
     if (idx === 20) return <Combo a={<K name="switch_button_home" />} b={<K name="switch_button_r" />} />;
+    return <Text text="?" />;
+  }
+  if (mode === MODE_SINPUT) {
+    // Nintendo labels by position (South B, East A, West Y, North X).
+    const names: Record<number, string> = {
+      1: "switch_button_b", 2: "switch_button_a", 3: "switch_button_y", 4: "switch_button_x",
+      5: "switch_button_l", 6: "switch_button_r", 7: "switch_button_zl", 8: "switch_button_zr",
+      9: "switch_button_minus", 10: "switch_button_plus", 11: "switch_stick_l_press", 12: "switch_stick_r_press",
+      13: "switch_button_home",
+      22: "steamdeck_button_l4", 23: "steamdeck_button_r4", 24: "steamdeck_button_l5", 25: "steamdeck_button_r5",
+    };
+    if (names[idx]) return <K name={names[idx]} />;
+    if (idx >= 14 && idx <= 17) return <K name={"switch_dpad_" + DIRS[idx - 14]} />;
+    if (idx === 21) return <Capture />;
+    if (idx === 26) return <Combo a={<K name="switch_button_home" />} b={<K name="switch_button_b" />} />;
+    if (idx === 27) return <Combo a={<K name="switch_button_home" />} b={<K name="switch_button_r" />} />;
+    if (idx === 29) return <Text text="Misc" />;
     return <Text text="?" />;
   }
   if (mode === MODE_GC) {

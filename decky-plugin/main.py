@@ -46,6 +46,7 @@ USBDEVFS_CLAIMINTERFACE = 0x8004550F   # _IOR('U', 15, unsigned int)
 USBDEVFS_RELEASEINTERFACE = 0x80045510 # _IOR('U', 16, unsigned int)
 
 POLL_S = 3.0                # background status poll (notifications)
+EVENTS_S = 0.05             # button events poll (Quick Access menu)
 UPDATE_CHECK_S = 24 * 3600  # automatic update check interval
 FW_CHUNK = 4096
 
@@ -167,6 +168,48 @@ def uf2_image(data, family, base, max_len):
     return bytes(img)
 
 
+# SInput mode: Steam reads the controller through hidraw. SteamOS's own rules
+# may not cover its ID (2e8a:10c6), so the plugin adds one.
+UDEV_RULE_PATH = "/etc/udev/rules.d/70-switch2-pico.rules"
+UDEV_RULE = (
+    "# Added by the Switch2-Pico Decky plugin: lets Steam read the dongle in SInput mode.\n"
+    'KERNEL=="hidraw*", ATTRS{idVendor}=="2e8a", ATTRS{idProduct}=="10c6", MODE="0660", TAG+="uaccess"\n'
+)
+UDEV_DIRS = ("/etc/udev/rules.d", "/usr/lib/udev/rules.d", "/lib/udev/rules.d", "/run/udev/rules.d")
+
+
+def system_env():
+    """The environment for system tools: without the libraries Decky's
+    bundled Python points LD_LIBRARY_PATH at."""
+    env = dict(os.environ)
+    env.pop("LD_LIBRARY_PATH", None)
+    env.pop("LD_PRELOAD", None)
+    return env
+
+
+def install_udev_rule():
+    """Best effort: add the hidraw rule unless a rule for the ID exists."""
+    try:
+        if _read(UDEV_RULE_PATH) == UDEV_RULE.strip():
+            return
+        for d in UDEV_DIRS:
+            for path in glob.glob(os.path.join(d, "*.rules")):
+                if path == UDEV_RULE_PATH:
+                    continue
+                text = (_read(path) or "").lower()
+                if "2e8a" in text and "10c6" in text:
+                    return
+        os.makedirs(os.path.dirname(UDEV_RULE_PATH), exist_ok=True)
+        with open(UDEV_RULE_PATH, "w") as f:
+            f.write(UDEV_RULE)
+        subprocess.run(["udevadm", "control", "--reload-rules"], timeout=10, check=False, env=system_env())
+        subprocess.run(["udevadm", "trigger", "--subsystem-match=hidraw", "--action=change"], timeout=10, check=False,
+                       env=system_env())
+        decky.logger.info("installed %s", UDEV_RULE_PATH)
+    except Exception as e:
+        decky.logger.warning("udev rule not installed: %s", e)
+
+
 def vcmp(a, b):
     x = [int(p) for p in str(a).split(".")[:3]] + [0, 0, 0]
     y = [int(p) for p in str(b).split(".")[:3]] + [0, 0, 0]
@@ -217,11 +260,16 @@ class Plugin:
         self.plugin_latest_at = 0.0
         self.plugin_notified = None
         self.updating = False
-        self.monitor = asyncio.get_event_loop().create_task(self._monitor())
+        self.decky_enabled = False  # turned the dongle's Decky options on (once per connection)
+        loop = asyncio.get_event_loop()
+        self.monitor = loop.create_task(self._monitor())
+        self.events = loop.create_task(self._events())
+        await asyncio.to_thread(install_udev_rule)
         decky.logger.info("Switch2-Pico plugin started")
 
     async def _unload(self):
         self.monitor.cancel()
+        self.events.cancel()
 
     # ---- Transport -------------------------------------------------------
     async def _request(self, method, path, body=b"", timeout_ms=3000):
@@ -376,7 +424,7 @@ class Plugin:
             decky.logger.info("plugin %s installed; restarting Decky", info.get("version"))
             # Restart once this call has answered.
             asyncio.get_event_loop().call_later(1.0, lambda: subprocess.Popen(
-                ["systemctl", "restart", "plugin_loader"], start_new_session=True))
+                ["systemctl", "restart", "plugin_loader"], start_new_session=True, env=system_env()))
             return {"ok": True, "version": info.get("version")}
         except Exception as e:
             decky.logger.error("plugin update failed: %s", e)
@@ -414,6 +462,52 @@ class Plugin:
                 shutil.copyfile(os.path.join(tmp, rel), target + ".new")
                 os.replace(target + ".new", target)
 
+    async def _enable_decky_options(self):
+        """The plugin is here, so the dongle's configuration page shows the
+        options that need it ("Show additional Decky options")."""
+        if self.decky_enabled:
+            return
+        s = await self._json("GET", "/api/settings")
+        if "decky_options" not in s:
+            self.decky_enabled = True   # firmware without them
+            return
+        if not s["decky_options"]:
+            await self._json("POST", "/api/settings", b"decky_options=1")
+            decky.logger.info("turned on the dongle's Decky options")
+        self.decky_enabled = True
+
+    # ---- Background: button events ------------------------------------------
+    async def _events(self):
+        """Presses of a button mapped to the Quick Access menu, counted by the
+        dongle (GET /api/events), as "qam" events to the frontend, which opens
+        or closes the menu."""
+        seen = None   # the dongle's count at the last poll
+        while True:
+            try:
+                await asyncio.sleep(EVENTS_S)
+                if self.updating:
+                    continue
+                try:
+                    status, data = await self._request("GET", "/api/events", timeout_ms=500)
+                except DongleError:
+                    seen = None
+                    await asyncio.sleep(1.0)   # unplugged, restarting or in use
+                    continue
+                if status != 200:
+                    seen = None
+                    await asyncio.sleep(30.0)  # firmware without events
+                    continue
+                n = json.loads(data).get("qam", 0)
+                # The first poll (and after a restart) only sets the baseline.
+                if seen is not None and n != seen:
+                    await decky.emit("qam")
+                seen = n
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                decky.logger.warning("events: %s", e)
+                await asyncio.sleep(1.0)
+
     # ---- Background: notifications -----------------------------------------
     async def _monitor(self):
         """Profile switches and new firmware or plugin versions, as "notify"
@@ -427,8 +521,10 @@ class Plugin:
                     continue
                 st = await self.get_status()
                 if not st["ok"]:
+                    self.decky_enabled = False
                     continue
                 s = st["status"]
+                await self._enable_decky_options()
                 # Profile switched (C + Home on the controller, or here).
                 cur = (s.get("profile"), s.get("usb_mode"))
                 if running and cur != running:

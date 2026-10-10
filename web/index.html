@@ -224,7 +224,7 @@ body.offline #usb-help{display:flex}
 <div class="wrap">
 <div id="usb-help" class="card">
   <h2>Connect your Switch2-Pico</h2>
-  <p class="note" style="color:var(--fg)">Plug in the dongle, click <b>Connect over USB</b> and choose it. Its name follows its mode: "Pro Controller", "DualSense Edge Wireless Controller", "DualSense Wireless Controller", "Controller" (Xbox 360) or "WUP-028" (GameCube adapter).</p>
+  <p class="note" style="color:var(--fg)">Plug in the dongle, click <b>Connect over USB</b> and choose it. Its name follows its mode: "Pro Controller", "DualSense Edge Wireless Controller", "DualSense Wireless Controller", "Controller" (Xbox 360) "WUP-028" (GameCube adapter) or "Switch2-Pico SInput".</p>
   <button id="usb-connect" class="primary" onclick="usbConnect()">Connect over USB</button>
   <p class="note">Each mode is a separate USB device to the browser, so pick it once per mode; after that the page connects by itself. Needs Chrome, Edge or another Chromium browser. Linux: install the udev rule from the README first. If the dongle is set to appear only while a controller is connected, connect a controller first.</p>
 </div>
@@ -253,7 +253,7 @@ body.offline #usb-help{display:flex}
     </div>
     <div class="profrow">
       <label>Name<input type="text" id="pf-name" maxlength="19" oninput="profName(this.value)"></label>
-      <label>Emulated Controller<select id="pf-mode" onchange="profMode(+this.value)"><option value="-1">None</option><option value="0">Nintendo Switch Pro Controller</option><option value="1">DualSense Edge Wireless Controller</option><option value="2">DualSense Wireless Controller</option><option value="3">Xbox 360 Controller</option><option value="4">Nintendo GameCube Controller Adapter</option></select></label>
+      <label>Emulated Controller<select id="pf-mode" onchange="profMode(+this.value)"><option value="-1">None</option><option value="0">Nintendo Switch Pro Controller</option><option value="1">DualSense Edge Wireless Controller</option><option value="2">DualSense Wireless Controller</option><option value="3">Xbox 360 Controller</option><option value="4">Nintendo GameCube Controller Adapter</option><option value="5">SInput Controller</option></select></label>
       <div class="acts">
         <button id="prof-use" onclick="profUse()">Use this profile</button>
         <button id="prof-dup" onclick="dupStart()">Duplicate…</button>
@@ -298,7 +298,7 @@ body.offline #usb-help{display:flex}
         <p class="note" style="grid-column:1/-1">Try it under Tools → Haptics test.</p>
       </div>
       <div class="panel fields" data-panel="mouse" hidden>
-        <p class="note warn-note" id="mouse-x360" style="grid-column:1/-1" hidden>Mouse Mode is only available for emulated Xbox 360 controllers.</p>
+        <p class="note warn-note" id="mouse-x360" style="grid-column:1/-1" hidden>Mouse Mode is only available for emulated Xbox 360 and SInput controllers.</p>
         <label class="check"><input type="checkbox" id="pf-mouse" onchange="mouseFields()"><span>Mouse Mode</span></label>
         <label>Speed
           <span class="slider"><input type="range" min="10" max="250" id="pf-mouse-speed"><b><span id="v-pf-mouse-speed"></span>%</b></span></label>
@@ -401,6 +401,14 @@ body.offline #usb-help{display:flex}
       <p class="note" id="fw-note"></p>
     </section>
 
+    <section class="card stack" aria-label="Decky plugin">
+      <h2>Decky plugin</h2>
+      <div class="row" style="gap:6px">
+        <label class="check"><input type="checkbox" data-k="decky_options" id="decky-options" onchange="deckyOptionsChanged()"><span>Show additional Decky options</span></label>
+        <span class="help"><button type="button" aria-label="About the Decky options">?</button><span class="tipbox" role="tooltip">These options (such as mapping a button to the <b>Quick Access Menu</b>) need the Switch2-Pico plugin for <b>Decky Loader</b>, and only work on a Steam Deck or other SteamOS device in Game Mode. To get it, install Decky Loader from <b>decky.xyz</b>, then in Decky’s settings turn on <b>Developer mode</b> and choose <b>Install Plugin from URL</b> with <b>https://joshbirnholz.github.io/switch2-pico/decky/Switch2-Pico.zip</b>. Once you use the plugin, this will be turned on for you.</span></span>
+      </div>
+    </section>
+
     <section class="card stack" aria-label="Restart and reset">
       <h2>Restart and reset</h2>
       <div class="row">
@@ -493,7 +501,7 @@ async function usbConnect(){
 // The dongle's USB identity follows its mode (Switch Pro, DualSense Edge,
 // DualSense, Xbox 360); the configuration interface is the same in all of them.
 // Every emulated controller, and the configuration-only device (no controller connected).
-const USB_IDS = [[0x057e,0x2009],[0x054c,0x0df2],[0x054c,0x0ce6],[0x045e,0x028e],[0x057e,0x0337],[0x1209,0x0001]];
+const USB_IDS = [[0x057e,0x2009],[0x054c,0x0df2],[0x054c,0x0ce6],[0x045e,0x028e],[0x057e,0x0337],[0x2e8a,0x10c6],[0x1209,0x0001]];
 const isDongleId = d => USB_IDS.some(([v,p])=>d.vendorId===v&&d.productId===p);
 async function usbExchange(method, path, body){
   const head = te.encode(method+' '+path+'\n');
@@ -661,8 +669,8 @@ let MAP_CTRL=0;
 const CUR=[0,0,0,0,0];
 const TYPE=()=>S.types[MAP_CTRL];
 const prof=()=>TYPE().profiles[CUR[MAP_CTRL]];
-const EMU=['Nintendo Switch Pro Controller','DualSense Edge Wireless Controller','DualSense Wireless Controller','Xbox 360 Controller','Nintendo GameCube Controller Adapter'];
-const SHORT=['Switch Pro','DualSense Edge','DualSense','Xbox 360','GameCube adapter'];
+const EMU=['Nintendo Switch Pro Controller','DualSense Edge Wireless Controller','DualSense Wireless Controller','Xbox 360 Controller','Nintendo GameCube Controller Adapter','SInput Controller'];
+const SHORT=['Switch Pro','DualSense Edge','DualSense','Xbox 360','GameCube adapter','SInput'];
 const BTN=['A','B','X','Y','Up','Down','Left','Right'];
 const BTN_LABEL={A:'A',B:'B',X:'X',Y:'Y',Up:'D-pad up',Down:'D-pad down',Left:'D-pad left',Right:'D-pad right'};
 // Where each button's tile sits (column, row): the D-pad, and the face
@@ -682,7 +690,11 @@ function renderMap(mode){
   MAP_MODE=+mode;
   const M=mapMode(),m=$('map');
   // Outputs a mode lacks come back as null.
-  const opts=M.outputs.map((o,i)=>o===null?'':`<option value="${i}">${o}</option>`).join('');
+  // Outputs that need the Decky plugin: listed only with "Show additional
+  // Decky options" (one already chosen still shows as chosen).
+  const decky=(S.decky_outputs&&S.decky_outputs[M.family==='switch'?'switch':'gp'])||[];
+  const deckyOn=$('decky-options').checked;
+  const opts=M.outputs.map((o,i)=>o===null?'':`<option value="${i}"${decky.includes(i)&&!deckyOn?' hidden':''}>${o}</option>`).join('');
   const cell=(n,lab,a)=>`<label${a?` style="--a:${a}"`:''}>${lab}<select data-map="${n}">${opts}</select></label>`;
   const grp=k=>{const [t,cells,lay]=PAD_GROUPS[k];
     return `<div class="grp g-${k}"><h4>${t}</h4><div class="${lay||''}">${cells.map(c=>cell(...c)).join('')}</div></div>`};
@@ -741,10 +753,11 @@ function stashProfile(){
     P.mouse=$('pf-mouse').checked?1:0;P.mouse_speed=+$('pf-mouse-speed').value;P.mouse_flags=($('pf-mouse-hscroll').checked?0:1)|($('pf-mouse-inv-v').checked?2:0)|($('pf-mouse-inv-h').checked?4:0);
   }
 }
-// Mouse Mode: Xbox 360 mode only (in the other modes Linux's controller
-// drivers claim the mouse interface too; the firmware ignores it there).
+// Mouse Mode: Xbox 360 and SInput modes only (in the other modes Linux's
+// controller drivers claim the mouse interface too; the firmware ignores it there).
+const mouseMode=m=>m===3||m===5;
 function mouseFields(){
-  const P=prof(),x360=!!P&&P.mode===3;
+  const P=prof(),x360=!!P&&mouseMode(P.mode);
   $('mouse-x360').hidden=x360;
   $('pf-mouse').disabled=!x360;
   ['pf-mouse-speed','pf-mouse-hscroll','pf-mouse-inv-v','pf-mouse-inv-h'].forEach(id=>$(id).disabled=!x360||!$('pf-mouse').checked);
@@ -816,7 +829,7 @@ function renderProfile(){
   // doesn't remap them itself (DualSense Edge paddles).
   // The Pro Controller's GL / GR, or a Joy-Con 2 pair's SL / SR (each
   // Joy-Con's own): one setting for all of them.
-  $('remap-row').hidden=!((MAP_CTRL===0||MAP_CTRL===2)&&P&&P.mode!==1);
+  $('remap-row').hidden=!((MAP_CTRL===0||MAP_CTRL===2)&&P&&P.mode!==1&&P.mode!==5);
   const sl=MAP_CTRL===2,ab=sl?['SL','SR']:['GL','GR'];
   $('remap-label').textContent=`Remap ${ab[0]}/${ab[1]} from the controller`;
   $('remap-what').textContent=sl?'SL or SR you are holding':'back buttons';
@@ -954,7 +967,14 @@ function render(){
 }
 // The profile the dongle runs with: the one in use for the controller type
 // that connected last (its USB mode, and the mouse on Joy-Con 2 types).
-function bootOf(S){const t=S.last_ctrl||0,T=S.types[t],P=T.profiles[T.active]||{};return {mode:P.mode,mouse:t>=2&&P.mouse&&P.mode===3?1:0}}
+function bootOf(S){const t=S.last_ctrl||0,T=S.types[t],P=T.profiles[T.active]||{};return {mode:P.mode,mouse:t>=2&&P.mouse&&mouseMode(P.mode)?1:0}}
+// Saved right away, like the rest of Tools (other unsaved edits stay as they are).
+async function deckyOptionsChanged(){
+  const on=$('decky-options').checked?1:0;
+  stashMap();renderMap(MAP_MODE);
+  try{await api('/api/settings',{method:'POST',body:'decky_options='+on});S.decky_options=on}
+  catch(e){$('decky-options').checked=!on;stashMap();renderMap(MAP_MODE)}
+}
 function detachNote(){$('usb-detach-note').hidden=!$('usb-detach').checked}
 async function loadSettings(){S=(await api('/api/settings')).json();render()}
 async function save(){
@@ -1017,7 +1037,7 @@ async function poll(){
     pbtn.title=P.required?'':(S&&S.sync_button?'Turn on "Pair only after pressing Sync" first':'Not available on this board');
     pbtn.textContent=P.open?'Stop pairing':'Pair a controller';
     const L=s.link,ready=L.state==='ready';
-    const MODES={switch_pro:EMU[0],dualsense_edge:EMU[1],dualsense:EMU[2],xbox360:EMU[3],gc_adapter:EMU[4]};
+    const MODES={switch_pro:EMU[0],dualsense_edge:EMU[1],dualsense:EMU[2],xbox360:EMU[3],gc_adapter:EMU[4],sinput:EMU[5]};
     const links=s.links||[],ct=connType(s);
     // A Joy-Con 2 pair with one half connected says which.
     const half=ct===2&&links.length===1?' ('+(links[0].pid===8295?'L':'R')+' only)':'';

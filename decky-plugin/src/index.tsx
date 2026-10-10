@@ -1,7 +1,8 @@
 // Switch2-Pico: quick controls for the dongle in the Quick Access menu.
 import { addEventListener, definePlugin, removeEventListener, toaster } from "@decky/api";
 import {
-  ButtonItem, DialogButton, Field, Focusable, PanelSection, PanelSectionRow, showModal, SliderField, staticClasses, ToggleField,
+  ButtonItem, DialogButton, Field, Focusable, getGamepadNavigationTrees, Navigation, PanelSection, PanelSectionRow, showModal,
+  SliderField, staticClasses, ToggleField,
 } from "@decky/ui";
 import { CSSProperties, ReactNode, useEffect, useRef, useState } from "react";
 import {
@@ -10,7 +11,7 @@ import {
 } from "./api";
 import { InputIcon, OutputIcon, SlotIcon } from "./icons";
 import {
-  CTRL_GC, CtrlType, extraButtons, isJoyCon, MF_INVERT_H, MF_INVERT_V, MF_UP_DOWN_ONLY, MODE_NAMES, MODE_X360, outputText, PIDS,
+  CTRL_GC, CtrlType, extraButtons, isJoyCon, MF_INVERT_H, MF_INVERT_V, MF_UP_DOWN_ONLY, MODE_NAMES, mouseMode, outputText, PIDS,
   Profile, profileForm, quickRemap, Settings, slotLabel, Status, STATUS_MODES,
 } from "./model";
 import { confirm, PairedModal, PickerModal, SOFT_CSS, SoftButton, UpdateModal } from "./modals";
@@ -159,7 +160,7 @@ function Content() {
                 ? "It will reconnect in a few seconds."
                 : busy
                   ? "Another app (the configuration page in a browser) is using it. Close that and try again."
-                  : "Plug the Switch2-Pico dongle into the Steam Deck or dock. With “Only appear on USB while a controller is connected” on, it hides until a controller connects: press a button on your controller."}
+                  : "Plug the Switch2-Pico dongle into the Steam Deck or dock."}
             </div>
           </div>
           </Block>
@@ -202,7 +203,7 @@ function Content() {
         footer={T.numbered ? undefined : "On the controller: hold C + Home, then press the profile's button."}
         onPick={(i) => {
           const np = T.profiles[i]!;
-          const restarts = np.mode !== runMode || (isJoyCon(t) && (np.mode === MODE_X360 && np.mouse ? 1 : 0) !== (st.usb_mouse ? 1 : 0));
+          const restarts = np.mode !== runMode || (isJoyCon(t) && (mouseMode(np.mode) && np.mouse ? 1 : 0) !== (st.usb_mouse ? 1 : 0));
           save(`active_${t}=${i}`, restarts);
         }}
       />,
@@ -233,7 +234,7 @@ function Content() {
   };
 
   const remap = quickRemap(t, mode);
-  const mouseOK = mode === MODE_X360;
+  const mouseOK = mouseMode(mode);
   const flags = P?.mouse_flags ?? 0;
   const setFlag = (bit: number, on: boolean) => P && saveProfile({ ...P, mouse_flags: on ? flags | bit : flags & ~bit });
   const pairing = st.pairing;
@@ -341,7 +342,7 @@ function Content() {
               description={
                 mouseOK
                   ? "Lay a Joy-Con on its side to use it as a mouse. Turning this on or off will restart the dongle."
-                  : "Only available for profiles that emulate an Xbox 360 controller."
+                  : "Only available for profiles that emulate an Xbox 360 or SInput controller."
               }
               disabled={!mouseOK}
               checked={mouseOK && !!P.mouse}
@@ -488,6 +489,22 @@ async function onNotify(kind: string, a: string | number, b: string | number) {
   }
 }
 
+// A button mapped to "Quick Access Menu (Decky)": opens the menu, or closes
+// it when it's open.
+function quickAccessVisible(): boolean {
+  const trees = getGamepadNavigationTrees() ?? [];
+  const win = trees.find((t: any) => t?.id === "QuickAccess-NA")?.m_Root?.m_element?.ownerDocument?.defaultView;
+  return !!win && !win.document.hidden;
+}
+function onQuickAccess() {
+  try {
+    if (quickAccessVisible()) Navigation.CloseSideMenus();
+    else Navigation.OpenQuickAccessMenu();
+  } catch (e) {
+    console.warn("Switch2-Pico: couldn't open the Quick Access menu", e);
+  }
+}
+
 function PluginIcon() {
   return (
     <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -501,6 +518,7 @@ function PluginIcon() {
 
 export default definePlugin(() => {
   const listener = addEventListener<[string, string | number, string | number]>("notify", onNotify);
+  const qam = addEventListener("qam", onQuickAccess);
   return {
     name: "Switch2-Pico",
     titleView: <div className={staticClasses.Title}>Switch2-Pico</div>,
@@ -508,6 +526,7 @@ export default definePlugin(() => {
     icon: <PluginIcon />,
     onDismount() {
       removeEventListener("notify", listener);
+      removeEventListener("qam", qam);
     },
   };
 });

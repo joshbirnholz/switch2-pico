@@ -50,6 +50,7 @@ export interface Settings {
   inputs: string[];
   quick_remap: number;
   usb_detach: number;
+  decky_options?: number;
 }
 
 // Controller types (ctrl_type_t).
@@ -57,17 +58,25 @@ export const CTRL_PRO = 0, CTRL_GC = 1, CTRL_PAIR = 2, CTRL_JC_L = 3, CTRL_JC_R 
 export const isJoyCon = (t: number) => t >= CTRL_PAIR;
 
 // USB modes (usb_mode_t).
-export const MODE_SWITCH = 0, MODE_DS_EDGE = 1, MODE_DS = 2, MODE_X360 = 3, MODE_GC = 4;
+export const MODE_SWITCH = 0, MODE_DS_EDGE = 1, MODE_DS = 2, MODE_X360 = 3, MODE_GC = 4, MODE_SINPUT = 5;
 export const MODE_NAMES = [
   "Nintendo Switch Pro Controller",
   "DualSense Edge Wireless Controller",
   "DualSense Wireless Controller",
   "Xbox 360 Controller",
   "Nintendo GameCube Controller Adapter",
+  "SInput Controller",
 ];
 export const STATUS_MODES: Record<string, number> = {
-  switch_pro: MODE_SWITCH, dualsense_edge: MODE_DS_EDGE, dualsense: MODE_DS, xbox360: MODE_X360, gc_adapter: MODE_GC,
+  switch_pro: MODE_SWITCH, dualsense_edge: MODE_DS_EDGE, dualsense: MODE_DS, xbox360: MODE_X360, gc_adapter: MODE_GC, sinput: MODE_SINPUT,
 };
+// Mouse Mode: emulated Xbox 360 and SInput controllers only.
+export const mouseMode = (mode: number) => mode === MODE_X360 || mode === MODE_SINPUT;
+
+// Outputs the plugin itself carries out: the Quick Access menu
+// (OUT_DECKY_QAM in Switch Pro mode, GP_DECKY_QAM in the others).
+export const OUT_DECKY_QAM = 21, GP_DECKY_QAM = 28;
+export const deckyQam = (mode: number) => (mode === MODE_SWITCH ? OUT_DECKY_QAM : GP_DECKY_QAM);
 
 export const PIDS: Record<number, string> = {
   0x2069: "Nintendo Switch 2 Pro Controller",
@@ -102,9 +111,10 @@ export function extraButtons(t: number): Extra[] {
 }
 
 // Remapping from the controller (C + GL / GR, or SL / SR on a pair): the Pro
-// Controller and a pair, except in DualSense Edge mode (the host remaps those).
+// Controller and a pair, except in DualSense Edge and SInput modes (the host
+// remaps those).
 export function quickRemap(t: number, mode: number): string | null {
-  if (mode === MODE_DS_EDGE) return null;
+  if (mode === MODE_DS_EDGE || mode === MODE_SINPUT) return null;
   if (t === CTRL_PRO) return "GL/GR";
   if (t === CTRL_PAIR) return "SL/SR";
   return null;

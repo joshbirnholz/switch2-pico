@@ -34,10 +34,10 @@ Switch 2 Pro Controller  ──BLE──▶  dongle    ──USB──▶  PC / 
 | HD rumble | The host's Switch 1 HD rumble frames, including the packed multi-sample formats, are decoded and re-encoded for the Switch 2 actuators, left and right separately. |
 | Player LEDs | Follow the player number the host assigns. |
 | Battery | Reported to the host. |
-| USB modes | **Switch Pro Controller** (default; Switch consoles and PCs), **DualSense Edge** (GL, GR and C become its back paddles and Fn button, so Steam Input can map them), **DualSense**, or **Xbox 360 controller**. Each mode has its own button map. |
+| USB modes | **Switch Pro Controller** (default; Switch consoles and PCs), **DualSense Edge** (GL, GR and C become its back paddles and Fn button, so Steam Input can map them), **DualSense**, **Xbox 360 controller**, **GameCube adapter**, or **SInput** (four back paddles, Capture and C as separate buttons in Steam Input, with Nintendo labels, gyro and rumble). Each mode has its own button map. |
 | Nintendo GameCube Controller | Basic support: buttons, sticks, analog triggers acting as L/R past a threshold, and rumble on its motor (strength by switching it on and off every 12 ms, as SDL does). |
 | Joy-Con 2 | A **Joy-Con 2 (L)** and a **Joy-Con 2 (R)** connected together are one controller, **Joy-Con 2 (L/R)**. A single one is held sideways (SL / SR are its shoulders). Each of the three has its own profiles. **Untested on hardware** (see [Joy-Con 2](#joy-con-2)). |
-| Mouse | Mouse Mode: a Joy-Con 2's optical sensor as a USB mouse next to the controller (a profile option, Xbox 360 mode). |
+| Mouse | Mouse Mode: a Joy-Con 2's optical sensor as a USB mouse next to the controller (a profile option, Xbox 360 and SInput modes). |
 | Configuration page | Over **WebUSB** in Chrome/Edge with the dongle plugged in, or (Pico 2 W only) over the dongle's own Wi-Fi from any phone or computer. |
 
 ## Hardware
@@ -168,8 +168,9 @@ and **Invert left / right scrolling** turn either the other way); picked up,
 they are the controller's again. Turning Mouse Mode on or off
 restarts the dongle.
 
-**Xbox 360 mode only.** Mouse Mode works only in profiles that emulate an
-Xbox 360 controller; elsewhere the setting is kept but does nothing (and the
+**Xbox 360 and SInput modes only.** Mouse Mode works only in profiles that
+emulate an Xbox 360 or an SInput controller (no kernel driver claims either
+device as a whole); elsewhere the setting is kept but does nothing (and the
 Joy-Con's buttons all stay the controller's). In the Switch Pro and
 DualSense modes, Linux's driver for that controller (`hid-nintendo`,
 `hid-playstation`) claims every interface of the device, the mouse's too,
@@ -224,8 +225,9 @@ ignored). Change the time or turn it off in the configuration page's
 press another button: GL (GR) now sends what that button sends, and the
 controller ticks. Do the same again to clear it. While C + GL/GR are held,
 nothing reaches the host. Turn it off on the configuration page if you use C
-as a regular button. It is off in DualSense Edge mode, where GL, GR and C are
-the paddles and Fn button that the host's software (e.g. Steam Input) remaps.
+as a regular button. It is off in DualSense Edge and SInput modes, where GL,
+GR and C are the paddles and extra buttons that the host's software (e.g.
+Steam Input) remaps.
 
 **Steam quick access menu on C.** On the configuration page, map C (or any
 button) to *Home+A (Steam quick access)*. A tap then sends Home, then Home + A,
@@ -239,7 +241,7 @@ game.
 Home, then Home + R, Steam's screenshot shortcut (Guide + RB / PS + R1 in the
 other modes). Map Capture (or any button) to it.
 
-### USB modes (DualSense Edge, DualSense, Xbox 360, GameCube adapter)
+### USB modes (DualSense Edge, DualSense, Xbox 360, GameCube adapter, SInput)
 
 Under **Mode** (on each controller tab) the dongle can present itself as:
 
@@ -250,6 +252,31 @@ Under **Mode** (on each controller tab) the dongle can present itself as:
 | DualSense | PCs and games that expect a PlayStation pad | mapped to existing buttons |
 | Xbox 360 controller | anything that only speaks XInput | mapped to existing buttons |
 | GameCube adapter | Switch and Wii U games that take GameCube controllers (Smash), Dolphin / Slippi, Steam | mapped to existing buttons |
+| SInput | PCs (Steam, SDL games); Steam Input gets every extra button, with Nintendo labels | back paddles, Capture, an extra button |
+
+**SInput mode** presents the dongle as an SInput controller ("Switch2-Pico
+SInput", 2E8A:10C6), Hand Held Legend's open USB protocol that SDL (and so
+Steam) reads directly: the dongle tells the host which buttons, sticks,
+triggers and sensors it has, so the four back paddles, Capture and C come
+through as buttons of their own, with Nintendo face labels (B bottom, A
+right), gyro, accelerometer, rumble and player number. Defaults:
+
+| Button | SInput |
+| --- | --- |
+| GL (Pro) / SL of the (L) | left paddle 1 (L4) |
+| SR of the (L) | left paddle 2 (L5) |
+| GR (Pro) / SR of the (R) | right paddle 1 (R4) |
+| SL of the (R) | right paddle 2 (R5) |
+| Capture | Capture |
+| Home | Guide (Home) |
+| C | Misc, an extra button |
+
+(Held upright, a Joy-Con 2 (L)'s SL is above its SR and a Joy-Con 2 (R)'s SR
+above its SL, so the upper ones are paddles 1.) Mouse Mode works in this
+mode too. On Linux, Steam needs to read the device through hidraw: the
+current `tools/99-switch2-pico.rules` allows it (the Decky plugin installs
+such a rule on SteamOS). **Untested on hardware**, and it needs an SDL / Steam
+recent enough to know SInput.
 
 **GameCube adapter mode** presents the dongle as Nintendo's Wii U / Switch
 GameCube controller adapter (WUP-028) with the controller in port 1 (ports
@@ -301,7 +328,7 @@ profile**, **Duplicate…** and **Delete**. Then come its **Buttons**,
 * Changing a profile's emulated controller starts its mapping over from that
   mode's defaults.
 * The GL / GR remap option shows only where it applies (not in DualSense Edge
-  mode, whose back paddles are remapped by the host).
+  or SInput mode, whose back paddles are remapped by the host).
 
 Edits stay unsaved until **Save** in the header; the header says when there
 are unsaved changes.
@@ -335,7 +362,8 @@ dongle in that mode. Default profiles:
 | X | DualSense (DualSense Wireless Controller) |
 | Y | Switch Pro (Nintendo Switch Pro Controller) |
 | D-pad up | GameCube adapter (Nintendo GameCube Controller Adapter) |
-| Other D-pad directions | empty |
+| D-pad down | SInput (SInput Controller; new dongles) |
+| D-pad left / right | empty |
 
 Empty buttons are ignored. Press C + Home again, or wait 5 seconds without
 pressing anything, to leave without a change. While choosing, the host sees no
@@ -348,7 +376,7 @@ IDs; the configuration page still finds it (Linux: install the current
 `tools/99-switch2-pico.rules`, which covers every mode's IDs). The default
 mappings go by position (Nintendo A = Circle / Xbox B, B = Cross / Xbox A, and
 so on). The C + GL/GR + button shortcut changes the profile in use and works
-in every mode except DualSense Edge.
+in every mode except DualSense Edge and SInput.
 
 DualSense modes add these outputs to the map:
 
@@ -402,8 +430,8 @@ With the dongle plugged in, open **https://joshbirnholz.github.io/switch2-pico/*
 in Chrome or Edge (Chrome also offers this link in a notification when the
 dongle is plugged in), click **Connect over USB** and pick the dongle ("Pro
 Controller", "DualSense Edge Wireless Controller", "DualSense Wireless
-Controller" or "Controller", depending on its USB mode; a real controller with
-those names isn't listed).
+Controller", "Controller" or "Switch2-Pico SInput", depending on its USB
+mode; a real controller with those names isn't listed).
 You can also open `web/index.html` from this repository directly (download
 it and double-click it; WebUSB works from a local file too).
 
@@ -458,6 +486,16 @@ controls in the Quick Access menu: pairing, the profile, the extra buttons
 (C, Capture, GL / GR, SL / SR), Joy-Con 2 Mouse Mode, paired controllers,
 reboot and firmware updates. It talks to the dongle over USB like the
 configuration page. See [decky-plugin/README.md](decky-plugin/README.md).
+
+With the plugin, any button can open Steam's **Quick Access menu** (in any
+mode and profile): map it to **Quick Access Menu (Decky)**. The dongle counts
+taps of it (released without another button pressed meanwhile, so C still
+works for C + Home and C + GL) and the plugin opens the menu, or closes it
+when it's open. This
+output only works in SteamOS Game Mode with the plugin running, so the
+configuration page lists it only with **Tools → Decky plugin → Show
+additional Decky options** on; using the plugin turns that on for the
+dongle. (Provisional: this feature may change or go away.)
 
 ## Troubleshooting
 
@@ -535,6 +573,8 @@ where it stopped. Please include it in bug reports.
   2 (L) together with a Joy-Con 2 (R).
 * A single sideways Joy-Con 2's motion isn't turned to match how it's held.
 * No drawing of the Joy-Con 2 on the configuration page yet.
+* SInput mode and the Decky Quick Access menu output are untested on
+  hardware.
 * Going back to firmware older than 0.10.0 resets the settings (pairings
   included): the older firmware doesn't read the larger settings.
 * The Switch 1 report carries three IMU samples per report. The controller

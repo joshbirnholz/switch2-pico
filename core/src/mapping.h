@@ -135,6 +135,15 @@ typedef enum { MACRO_IDLE, MACRO_GUIDE, MACRO_GUIDE_SOUTH, MACRO_GUIDE_R1 } macr
 macro_phase_t mapping_macro_run(mapping_macro_t *m, const uint8_t map[IN_COUNT], uint8_t qam, uint8_t shot,
                                 uint32_t prev, uint32_t raw, uint32_t now_ms);
 bool mapping_macro_busy(const mapping_macro_t *m);
+// Outputs handled outside the host report (OUT_DECKY_QAM / GP_DECKY_QAM):
+// true when a button mapped to `value` is released after a tap, with no
+// other button pressed meanwhile (so C + Home and C + GL still work when C
+// is mapped to it). `prev` / `raw`: the controller's own buttons.
+typedef struct {
+    uint32_t held;      // raw S2 bit of the button being held (0: none)
+    bool spoiled;       // another button was pressed while it was held
+} mapping_tap_t;
+bool mapping_tap(mapping_tap_t *t, const uint8_t map[IN_COUNT], uint8_t value, uint32_t prev, uint32_t raw);
 
 void mapping_pack_stick(const uint16_t v[2], uint8_t out[3]);
 

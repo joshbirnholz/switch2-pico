@@ -10,7 +10,16 @@ menu (Decky Loader), on a Steam Deck or any SteamOS / Linux machine with Decky.
 * **Extra buttons** of the connected controller (C, Capture, GL / GR, the
   Joy-Con 2 SL / SR): pick what each sends from a list with button icons.
 * **Remap from the controller** (C + GL / GR or SL / SR) where available.
-* **Mouse Mode** for Joy-Con 2 (Xbox 360 profiles): on / off, speed, scrolling.
+* **Quick Access menu from the controller**: a button mapped to **Quick
+  Access Menu (Decky)** (here or on the configuration page) opens Steam's
+  Quick Access menu, or closes it when it's open. The plugin asks the dongle
+  for presses every 50 ms, and turns on the dongle's *Show additional Decky
+  options* so the configuration page lists this output. Provisional.
+* **Mouse Mode** for Joy-Con 2 (Xbox 360 and SInput profiles): on / off, speed, scrolling.
+* **SInput mode**: on start the plugin adds a udev rule
+  (`/etc/udev/rules.d/70-switch2-pico.rules`) so Steam can read the dongle
+  through hidraw in SInput mode, unless a rule for its ID (2e8a:10c6) is
+  already there.
 * **Paired controllers**: forget one or all.
 * **Only on USB while a controller is connected** (the dongle's setting).
 * **Reboot dongle**.
