@@ -49,6 +49,9 @@ typedef struct {
 bool platform_supply(platform_supply_t *out);
 // USB power (VBUS) present: 1 yes, 0 no, -1 unknown.
 int platform_usb_power(void);
+// The USB descriptors changed (usb_mode_set_config_only()); called while
+// disconnected. Boards that build them once rebuild them here.
+void platform_usb_rebuild(void);
 size_t platform_saved_log(char *dst, size_t cap);
 
 // Firmware update over the configuration channel (WebUSB / HTTP), without

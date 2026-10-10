@@ -5,6 +5,7 @@
 
 #include "tusb.h"
 
+#include "usb_mode.h"
 #include "webusb.h"
 
 // ---------------------------------------------------------------------------
@@ -54,7 +55,12 @@ bool tud_vendor_control_xfer_cb(uint8_t rhport, uint8_t stage, tusb_control_requ
         return tud_control_xfer(rhport, request, (void *)(uintptr_t)&s_url, s_url.bLength);
     case WEBUSB_VENDOR_REQUEST_MS:
         if (request->wIndex == 7) {
-            return tud_control_xfer(rhport, request, (void *)(uintptr_t)s_ms_os_20, sizeof s_ms_os_20);
+            // The configuration interface is the only one (0) on the
+            // configuration-only device.
+            static uint8_t d[sizeof s_ms_os_20];
+            memcpy(d, s_ms_os_20, sizeof d);
+            d[0x0A + 0x08 + 4] = usb_mode_config_only() ? 0 : WEBUSB_ITF;
+            return tud_control_xfer(rhport, request, d, sizeof d);
         }
         return false;
     default:

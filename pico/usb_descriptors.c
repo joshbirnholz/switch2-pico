@@ -43,11 +43,11 @@ uint8_t const *tud_descriptor_device_cb(void) {
     // then doesn't match class-only interface drivers (usbhid) to any of its
     // interfaces, so with the Joy-Con 2 mouse the class is per interface
     // (xpad still matches: it names the vendor too).
-    uint8_t cls = usb_mode_has_mouse() ? 0x00 : id->device_class;
+    uint8_t cls = usb_mode_has_mouse() || usb_mode_config_only() ? 0x00 : id->device_class;
     s_device.bDeviceClass = s_device.bDeviceSubClass = s_device.bDeviceProtocol = cls;
     // A distinct bcdDevice keeps Windows from reusing a cached "no MS OS
     // descriptor" answer from a genuine controller.
-    s_device.bcdUSB = g_settings.webusb_enabled ? 0x0210 : 0x0200;
+    s_device.bcdUSB = g_settings.webusb_enabled || usb_mode_config_only() ? 0x0210 : 0x0200;
     s_device.bcdDevice = (uint16_t)(id->bcd_device | (g_settings.webusb_enabled ? 1 : 0));
     return (uint8_t const *)&s_device;
 }
@@ -60,7 +60,7 @@ static const uint8_t s_bos[] = {
 };
 
 uint8_t const *tud_descriptor_bos_cb(void) {
-    return g_settings.webusb_enabled ? s_bos : NULL;
+    return g_settings.webusb_enabled || usb_mode_config_only() ? s_bos : NULL;
 }
 
 // ---------------------------------------------------------------------------
@@ -77,19 +77,23 @@ static uint8_t s_config[CONFIG_MAX];
 
 uint8_t const *tud_descriptor_configuration_cb(uint8_t index) {
     (void)index;
-    bool webusb = g_settings.webusb_enabled;
-    // Interface 0: the controller (HID, or XInput in Xbox 360 mode).
+    bool config_only = usb_mode_config_only();
+    bool webusb = g_settings.webusb_enabled || config_only;
     uint16_t n = TUD_CONFIG_DESC_LEN;
-    n += usb_mode_interface_desc(s_config + n, (uint16_t)(sizeof s_config - n), 0, EP_IN, EP_OUT);
-    uint8_t itfs = 1;
+    uint8_t itfs = 0;
+    if (!config_only) {
+        // Interface 0: the controller (HID, or XInput in Xbox 360 mode).
+        n += usb_mode_interface_desc(s_config + n, (uint16_t)(sizeof s_config - n), 0, EP_IN, EP_OUT);
+        itfs = 1;
+    }
     if (webusb) {
-        // Interface 1: WebUSB configuration (vendor class, bulk)
-        const uint8_t vendor[] = {TUD_VENDOR_DESCRIPTOR(1, 4, EP_VENDOR_OUT, EP_VENDOR_IN, 64)};
+        // Interface 1 (0 when it's the only one): WebUSB configuration (vendor class, bulk)
+        const uint8_t vendor[] = {TUD_VENDOR_DESCRIPTOR(itfs, 4, EP_VENDOR_OUT, EP_VENDOR_IN, 64)};
         memcpy(s_config + n, vendor, sizeof vendor);
         n += sizeof vendor;
         itfs++;
     }
-    if (usb_mode_has_mouse()) {
+    if (usb_mode_has_mouse() && !config_only) {
         // Last: the Joy-Con 2 mice, (L) then (R) (the WebUSB interface keeps its number).
         for (uint8_t i = 0; i < USB_MOUSE_COUNT; i++) {
             n += usb_mouse_interface_desc(s_config + n, (uint16_t)(sizeof s_config - n), itfs, (uint8_t)(EP_MOUSE_IN + i));

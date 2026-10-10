@@ -370,7 +370,7 @@ body.offline #usb-help{display:flex}
       <label class="kvrow">Report interval<select data-k="usb_interval" id="usb-interval"><option value="4">4 ms (250 Hz)</option><option value="8">8 ms (125 Hz)</option><option value="16">16 ms (62.5 Hz)</option></select></label>
       <label class="check"><input type="checkbox" data-k="led_follow_host">Player lights follow the host</label>
       <label class="check"><input type="checkbox" data-k="usb_wakeup">Wake a sleeping PC from the controller</label>
-      <label class="check top"><input type="checkbox" data-k="usb_detach" id="usb-detach"><span>Only appear on USB while a controller is connected<span class="hint" style="display:block" id="usb-detach-note" hidden>A controller must be connected to configure the dongle.</span></span></label>
+      <label class="check top"><input type="checkbox" data-k="usb_detach" id="usb-detach"><span>Only appear as a controller while one is connected<span class="hint" style="display:block" id="usb-detach-note" hidden>With no controller connected, the dongle will show up as a “Switch2-Pico” USB device that games don’t see. This page and the Decky plugin can still configure it.</span></span></label>
     </section>
     <details class="card" open>
       <summary>Connection details</summary>
@@ -465,10 +465,18 @@ const USE_HTTP = location.protocol === 'http:' && !['localhost','127.0.0.1'].inc
 let usbDev = null, usbBusy = Promise.resolve();
 const te = new TextEncoder(), td = new TextDecoder();
 
+let usbEpIn = 2, usbEpOut = 2;
 async function usbOpen(dev){
   await dev.open();
   if (dev.configuration === null) await dev.selectConfiguration(1);
-  await dev.claimInterface(1);
+  // The configuration interface: vendor class, not the Xbox 360 one (0x5D);
+  // interface 1 next to the controller, 0 on the configuration-only device.
+  const cfg = dev.configuration.interfaces.find(i => i.alternates[0].interfaceClass === 0xff && i.alternates[0].interfaceSubclass === 0);
+  await dev.claimInterface(cfg ? cfg.interfaceNumber : 1);
+  // Its bulk endpoints (numbers differ between boards and devices).
+  const eps = cfg ? cfg.alternates[0].endpoints : [];
+  usbEpOut = (eps.find(e => e.direction === 'out') || {endpointNumber: 2}).endpointNumber;
+  usbEpIn = (eps.find(e => e.direction === 'in') || {endpointNumber: 2}).endpointNumber;
   usbDev = dev;
   setOnline(true);
   loadSettings(); loadLog();
@@ -484,7 +492,8 @@ async function usbConnect(){
 }
 // The dongle's USB identity follows its mode (Switch Pro, DualSense Edge,
 // DualSense, Xbox 360); the configuration interface is the same in all of them.
-const USB_IDS = [[0x057e,0x2009],[0x054c,0x0df2],[0x054c,0x0ce6],[0x045e,0x028e],[0x057e,0x0337]];
+// Every emulated controller, and the configuration-only device (no controller connected).
+const USB_IDS = [[0x057e,0x2009],[0x054c,0x0df2],[0x054c,0x0ce6],[0x045e,0x028e],[0x057e,0x0337],[0x1209,0x0001]];
 const isDongleId = d => USB_IDS.some(([v,p])=>d.vendorId===v&&d.productId===p);
 async function usbExchange(method, path, body){
   const head = te.encode(method+' '+path+'\n');
@@ -492,10 +501,10 @@ async function usbExchange(method, path, body){
   const payload = new Uint8Array(head.length+data.length); payload.set(head); payload.set(data,head.length);
   const msg = new Uint8Array(8+payload.length);
   msg.set(te.encode('S2PQ'),0); new DataView(msg.buffer).setUint32(4,payload.length,true); msg.set(payload,8);
-  await usbDev.transferOut(2, msg);
+  await usbDev.transferOut(usbEpOut, msg);
   let buf = new Uint8Array(0), need = 12, status = 0;
   while (buf.length < need){
-    const r = await usbDev.transferIn(2, 4096);
+    const r = await usbDev.transferIn(usbEpIn, 4096);
     const chunk = new Uint8Array(r.data.buffer, r.data.byteOffset, r.data.byteLength);
     const nb = new Uint8Array(buf.length+chunk.length); nb.set(buf); nb.set(chunk,buf.length); buf = nb;
     if (buf.length >= 12 && need === 12){
@@ -1024,7 +1033,7 @@ async function poll(){
         :battHTML(L.battery_pct,L.charging?'Charging':'');
       sb.title=two?'Joy-Con 2 batteries':'Controller battery';
     }
-    const su=$('st-usb');su.textContent=s.usb.mounted?'USB: '+(s.profile||MODES[s.usb_mode]||s.usb_mode):'USB not connected';su.title=s.usb.mounted?'Emulating: '+(MODES[s.usb_mode]||s.usb_mode):'';su.className='chip'+(s.usb.mounted?'':' warn');
+    const su=$('st-usb');if(s.usb_config_only){su.textContent='USB: no controller';su.title='Shows up as a configuration-only USB device until a controller connects';su.className='chip'}else{su.textContent=s.usb.mounted?'USB: '+(s.profile||MODES[s.usb_mode]||s.usb_mode):'USB not connected';su.title=s.usb.mounted?'Emulating: '+(MODES[s.usb_mode]||s.usb_mode):'';su.className='chip'+(s.usb.mounted?'':' warn');}
     kv($('ctrl'),[
       ['Type',ready?cname+half:(PIDS[L.pid]||(L.pid?('0x'+L.pid.toString(16)):'—'))],['Serial',L.serial||'—'],['Address',ready?L.addr:'—'],
       ...(links.length>1?links.map(k=>[PIDS[k.pid]||'Controller',`${k.addr} · ${k.state}`+(k.power_level>=0?` · battery level ${k.power_level}/9`:'')+(k.charging?' · charging':'')+` · ${k.report_hz} Hz`]):[]),

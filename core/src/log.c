@@ -33,6 +33,7 @@ __attribute__((weak)) int platform_usb_power(void) {
 
 // Boards without a saved log.
 __attribute__((weak)) void platform_log_flush(void) {}
+__attribute__((weak)) void platform_usb_rebuild(void) {}
 __attribute__((weak)) size_t platform_saved_log(char *dst, size_t cap) {
     (void)dst;
     (void)cap;

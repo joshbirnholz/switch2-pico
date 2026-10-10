@@ -78,14 +78,25 @@ void s2_link_hook_controller_seen(void) {
     tud_remote_wakeup();
 }
 
+// "Only appear as a controller while one is connected": otherwise the
+// dongle is a configuration-only USB device (see usb_mode_set_config_only()).
+// Switching means leaving the bus and coming back as the other device.
+static void usb_present_controller(bool controller) {
+    bool config_only = g_settings.usb_detach_when_idle && !controller;
+    if (config_only == usb_mode_config_only()) return;
+    tud_disconnect();
+    usb_mode_set_config_only(config_only);
+    platform_usb_rebuild();
+    s_usb_reconnect = true;
+    s_usb_reconnect_at = platform_deadline_ms(300);
+    LOG("usb: %s", config_only ? "no controller: configuration-only device" : "controller connected: emulating it");
+}
+
 void s2_link_hook_connection_changed(bool connected) {
     // Save the log around a lost connection right away (it may be followed
     // by a reset or power loss).
     if (!connected) platform_log_flush();
-    if (g_settings.usb_detach_when_idle) {
-        if (connected) tud_connect();
-        else tud_disconnect();
-    }
+    usb_present_controller(connected);
 }
 
 void s2_link_hook_controller_colors(const uint8_t rgb[12]) {
@@ -601,9 +612,11 @@ static void usb_watch_task(void) {
 }
 
 static void maintenance_task(void) {
+    // The setting may change at any time (from the page or the plugin).
+    if (!s_usb_reconnect) usb_present_controller(s2_link_state() == S2_LINK_READY);
     if (s_usb_reconnect && platform_time_reached(s_usb_reconnect_at)) {
         s_usb_reconnect = false;
-        if (!g_settings.usb_detach_when_idle || s2_link_state() == S2_LINK_READY) tud_connect();
+        tud_connect();
     }
     if (s_reboot && platform_time_reached(s_reboot_at)) {
         platform_reboot(s_reboot == 2);

@@ -23,6 +23,12 @@ typedef struct {
 
 usb_mode_t usb_mode_active(void);
 const usb_identity_t *usb_mode_identity(void);
+// "Configuration only": while no controller is connected and the dongle is
+// set to appear as a controller only then, it shows up as a plain USB device
+// with just the configuration interface (so the page and the Decky plugin
+// still reach it). usb_mode_identity() is that device's then.
+void usb_mode_set_config_only(bool on);
+bool usb_mode_config_only(void);
 const char *usb_mode_name(usb_mode_t m);
 void usb_mode_get_status(procon_status_t *out);
 // Whether the USB mouse interface is there (latched at boot with the mode:

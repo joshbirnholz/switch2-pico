@@ -108,7 +108,9 @@ static MouseInterface s_mouse_itf[USB_MOUSE_COUNT];   // (L), (R)
 static Adafruit_USBD_WebUSB s_webusb;
 WEBUSB_URL_DEF(s_landing_page, 1 /* https */, "joshbirnholz.github.io/switch2-pico/");
 
-static void usb_setup(void) {
+// Builds the configuration: the controller (+ WebUSB, + mice), or just the
+// WebUSB interface as the configuration-only device (usb_mode_config_only()).
+static void usb_setup(bool attach) {
     // The core has already enumerated a CDC serial port; replace the whole
     // configuration with ours. Only touch the pull-up once the stack is
     // mounted: toggling it before the USBD peripheral's READY event makes
@@ -123,8 +125,9 @@ static void usb_setup(void) {
     TinyUSBDevice.setManufacturerDescriptor(id->manufacturer);
     TinyUSBDevice.setProductDescriptor(id->product);
     TinyUSBDevice.setSerialDescriptor("000000000001");
-    TinyUSBDevice.addInterface(s_pro_itf);
-    if (g_settings.webusb_enabled) {
+    bool config_only = usb_mode_config_only();
+    if (!config_only) TinyUSBDevice.addInterface(s_pro_itf);
+    if (g_settings.webusb_enabled || config_only) {
         s_webusb.setLandingPage(&s_landing_page);
         s_webusb.setStringDescriptor("Switch2-Pico Config");
         s_webusb.begin();                     // also switches to USB 2.1 for the BOS descriptor
@@ -134,10 +137,16 @@ static void usb_setup(void) {
         TinyUSBDevice.setDeviceVersion(id->bcd_device);
     }
     // Last, so the WebUSB interface keeps its number.
-    if (usb_mode_has_mouse()) {
+    if (usb_mode_has_mouse() && !config_only) {
         for (int i = 0; i < USB_MOUSE_COUNT; i++) TinyUSBDevice.addInterface(s_mouse_itf[i]);
     }
-    if (!g_settings.usb_detach_when_idle) TinyUSBDevice.attach();
+    if (attach) TinyUSBDevice.attach();
+}
+
+// The core switched between the controller and the configuration-only
+// device; it reconnects afterwards.
+extern "C" void platform_usb_rebuild(void) {
+    usb_setup(false);
 }
 
 extern "C" void platform_watchdog_start(void);
@@ -167,7 +176,10 @@ void setup() {
     platform_watchdog_start();
     InternalFS.begin();
     settings_init();
-    usb_setup();
+    // No controller yet: with "only as a controller while one is
+    // connected", start as the configuration-only device.
+    usb_mode_set_config_only(g_settings.usb_detach_when_idle);
+    usb_setup(true);
     app_core_init();
 }
 

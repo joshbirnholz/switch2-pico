@@ -17,6 +17,18 @@ static const usb_identity_t IDENTITIES[USB_MODE_COUNT] = {
     [USB_MODE_GC_ADAPTER] = {0x057E, 0x0337, 0x0100, 0x00, "Nintendo", "WUP-028"},
 };
 
+// pid.codes' test ID (1209:0001): a plain device, nothing binds a driver to it.
+static const usb_identity_t CONFIG_ONLY = {0x1209, 0x0001, 0x0100, 0x00, "Switch2-Pico", "Switch2-Pico (no controller)"};
+static bool s_config_only;
+
+void usb_mode_set_config_only(bool on) {
+    s_config_only = on;
+}
+
+bool usb_mode_config_only(void) {
+    return s_config_only;
+}
+
 static const char *const NAMES[USB_MODE_COUNT] = {
     [USB_MODE_SWITCH_PRO] = "switch_pro",
     [USB_MODE_DUALSENSE_EDGE] = "dualsense_edge",
@@ -42,6 +54,7 @@ bool usb_mode_has_mouse(void) {
 }
 
 const usb_identity_t *usb_mode_identity(void) {
+    if (s_config_only) return &CONFIG_ONLY;
     return &IDENTITIES[usb_mode_active()];
 }
 

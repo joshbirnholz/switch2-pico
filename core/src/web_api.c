@@ -111,6 +111,7 @@ static void api_status(http_response_t *r) {
     // dongle started for (or switched to).
     jb_printf(&j, ",\"profile\":");
     jb_str(&j, settings_active(&g_settings, settings_boot_ctrl(&g_settings))->name);
+    jb_printf(&j, ",\"usb_config_only\":%s", usb_mode_config_only() ? "true" : "false");
     jb_printf(&j, ",\"usb_mouse\":%s,\"ctrl_type\":%u", usb_mode_has_mouse() ? "true" : "false",
               s2_link_ctrl_type());
     platform_supply_t sup;

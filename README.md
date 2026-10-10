@@ -418,8 +418,13 @@ enable it once under **Settings → Pages → Source: GitHub Actions**.
   the configuration interface.
 * The WebUSB interface is a second USB interface next to the controller, and
   is always on.
-* With *Only appear on USB while a controller is connected* (**Device →
-  USB**), connect a controller before opening the page.
+* With *Only appear as a controller while one is connected* (**Device →
+  USB**), the dongle shows up while no controller is connected as a plain
+  USB device, "Switch2-Pico (no controller)" (1209:0001, pid.codes' test
+  ID), with only the configuration interface: games don't see a controller,
+  but this page and the Decky plugin can still configure it. When a
+  controller connects, the dongle leaves USB and comes back as the
+  emulated controller (and the other way round when it disconnects).
 
 ### Over Wi-Fi
 
