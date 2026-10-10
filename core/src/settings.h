@@ -367,9 +367,15 @@ static inline bool settings_mode_has_mouse(uint8_t usb_mode) {
 static inline bool settings_profile_mouse(const profile_t *p, ctrl_type_t t) {
     return ctrl_is_joycon(t) && p->mouse_src != MOUSE_OFF && settings_mode_has_mouse(p->usb_mode);
 }
+// Whether the USB mice are there with a profile: Joy-Con 2 types in those
+// modes, whether Mouse Mode is on or off, so turning it on or off applies
+// right away (no new USB device, no restart).
+static inline bool settings_mouse_interfaces(const profile_t *p, ctrl_type_t t) {
+    return ctrl_is_joycon(t) && settings_mode_has_mouse(p->usb_mode);
+}
 // ... for the profile the dongle starts with (the USB descriptors follow it).
 static inline bool settings_boot_mouse(const settings_t *s) {
-    return settings_profile_mouse(settings_active(s, settings_boot_ctrl(s)), settings_boot_ctrl(s));
+    return settings_mouse_interfaces(settings_active(s, settings_boot_ctrl(s)), settings_boot_ctrl(s));
 }
 // Sticks, triggers and rumble of a controller type's active profile.
 typedef struct {

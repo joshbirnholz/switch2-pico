@@ -165,8 +165,11 @@ middle-clicks and its stick scrolls: up / down scroll up / down, and left /
 right scroll sideways (with **Scroll sideways with left / right** off, left
 scrolls up and right down, as on a Switch 2; **Invert up / down scrolling**
 and **Invert left / right scrolling** turn either the other way); picked up,
-they are the controller's again. Turning Mouse Mode on or off
-restarts the dongle.
+they are the controller's again. In Xbox 360 and SInput profiles of the
+Joy-Con 2 types the dongle always has the two USB mice, so turning Mouse
+Mode on or off (and every other option and mapping) takes effect right
+away; only switching to a profile with another emulated controller restarts
+the dongle.
 
 **Xbox 360 and SInput modes only.** Mouse Mode works only in profiles that
 emulate an Xbox 360 or an SInput controller (no kernel driver claims either

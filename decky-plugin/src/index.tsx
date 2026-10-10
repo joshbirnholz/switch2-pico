@@ -124,7 +124,7 @@ function Content() {
     return () => clearInterval(id);
   }, []);
 
-  // Settings changes; a change of USB mode (or Mouse Mode) restarts the dongle.
+  // Settings changes, applied right away; only a change of USB mode restarts the dongle.
   const save = async (form: string, restarts = false) => {
     if (restarts) setRestarting(true);
     const r = await setSettings(form);
@@ -203,7 +203,7 @@ function Content() {
         footer={T.numbered ? undefined : "On the controller: hold C + Home, then press the profile's button."}
         onPick={(i) => {
           const np = T.profiles[i]!;
-          const restarts = np.mode !== runMode || (isJoyCon(t) && (mouseMode(np.mode) && np.mouse ? 1 : 0) !== (st.usb_mouse ? 1 : 0));
+          const restarts = np.mode !== runMode || (isJoyCon(t) && mouseMode(np.mode)) !== st.usb_mouse;
           save(`active_${t}=${i}`, restarts);
         }}
       />,
@@ -341,12 +341,12 @@ function Content() {
               label="Mouse Mode"
               description={
                 mouseOK
-                  ? "Lay a Joy-Con on its side to use it as a mouse. Turning this on or off will restart the dongle."
+                  ? "Lay a Joy-Con on its side to use it as a mouse."
                   : "Only available for profiles that emulate an Xbox 360 or SInput controller."
               }
               disabled={!mouseOK}
               checked={mouseOK && !!P.mouse}
-              onChange={(v) => saveProfile({ ...P, mouse: v ? 1 : 0, mouse_speed: P.mouse_speed || 100 }, true)}
+              onChange={(v) => saveProfile({ ...P, mouse: v ? 1 : 0, mouse_speed: P.mouse_speed || 100 }, !st.usb_mouse)}
             />
           </PanelSectionRow>
           {mouseOK && !!P.mouse && (

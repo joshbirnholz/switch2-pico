@@ -1154,8 +1154,13 @@ static void test_sinput(void) {
     settings_default_profile_for(CTRL_JOYCON_PAIR, USB_MODE_SINPUT, &pr);
     pr.mouse_src = MOUSE_ON;
     CHECK(settings_profile_mouse(&pr, CTRL_JOYCON_PAIR));
+    // The mice are there with Mouse Mode off too, so it toggles without a restart.
+    pr.mouse_src = MOUSE_OFF;
+    CHECK(!settings_profile_mouse(&pr, CTRL_JOYCON_PAIR) && settings_mouse_interfaces(&pr, CTRL_JOYCON_PAIR));
+    CHECK(!settings_mouse_interfaces(&pr, CTRL_PRO));
+    pr.mouse_src = MOUSE_ON;
     pr.usb_mode = USB_MODE_DUALSENSE;
-    CHECK(!settings_profile_mouse(&pr, CTRL_JOYCON_PAIR));
+    CHECK(!settings_profile_mouse(&pr, CTRL_JOYCON_PAIR) && !settings_mouse_interfaces(&pr, CTRL_JOYCON_PAIR));
 }
 
 int main(void) {

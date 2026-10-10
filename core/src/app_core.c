@@ -174,7 +174,7 @@ static void mode_select_step(uint32_t raw) {
             LOG("profile select: already %s", p->name);
             s2_link_haptic(S2_HAPTIC_TICK);
             s2_link_set_led_override(-1);
-        } else if (p->usb_mode == usb_mode_active() && settings_profile_mouse(p, type) == usb_mode_has_mouse()) {
+        } else if (p->usb_mode == usb_mode_active() && settings_mouse_interfaces(p, type) == usb_mode_has_mouse()) {
             // Same USB device: only the map and options change, right away.
             LOG("profile select: %s", p->name);
             profiles->active = chosen;
@@ -213,9 +213,9 @@ bool app_controller_type(ctrl_type_t t) {
         g_settings.last_ctrl = (uint8_t)t;
         const profile_t *p = settings_active(&g_settings, t);
         uint8_t m = p->usb_mode;
-        if (m != usb_mode_active() || settings_profile_mouse(p, t) != usb_mode_has_mouse()) {
+        if (m != usb_mode_active() || settings_mouse_interfaces(p, t) != usb_mode_has_mouse()) {
             LOG("usb: %s: its profile is %s%s, restarting", ctrl_type_name(t), usb_mode_name((usb_mode_t)m),
-                settings_profile_mouse(p, t) ? " with the mouse" : "");
+                settings_mouse_interfaces(p, t) ? " with the mice" : "");
             restarting = true;
             settings_save_now();
             app_request_reboot(false);

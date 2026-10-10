@@ -488,7 +488,7 @@ static void api_settings_post(const http_request_t *req, http_response_t *r) {
         // The host must see a different device: save and restart.
         settings_save_now();
         LOG("web: USB mode -> %s%s, restarting", usb_mode_name((usb_mode_t)settings_boot_usb_mode(&s)),
-            settings_boot_mouse(&s) ? " with the mouse" : "");
+            settings_boot_mouse(&s) ? " with the mice" : "");
         app_request_reboot(false);
     } else {
         settings_save_later();
