@@ -399,6 +399,14 @@ class Plugin:
                 os.makedirs(os.path.dirname(path), exist_ok=True)
                 with z.open(name) as src, open(path, "wb") as out:
                     shutil.copyfileobj(src, out)
+            # Decky leaves plugin folders read-only: writable again first
+            # (as other self-updating plugins do).
+            for root, dirs, files in os.walk(dest):
+                for n in [root] + [os.path.join(root, f) for f in files]:
+                    try:
+                        os.chmod(n, os.stat(n).st_mode | 0o200)
+                    except OSError:
+                        pass
             # Everything extracted: now swap each file in place.
             for rel in members:
                 target = os.path.join(dest, rel)
