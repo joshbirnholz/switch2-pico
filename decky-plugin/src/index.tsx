@@ -266,7 +266,7 @@ function Content() {
                 ))}
               </span>
             </div>
-            <div style={hint}>{MODE_NAMES[runMode]}</div>
+            {ready.length > 0 && <div style={hint}>{MODE_NAMES[runMode]}</div>}
           </div>
           </Block>
         </PanelSectionRow>
@@ -299,7 +299,7 @@ function Content() {
         {pluginBanner}
       </PanelSection>
 
-      {T && P && S && (
+      {T && P && S && ready.length > 0 && (
         <PanelSection title="Extra buttons">
           {extraButtons(t).map((e) => {
             const o = P.map[e.input];
@@ -333,7 +333,7 @@ function Content() {
         </PanelSection>
       )}
 
-      {T && P && isJoyCon(t) && (
+      {T && P && isJoyCon(t) && ready.length > 0 && (
         <PanelSection title="Mouse Mode">
           <PanelSectionRow>
             <ToggleField
