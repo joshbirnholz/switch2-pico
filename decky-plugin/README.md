@@ -4,11 +4,11 @@ Quick controls for the Switch2-Pico dongle from the Steam Deck's Quick Access
 menu (Decky Loader), on a Steam Deck or any SteamOS / Linux machine with Decky.
 
 * Status of the connected controller (battery icons, what the dongle emulates).
-* **Pair a controller**.
 * **Profile** for the connected controller type (pop-up list with the
   profile's button and emulated controller).
-* **Extra buttons** of the connected controller (C, Capture, GL / GR, the
-  Joy-Con 2 SL / SR): pick what each sends from a list with button icons.
+* **Button mapping** for the connected controller: its extra buttons
+  (Capture, C, GL / GR, the Joy-Con 2 SL / SR) in the panel, and **Show all**
+  for every button; pick what each sends from a list with button icons.
 * **Remap from the controller** (C + GL / GR or SL / SR) where available.
 * **Quick Access menu from the controller**: a button mapped to **Quick
   Access Menu (Decky)** (here or on the configuration page) opens Steam's
@@ -20,7 +20,7 @@ menu (Decky Loader), on a Steam Deck or any SteamOS / Linux machine with Decky.
   (`/etc/udev/rules.d/70-switch2-pico.rules`) so Steam can read the dongle
   through hidraw in SInput mode, unless a rule for its ID (2e8a:10c6) is
   already there.
-* **Paired controllers**: forget one or all.
+* **Paired controllers**: pair a controller, forget one or all.
 * **Reboot dongle**.
 * **Firmware updates**: checks GitHub on start and once a day, and installs
   the update over USB.

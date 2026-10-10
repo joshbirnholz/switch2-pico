@@ -4,7 +4,8 @@ import { addEventListener, removeEventListener } from "@decky/api";
 import { ConfirmModal, DialogButton, Focusable, ModalRoot, ProgressBar, showModal } from "@decky/ui";
 import { ReactNode, useEffect, useState } from "react";
 import { action, getStatus, installUpdate } from "./api";
-import { PIDS, Status } from "./model";
+import { Extra, PIDS, Status } from "./model";
+import { InputIcon, OutputIcon } from "./icons";
 
 const row: React.CSSProperties = {
   display: "flex",
@@ -91,13 +92,55 @@ export function PickerModal(props: {
   );
 }
 
+// "Show all": every button of the controller with what it sends; each opens
+// the list of outputs (onPick), and the list here follows the choices.
+export function AllButtonsModal(props: {
+  title: string;
+  subtitle: string;
+  buttons: Extra[];
+  map: number[];
+  mode: number;
+  onPick(e: Extra, current: number[], onPicked: (map: number[]) => void): void;
+  closeModal?(): void;
+}) {
+  const [map, setMap] = useState(props.map);
+  return (
+    <ModalRoot closeModal={props.closeModal}>
+      <style>{SOFT_CSS}</style>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <div style={{ fontSize: 22, fontWeight: 700 }}>{props.title}</div>
+        <DialogButton style={{ width: "auto", minWidth: 0, padding: "0 16px", height: 34 }} onClick={() => props.closeModal?.()}>
+          Back
+        </DialogButton>
+      </div>
+      <div style={{ ...sub, marginBottom: 12 }}>{props.subtitle}</div>
+      <Focusable flow-children="column" style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: "60vh", overflowY: "auto" }}>
+        {props.buttons.map((e) => (
+          <SoftButton key={e.input} style={row} onActivate={() => props.onPick(e, map, setMap)}>
+            <span style={iconBox}>
+              <InputIcon label={e.label} />
+            </span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 600 }}>{e.title ?? e.label}</div>
+              {e.side && <div style={sub}>{e.side}</div>}
+            </span>
+            <span style={iconBox}>
+              <OutputIcon mode={props.mode} idx={map[e.input]} />
+            </span>
+          </SoftButton>
+        ))}
+      </Focusable>
+    </ModalRoot>
+  );
+}
+
 export function confirm(title: string, description: string, ok: string, onOK: () => void, destructive = false) {
   showModal(
     <ConfirmModal strTitle={title} strDescription={description} strOKButtonText={ok} bDestructiveWarning={destructive} onOK={onOK} />,
   );
 }
 
-// Remembered controllers, each with Forget, and Forget all.
+// Pairing, the remembered controllers, each with Forget, and Forget all.
 export function PairedModal(props: { closeModal?(): void; onChange(): void }) {
   const [st, setSt] = useState<Status | null>(null);
   const reload = async () => {
@@ -105,7 +148,10 @@ export function PairedModal(props: { closeModal?(): void; onChange(): void }) {
     if (r.ok && r.status) setSt(r.status);
   };
   useEffect(() => {
+    // While open: the pairing window and newly paired controllers.
     reload();
+    const id = setInterval(reload, 1000);
+    return () => clearInterval(id);
   }, []);
   const forget = (addr: string | null) =>
     confirm(
@@ -130,6 +176,19 @@ export function PairedModal(props: { closeModal?(): void; onChange(): void }) {
         </DialogButton>
       </div>
       <Focusable style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        {st?.pairing.required && (
+          <DialogButton
+            style={{ marginBottom: 8 }}
+            onClick={async () => {
+              await action("pair");
+              await reload();
+              props.onChange();
+            }}
+          >
+            {st.pairing.open ? "Stop pairing" : "Pair a controller"}
+          </DialogButton>
+        )}
+        {st?.pairing.open && <div style={{ ...sub, marginBottom: 8 }}>Hold the Sync button on the controller.</div>}
         {!list.length && <div style={sub}>None yet.</div>}
         {list.map((b) => (
           <Focusable key={b.addr} style={{ ...row, justifyContent: "space-between", background: "#1f252e", borderRadius: 4 }}>

@@ -126,9 +126,15 @@ export function OutputIcon({ mode, idx }: { mode: number; idx: number }) {
   return <Text text="?" />;
 }
 
-// The controller's own extra buttons (C, Capture, GL / GR, SL / SR).
+// The controller's own buttons, by their label (see model.ts allButtons()).
 export function InputIcon({ label }: { label: string }) {
   if (label === "Capture") return <Capture />;
+  const dir = ["Up", "Down", "Left", "Right"].indexOf(label);
+  if (dir >= 0) return <K name={"switch_dpad_" + DIRS[dir]} />;
+  if (label === "LStick") return <K name="switch_stick_l_press" />;
+  if (label === "RStick") return <K name="switch_stick_r_press" />;
+  if (label === "Z") return <K name="gamecube_button_z" />;
+  if (label === "Start") return <K name="gamecube_button_start" />;
   return <K name={"switch_button_" + label.toLowerCase()} />;
 }
 

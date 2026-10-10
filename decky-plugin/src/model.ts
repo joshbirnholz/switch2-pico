@@ -90,16 +90,16 @@ export const IN_CAPTURE = 13, IN_GL = 18, IN_GR = 19, IN_C = 20, IN_SL_R = 21, I
 // A controller's extra buttons: the input, its label, and which Joy-Con it is
 // on. SL / SR top to bottom as on the Joy-Con: the (L)'s SL above its SR, the
 // (R)'s SR above its SL.
-export interface Extra { input: number; label: string; side?: string }
+export interface Extra { input: number; label: string; side?: string; title?: string }
 export function extraButtons(t: number): Extra[] {
   switch (t) {
     case CTRL_PRO:
-      return [{ input: IN_GL, label: "GL" }, { input: IN_GR, label: "GR" }, { input: IN_C, label: "C" }, { input: IN_CAPTURE, label: "Capture" }];
+      return [{ input: IN_GL, label: "GL" }, { input: IN_GR, label: "GR" }, { input: IN_CAPTURE, label: "Capture" }, { input: IN_C, label: "C" }];
     case CTRL_GC:
-      return [{ input: IN_C, label: "C" }, { input: IN_CAPTURE, label: "Capture" }];
+      return [{ input: IN_CAPTURE, label: "Capture" }, { input: IN_C, label: "C" }];
     case CTRL_PAIR:
       return [
-        { input: IN_C, label: "C" }, { input: IN_CAPTURE, label: "Capture" },
+        { input: IN_CAPTURE, label: "Capture" }, { input: IN_C, label: "C" },
         { input: IN_GL, label: "SL", side: "Joy-Con 2 (L)" }, { input: IN_GR, label: "SR", side: "Joy-Con 2 (L)" },
         { input: IN_SR_R, label: "SR", side: "Joy-Con 2 (R)" }, { input: IN_SL_R, label: "SL", side: "Joy-Con 2 (R)" },
       ];
@@ -109,6 +109,30 @@ export function extraButtons(t: number): Extra[] {
       return [{ input: IN_C, label: "C" }, { input: IN_GR, label: "SR" }, { input: IN_GL, label: "SL" }];
   }
   return [];
+}
+
+// Every button of a controller type, for "Show all": what the configuration
+// page shows for it (core/src/mapping.c mapping_type_inputs()), roughly in
+// the order they sit on the controller; then its extra buttons.
+const IN_LABELS = ["A", "B", "X", "Y", "L", "R", "ZL", "ZR", "Minus", "Plus", "LStick", "RStick", "Home", "Capture",
+  "Up", "Down", "Left", "Right"];
+const MAIN_ORDER = [0, 1, 2, 3, 14, 15, 16, 17, 4, 6, 5, 7, 8, 9, 10, 11, 12];
+const ABSENT: Record<number, number[]> = {
+  [CTRL_GC]: [8, 10, 11],                                // Minus, stick clicks
+  [CTRL_JC_L]: [0, 1, 2, 3, 5, 7, 9, 11, 12],            // the (R)'s half
+  [CTRL_JC_R]: [14, 15, 16, 17, 4, 6, 8, 10, 13],        // the (L)'s half
+};
+export function allButtons(t: number): Extra[] {
+  const absent = new Set(ABSENT[t] ?? []);
+  const main: Extra[] = MAIN_ORDER.filter((i) => !absent.has(i)).map((i) => {
+    let label = IN_LABELS[i];
+    if (t === CTRL_GC && label === "ZR") label = "Z";
+    if (t === CTRL_GC && label === "Plus") label = "Start";
+    const title = label === "LStick" ? "Left stick press" : label === "RStick" ? "Right stick press" : undefined;
+    return { input: i, label, title };
+  });
+  // Then the extra buttons (Capture, C, GL / GR, SL / SR), as listed in the panel.
+  return [...main, ...extraButtons(t)];
 }
 
 // Remapping from the controller (C + GL / GR, or SL / SR on a pair): the Pro

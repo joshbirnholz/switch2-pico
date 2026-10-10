@@ -502,9 +502,8 @@ On the page you can:
 ### Steam Deck / SteamOS: Decky plugin
 
 `decky-plugin/` is a [Decky Loader](https://decky.xyz) plugin with quick
-controls in the Quick Access menu: pairing, the profile, the extra buttons
-(C, Capture, GL / GR, SL / SR), Joy-Con 2 Mouse Mode, paired controllers,
-reboot and firmware updates. It talks to the dongle over USB like the
+controls in the Quick Access menu: the profile, button mapping, Joy-Con 2
+Mouse Mode, pairing and paired controllers, reboot and firmware updates. It talks to the dongle over USB like the
 configuration page. See [decky-plugin/README.md](decky-plugin/README.md).
 
 With the plugin, any button can open Steam's **Quick Access menu** (in any
@@ -513,7 +512,7 @@ taps of it (released without another button pressed meanwhile, so C still
 works for C + Home and C + GL) and the plugin opens the menu, or closes it
 when it's open. This
 output only works in SteamOS Game Mode with the plugin running, so the
-configuration page lists it only with **Tools → Decky plugin → Show
+configuration page lists it only with **Device → Decky plugin → Show
 additional Decky options** on; using the plugin turns that on for the
 dongle. (Provisional: this feature may change or go away.)
 

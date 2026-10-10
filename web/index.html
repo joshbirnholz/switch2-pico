@@ -371,6 +371,13 @@ body.offline #usb-help{display:flex}
       <label class="check"><input type="checkbox" data-k="led_follow_host">Player lights follow the host</label>
       <label class="check"><input type="checkbox" data-k="usb_wakeup">Wake a sleeping PC from the controller</label>
     </section>
+    <section class="card stack" aria-label="Decky plugin" data-live>
+      <h2>Decky plugin</h2>
+      <div class="row" style="gap:6px">
+        <label class="check"><input type="checkbox" data-k="decky_options" id="decky-options" onchange="deckyOptionsChanged()"><span>Show additional Decky options</span></label>
+        <span class="help"><button type="button" aria-label="About the Decky options">?</button><span class="tipbox" role="tooltip">These options (such as mapping a button to the <b>Quick Access Menu</b>) need the Switch2-Pico plugin for <b>Decky Loader</b>, and only work on a Steam Deck or other SteamOS device in Game Mode. To get it, install Decky Loader from <b>decky.xyz</b>, then in Decky’s settings turn on <b>Developer mode</b> and choose <b>Install Plugin from URL</b> with <b>https://joshbirnholz.github.io/switch2-pico/decky/Switch2-Pico.zip</b>. Once you use the plugin, this will be turned on for you.</span></span>
+      </div>
+    </section>
     <details class="card" open>
       <summary>Connection details</summary>
       <dl class="kv" id="ctrl"></dl>
@@ -398,14 +405,6 @@ body.offline #usb-help{display:flex}
         </div>
       </div>
       <p class="note" id="fw-note"></p>
-    </section>
-
-    <section class="card stack" aria-label="Decky plugin">
-      <h2>Decky plugin</h2>
-      <div class="row" style="gap:6px">
-        <label class="check"><input type="checkbox" data-k="decky_options" id="decky-options" onchange="deckyOptionsChanged()"><span>Show additional Decky options</span></label>
-        <span class="help"><button type="button" aria-label="About the Decky options">?</button><span class="tipbox" role="tooltip">These options (such as mapping a button to the <b>Quick Access Menu</b>) need the Switch2-Pico plugin for <b>Decky Loader</b>, and only work on a Steam Deck or other SteamOS device in Game Mode. To get it, install Decky Loader from <b>decky.xyz</b>, then in Decky’s settings turn on <b>Developer mode</b> and choose <b>Install Plugin from URL</b> with <b>https://joshbirnholz.github.io/switch2-pico/decky/Switch2-Pico.zip</b>. Once you use the plugin, this will be turned on for you.</span></span>
-      </div>
     </section>
 
     <section class="card stack" aria-label="Restart and reset">
@@ -967,7 +966,7 @@ function render(){
 // The profile the dongle runs with: the one in use for the controller type
 // that connected last (its USB mode, and the mouse on Joy-Con 2 types).
 function bootOf(S){const t=S.last_ctrl||0,T=S.types[t],P=T.profiles[T.active]||{};return {mode:P.mode,mouse:t>=2&&mouseMode(P.mode)?1:0}}
-// Saved right away, like the rest of Tools (other unsaved edits stay as they are).
+// Saved right away, without Save (other unsaved edits stay as they are).
 async function deckyOptionsChanged(){
   const on=$('decky-options').checked?1:0;
   stashMap();renderMap(MAP_MODE);
@@ -1232,8 +1231,10 @@ buildStatic();
 showSection(recall('sec','ctrl'));showSub(recall('sub','buttons'));
 // Any edit in Controller or Device is unsaved until Save.
 document.querySelectorAll('[data-page="ctrl"],[data-page="dev"]').forEach(pg=>{
-  pg.addEventListener('input',e=>{if(e.target.matches('input,select')&&S)setDirty(true)});
-  pg.addEventListener('change',e=>{if(e.target.matches('input,select')&&S)setDirty(true)});
+  // (Except cards marked data-live, which save by themselves.)
+  const edit=e=>e.target.matches('input,select')&&!e.target.closest('[data-live]')&&S;
+  pg.addEventListener('input',e=>{if(edit(e))setDirty(true)});
+  pg.addEventListener('change',e=>{if(edit(e))setDirty(true)});
 });
 window.addEventListener('beforeunload',e=>{if(DIRTY){e.preventDefault();e.returnValue=''}});
 setInterval(()=>{if(SEC==='tools'&&$('log-follow').checked&&LOG_VIEW==='now'&&!document.hidden)loadLog().catch(()=>{})},2000);

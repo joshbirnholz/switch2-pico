@@ -11,10 +11,10 @@ import {
 } from "./api";
 import { InputIcon, OutputIcon, SlotIcon } from "./icons";
 import {
-  CTRL_GC, CtrlType, extraButtons, isJoyCon, MF_INVERT_H, MF_INVERT_V, MF_UP_DOWN_ONLY, MODE_NAMES, mouseMode, outputText, PIDS,
+  allButtons, CTRL_GC, CtrlType, Extra, extraButtons, isJoyCon, MF_INVERT_H, MF_INVERT_V, MF_UP_DOWN_ONLY, MODE_NAMES, mouseMode, outputText, PIDS,
   Profile, profileForm, quickRemap, Settings, slotLabel, Status, STATUS_MODES,
 } from "./model";
-import { confirm, PairedModal, PickerModal, SOFT_CSS, SoftButton, UpdateModal } from "./modals";
+import { AllButtonsModal, confirm, PairedModal, PickerModal, SOFT_CSS, SoftButton, UpdateModal } from "./modals";
 
 const hint: CSSProperties = { fontSize: 12.5, color: "#a3adba", lineHeight: 1.35 };
 // Everything stays within the panel's width (no horizontal scrolling).
@@ -210,25 +210,43 @@ function Content() {
     );
   };
 
-  const pickOutput = (input: number, label: string, side?: string) => {
+  // What `input` sends: a list of the mode's outputs. `current` is the map
+  // as it is now (the "Show all" list keeps its own while it is open).
+  const pickOutput = (e: Extra, current: number[], onPicked?: (map: number[]) => void) => {
     if (!S || !P) return;
     const outs = S.modes[mode].outputs;
+    const label = e.title ?? e.label;
     showModal(
       <PickerModal
-        title={side ? `${label} · ${side}` : label}
+        title={e.side ? `${label} · ${e.side}` : label}
         subtitle={`${P.name} · ${MODE_NAMES[mode]}`}
         items={outs
           .map((name, i) => ({ name, i }))
           .filter(({ name }) => name !== null)
           .map(({ name, i }) => {
             const tx = outputText(name!);
-            return { key: i, icon: <OutputIcon mode={mode} idx={i} />, title: tx.title, desc: tx.desc, selected: P.map[input] === i };
+            return { key: i, icon: <OutputIcon mode={mode} idx={i} />, title: tx.title, desc: tx.desc, selected: current[e.input] === i };
           })}
         onPick={(o) => {
-          const map = P.map.slice();
-          map[input] = o;
+          const map = current.slice();
+          map[e.input] = o;
           saveProfile({ ...P, map });
+          onPicked?.(map);
         }}
+      />,
+    );
+  };
+
+  const showAll = () => {
+    if (!P) return;
+    showModal(
+      <AllButtonsModal
+        title="Button mapping"
+        subtitle={`${P.name} · ${MODE_NAMES[mode]}`}
+        buttons={allButtons(t)}
+        map={P.map}
+        mode={mode}
+        onPick={pickOutput}
       />,
     );
   };
@@ -237,21 +255,11 @@ function Content() {
   const mouseOK = mouseMode(mode);
   const flags = P?.mouse_flags ?? 0;
   const setFlag = (bit: number, on: boolean) => P && saveProfile({ ...P, mouse_flags: on ? flags | bit : flags & ~bit });
-  const pairing = st.pairing;
 
   return (
     <>
       <style>{SOFT_CSS}</style>
       <PanelSection>
-        {/* First: something focusable at the very top, so moving up with the
-            D-pad scrolls the panel back to its top. */}
-        {pairing.required && (
-          <PanelSectionRow>
-            <ButtonItem layout="below" onClick={() => action("pair").then(poll)}>
-              {pairing.open ? "Stop pairing" : "Pair a controller"}
-            </ButtonItem>
-          </PanelSectionRow>
-        )}
         <PanelSectionRow>
           <Block>
           <div style={{ ...card, background: "#1f252e", gap: 4 }}>
@@ -301,7 +309,7 @@ function Content() {
       </PanelSection>
 
       {T && P && S && ready.length > 0 && (
-        <PanelSection title="Extra buttons">
+        <PanelSection title="Button mapping">
           {extraButtons(t).map((e) => {
             const o = P.map[e.input];
             return (
@@ -314,13 +322,16 @@ function Content() {
                     </span>
                   }
                 >
-                  <SoftButton style={small} onActivate={() => pickOutput(e.input, e.label, e.side)}>
+                  <SoftButton style={small} onActivate={() => pickOutput(e, P.map)}>
                     <OutputIcon mode={mode} idx={o} />
                   </SoftButton>
                 </Row>
               </PanelSectionRow>
             );
           })}
+          <PanelSectionRow>
+            <ButtonItem layout="below" onClick={showAll}>Show all</ButtonItem>
+          </PanelSectionRow>
           {remap && (
             <PanelSectionRow>
               <ToggleField
