@@ -22,6 +22,7 @@ import glob
 import json
 import os
 import shutil
+import ssl
 import struct
 import subprocess
 import tempfile
@@ -172,9 +173,29 @@ def vcmp(a, b):
     return (x[:3] > y[:3]) - (x[:3] < y[:3])
 
 
+# Decky's bundled Python doesn't find the system's root certificates by
+# itself ("certificate verify failed"): point it at the system bundle.
+CA_FILES = (
+    "/etc/ssl/certs/ca-certificates.crt",   # SteamOS / Arch, Debian
+    "/etc/ca-certificates/extracted/tls-ca-bundle.pem",
+    "/etc/pki/tls/certs/ca-bundle.crt",     # Fedora
+    "/etc/ssl/cert.pem",
+)
+
+
+def _ssl_context():
+    for path in CA_FILES:
+        if os.path.exists(path):
+            return ssl.create_default_context(cafile=path)
+    return ssl.create_default_context()
+
+
+SSL_CONTEXT = _ssl_context()
+
+
 def http_get(url, timeout=20):
     req = urllib.request.Request(url, headers={"Cache-Control": "no-cache", "User-Agent": "switch2-pico-decky"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    with urllib.request.urlopen(req, timeout=timeout, context=SSL_CONTEXT) as r:
         return r.read()
 
 

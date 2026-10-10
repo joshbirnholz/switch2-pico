@@ -265,14 +265,15 @@ function Content() {
         <PanelSectionRow>
           <Block>
           <div style={{ ...card, background: "#1f252e", gap: 4 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <span style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 600, minWidth: 0 }}>
-                <span style={{ width: 8, height: 8, borderRadius: 4, background: ready.length ? "#3ecf6e" : "#5c6470", flex: "none" }} />
+            <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 600, minWidth: 0 }}>
+              <span style={{ width: 8, height: 8, borderRadius: 4, background: ready.length ? "#3ecf6e" : "#5c6470", flex: "none" }} />
+              <span style={{ minWidth: 0 }}>
                 {ready.length ? T?.name ?? PIDS[ready[0].pid] : "No controller connected"}
-              </span>
-              <span style={{ display: "flex", gap: 10, fontSize: 14, flex: "none" }}>
+                {/* The battery icons right after the name. */}
                 {ready.map((k) => (
-                  <Battery key={k.addr} pct={k.battery_pct} label={ready.length > 1 ? sideLetter(k.pid) : undefined} />
+                  <span key={k.addr} style={{ display: "inline-flex", marginLeft: 8, fontSize: 13, fontWeight: 400, verticalAlign: "middle" }}>
+                    <Battery pct={k.battery_pct} label={ready.length > 1 ? sideLetter(k.pid) : undefined} />
+                  </span>
                 ))}
               </span>
             </div>

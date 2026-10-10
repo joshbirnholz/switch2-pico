@@ -124,22 +124,10 @@ export function profileForm(t: number, i: number, P: Profile): string {
   return `prof_${t}_${i}=${nums},${mouse},${encodeURIComponent(P.name)}`;
 }
 
-// An output's name split into a title and a description line.
-const DESCRIPTIONS: Record<string, string> = {
-  None: "Does nothing",
-  Up: "D-pad up", Down: "D-pad down", Left: "D-pad left", Right: "D-pad right",
-  LStick: "Left stick click", RStick: "Right stick click",
-  LS: "Left stick click", RS: "Right stick click", L3: "Left stick click", R3: "Right stick click",
-  Minus: "Minus button", Plus: "Plus button", Home: "Home button", Capture: "Capture button",
-  Back: "Back button", Start: "Start button", Guide: "Guide button",
-  Create: "Create button", Options: "Options button", PS: "PS button",
-  LB: "Left bumper", RB: "Right bumper", LT: "Left trigger", RT: "Right trigger",
-  L1: "Left bumper", R1: "Right bumper", L2: "Left trigger", R2: "Right trigger",
-  L: "Left shoulder", R: "Right shoulder", ZL: "Left trigger", ZR: "Right trigger", Z: "Z button",
-  "Left paddle": "Back paddle", "Right paddle": "Back paddle", "Left Fn": "Function button", "Right Fn": "Function button",
-};
+// An output's name split into a title and, for shortcuts and the like
+// ("Home+A (Steam quick access)"), a description line.
 export function outputText(name: string): { title: string; desc: string } {
   const m = /^(.*) \((.*)\)$/.exec(name);
   if (m) return { title: m[1], desc: m[2].charAt(0).toUpperCase() + m[2].slice(1) };
-  return { title: name, desc: DESCRIPTIONS[name] || "" };
+  return { title: name, desc: "" };
 }
