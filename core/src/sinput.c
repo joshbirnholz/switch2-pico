@@ -3,10 +3,12 @@
 #include <math.h>
 #include <string.h>
 
+#include "app.h"
 #include "battery.h"
 #include "hd_rumble.h"
 #include "log.h"
 #include "platform.h"
+#include "s2_link.h"
 #include "settings.h"
 #include "usb_hid.h"
 
@@ -63,14 +65,26 @@ static const struct {
     {GP_MISC, SI_MISC},
 };
 
-// The buttons the host is told about (usage masks). Triggers are analog only:
+// The buttons the host is told about (usage masks). Always: face buttons,
+// D-pad, stick clicks, bumpers, Start, Back, Guide. Triggers are analog only:
 // with their digital bits too SDL would add two more buttons for them.
-static const uint8_t USAGE_MASKS[4] = {
-    0xFF,                                                     // face, D-pad
-    0x0F | 0xC0,                                              // L3 R3 L1 R1, paddles 1
-    0x01 | 0x02 | 0x04 | 0x08 | 0x10 | 0x20,                  // Start Back Guide Capture, paddles 2
-    0x01,                                                     // one extra button
-};
+void sinput_usage_masks(const uint8_t map[IN_COUNT], uint8_t m[4]) {
+    uint32_t used = 0;
+    for (int i = 0; i < IN_COUNT; i++) {
+        if (map[i] < GP_COUNT) used |= GP_BIT(map[i]);
+    }
+    bool pair1 = used & (GP_BIT(GP_PADDLE_L) | GP_BIT(GP_PADDLE_R));
+    bool pair2 = used & (GP_BIT(GP_FN_L) | GP_BIT(GP_FN_R));
+    m[0] = 0xFF;                                   // face, D-pad
+    m[1] = 0x0F;                                   // L3 R3 L1 R1
+    m[2] = 0x01 | 0x02 | 0x04;                     // Start Back Guide
+    m[3] = 0;
+    // SDL takes the second paddle pair (GL / GR) only together with the first.
+    if (pair1 || pair2) m[1] |= 0xC0;
+    if (pair2) m[2] |= 0x10 | 0x20;
+    if (used & GP_BIT(GP_MIC)) m[2] |= 0x08;       // Capture
+    if (used & GP_BIT(GP_MISC)) m[3] |= 0x01;      // C
+}
 
 static void put16(uint8_t *p, int v) {
     p[0] = (uint8_t)v;
@@ -135,7 +149,7 @@ void sinput_build_input(const sinput_state_t *st, uint32_t timestamp_us, uint8_t
 #define SINPUT_FACE_STYLE_BAYX         3   // Nintendo labels: B bottom, A right, Y left, X top
 #define SINPUT_SUB_PRODUCT             0
 
-void sinput_build_features(const uint8_t mac[6], uint8_t r[SINPUT_REPORT_LEN]) {
+void sinput_build_features(const uint8_t mac[6], const uint8_t masks[4], uint8_t r[SINPUT_REPORT_LEN]) {
     memset(r, 0, SINPUT_REPORT_LEN);
     r[0] = 0x02;
     r[1] = 0x02;                 // the features command
@@ -151,7 +165,7 @@ void sinput_build_features(const uint8_t mac[6], uint8_t r[SINPUT_REPORT_LEN]) {
     put16(d + 6, interval * 1000);   // polling interval, µs
     put16(d + 8, SINPUT_ACCEL_RANGE_G);
     put16(d + 10, SINPUT_GYRO_RANGE_DPS);
-    memcpy(d + 12, USAGE_MASKS, 4);
+    memcpy(d + 12, masks, 4);
     d[16] = 0;                   // touchpads
     d[17] = 0;
     memcpy(d + 18, mac, 6);
@@ -209,6 +223,8 @@ static bool s_was_mounted;
 static uint32_t s_next_report;
 static uint8_t s_mac[6];
 static bool s_features_due;
+static bool s_features_sent;      // the host has the button list in s_sent_masks
+static uint8_t s_sent_masks[4];
 static uint8_t s_motor_l, s_motor_r;
 static uint32_t s_rumble_refresh;
 
@@ -293,6 +309,7 @@ void sinput_task(void) {
         s_was_mounted = mounted;
         s_motor_l = s_motor_r = 0;
         s_features_due = false;
+        s_features_sent = false;
         s_status.handshake_done = false;
         LOG("sinput: USB %s", mounted ? "mounted" : "unmounted");
     }
@@ -301,13 +318,43 @@ void sinput_task(void) {
         send_rumble();
         s_rumble_refresh = platform_deadline_ms(RUMBLE_REFRESH_MS);
     }
+    // The buttons the active profile uses (of the controller connected, or
+    // the one the dongle starts with).
+    ctrl_type_t t = s2_link_state() == S2_LINK_READY ? mapping_ctrl_type(s2_link_mapping_ctx())
+                                                     : settings_boot_ctrl(&g_settings);
+    uint8_t masks[4];
+    sinput_usage_masks(settings_active_map(&g_settings, t), masks);
+    // SDL reads the button list only when the device appears: when it changes
+    // (a mapping, the profile or the controller type), appear anew.
+    // (After a moment: the page's or plugin's request that changed it gets
+    // its answer first.)
+    static bool changed;
+    static uint32_t changed_at;
+    if (mounted && s_features_sent && memcmp(masks, s_sent_masks, sizeof masks) != 0) {
+        if (!changed) {
+            changed = true;
+            changed_at = platform_deadline_ms(500);
+        } else if (platform_time_reached(changed_at)) {
+            LOG("sinput: buttons changed, reconnecting USB");
+            changed = false;
+            s_features_sent = false;
+            app_request_usb_reconnect();
+            return;
+        }
+    } else {
+        changed = false;
+    }
     if (!mounted || !usb_hid_ready()) return;
     uint8_t r[SINPUT_REPORT_LEN];
     // The features reply goes first: SDL waits for it (100 ms) before it
     // reads any input.
     if (s_features_due) {
-        sinput_build_features(s_mac, r);
-        if (usb_hid_send(r[0], r + 1, SINPUT_REPORT_LEN - 1)) s_features_due = false;
+        sinput_build_features(s_mac, masks, r);
+        if (usb_hid_send(r[0], r + 1, SINPUT_REPORT_LEN - 1)) {
+            s_features_due = false;
+            s_features_sent = true;
+            memcpy(s_sent_masks, masks, sizeof masks);
+        }
         return;
     }
     if (!platform_time_reached(s_next_report)) return;

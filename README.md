@@ -266,7 +266,16 @@ right), gyro, accelerometer, rumble and player number. Steam shows the
 Switch 2 Pro Controller's GL, GR and C symbols for three of them, so a
 Nintendo Switch 2 Pro Controller is mapped one to one. The other two paddles,
 L4 and R4, work but show no symbol in Steam; SDL accepts the GL / GR pair
-only together with them, so they are always reported. Defaults:
+only together with them.
+
+The dongle tells Steam only about the optional buttons (C, Capture, the
+paddles) that a button of the profile in use actually sends: with C mapped
+to the Quick Access Menu (Decky), for example, Steam doesn't list a C button
+it would never see. SDL reads that list only when the controller appears on
+USB, so when a mapping, profile or controller type change alters it, the
+dongle will leave USB and come back half a second later (the Bluetooth
+controller stays connected). Steam may then treat it as a controller with a
+different layout, with its own Steam Input configuration. Defaults:
 
 | Button | SInput |
 | --- | --- |

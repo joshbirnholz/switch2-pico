@@ -49,6 +49,11 @@ void procon_hook_rumble(const rumble_sample_t *l, int nl, const rumble_sample_t 
 void procon_hook_player_lights(uint8_t lights) { (void)lights; }
 void log_printf(const char *fmt, ...) { (void)fmt; }
 usb_mode_t usb_mode_active(void) { return USB_MODE_DUALSENSE_EDGE; }
+// sinput.c's runtime half.
+#include "s2_link.h"
+s2_link_state_t s2_link_state(void) { return S2_LINK_OFF; }
+const mapping_ctx_t *s2_link_mapping_ctx(void) { return NULL; }
+void app_request_usb_reconnect(void) {}
 
 static void test_defaults(settings_t *s) {
     memset(s, 0, sizeof *s);
@@ -1120,12 +1125,32 @@ static void test_sinput(void) {
 
     // Features reply: what SDL needs to build the mapping.
     uint8_t mac[6] = {1, 2, 3, 4, 5, 6};
-    sinput_build_features(mac, r);
+    uint8_t masks[4];
+    uint8_t pm[IN_COUNT];
+    settings_default_mode_map(CTRL_PRO, USB_MODE_SINPUT, pm);
+    sinput_usage_masks(pm, masks);
+    sinput_build_features(mac, masks, r);
     const uint8_t *d = r + 2;
     CHECK(r[0] == 0x02 && r[1] == 0x02 && d[0] == 1 && d[2] == 0xFF && d[4] == 7 && (d[5] >> 5) == 3);
     CHECK(le16s(d + 8) == SINPUT_ACCEL_RANGE_G && le16s(d + 10) == SINPUT_GYRO_RANGE_DPS);
-    // Four paddles, Back / Guide / Capture, one extra button; no digital triggers.
+    // Pro defaults: both paddle pairs (GL / GR need L4 / R4 with them), Back /
+    // Guide / Capture, C; no digital triggers.
     CHECK(d[12] == 0xFF && d[13] == 0xCF && d[14] == 0x3F && d[15] == 0x01 && memcmp(d + 18, mac, 6) == 0);
+    // Only the buttons the profile sends: C on the Quick Access menu, Capture
+    // unassigned, GL / GR on the stick clicks.
+    pm[IN_C] = GP_DECKY_QAM;
+    pm[IN_CAPTURE] = GP_NONE;
+    pm[IN_GL] = GP_L3;
+    pm[IN_GR] = GP_R3;
+    sinput_usage_masks(pm, masks);
+    CHECK(masks[0] == 0xFF && masks[1] == 0x0F && masks[2] == 0x07 && masks[3] == 0x00);
+    pm[IN_GL] = GP_PADDLE_L;                       // L4 alone: the first pair only
+    sinput_usage_masks(pm, masks);
+    CHECK(masks[1] == 0xCF && masks[2] == 0x07);
+    pm[IN_GL] = GP_FN_L;                           // GL: both pairs
+    pm[IN_C] = GP_MISC;
+    sinput_usage_masks(pm, masks);
+    CHECK(masks[1] == 0xCF && masks[2] == 0x37 && masks[3] == 0x01);
 
     // Commands.
     sinput_command_t c;

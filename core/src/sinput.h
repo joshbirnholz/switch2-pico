@@ -52,8 +52,12 @@ typedef struct {
 
 // Input report 0x01.
 void sinput_build_input(const sinput_state_t *st, uint32_t timestamp_us, uint8_t out[SINPUT_REPORT_LEN]);
+// The buttons the host is told about (the features reply's usage masks):
+// the optional ones (C, Capture, the paddles) only when a button of `map`
+// sends them, so Steam doesn't offer buttons it will never see.
+void sinput_usage_masks(const uint8_t map[IN_COUNT], uint8_t out[4]);
 // The reply to the features command (input report 0x02).
-void sinput_build_features(const uint8_t mac[6], uint8_t out[SINPUT_REPORT_LEN]);
+void sinput_build_features(const uint8_t mac[6], const uint8_t masks[4], uint8_t out[SINPUT_REPORT_LEN]);
 
 typedef struct {
     bool features;          // the host asked for the features reply
