@@ -305,7 +305,7 @@ body.offline #usb-help{display:flex}
         <label class="check top" style="grid-column:1/-1"><input type="checkbox" id="pf-mouse-hscroll"><span>Scroll sideways with left / right<span class="hint" style="display:block">Off: left scrolls up and right scrolls down, as on a Switch 2.</span></span></label>
         <label class="check" style="grid-column:1/-1"><input type="checkbox" id="pf-mouse-inv-v"><span>Invert up / down scrolling</span></label>
         <label class="check" style="grid-column:1/-1"><input type="checkbox" id="pf-mouse-inv-h"><span>Invert left / right scrolling</span></label>
-        <p class="note" style="grid-column:1/-1">Lay a Joy-Con 2 on its side on a surface and move it: it's a mouse while it lies there, and each Joy-Con is its own mouse. Its shoulder button clicks, its trigger right-clicks, its stick click middle-clicks and its stick scrolls; picked up, they're the controller's again. The dongle adds two USB mice next to the controller, so turning Mouse Mode on or off restarts it.</p>
+        <p class="note" style="grid-column:1/-1">Lay a Joy-Con 2 on its side on a surface and move it: it's a mouse while it lies there, and each Joy-Con is its own mouse. Its shoulder button clicks, its trigger right-clicks, its stick click middle-clicks and its stick scrolls; picked up, they're the controller's again. The dongle adds two USB mice next to the controller, so turning Mouse Mode on or off will restart it.</p>
       </div>
     </section>
 
@@ -392,7 +392,7 @@ body.offline #usb-help{display:flex}
         <input type="file" id="fw-file" accept=".uf2" style="display:none" onchange="fwFile(this)">
       </div>
       <div id="fw-step2" class="stack" style="display:none">
-        <p class="note">The dongle restarted as a USB drive (<b>NICENANO</b>, <b>FTHR840BOOT</b> or <b>RP2350</b>). Choose that drive and the firmware is written to it; the dongle installs it and restarts by itself.</p>
+        <p class="note">The dongle restarted as a USB drive (<b>NICENANO</b>, <b>FTHR840BOOT</b> or <b>RP2350</b>). Choose that drive to write the firmware to it. The dongle will install it and restart by itself.</p>
         <div class="row">
           <button class="primary" id="fw-write" onclick="fwWrite()">Write to the drive…</button>
           <button onclick="fwSave()">Save the .uf2 instead</button>
@@ -967,7 +967,7 @@ async function save(){
   // last) now has another USB mode: the dongle restarts.
   const lt=S.last_ctrl||0,T=S.types[lt];
   const b=bootOf(S);
-  if((b.mode!==S.boot_mode||b.mouse!==S.boot_mouse)&&!confirm('The profile in use for the '+T.name+(b.mode!==S.boot_mode?' has another USB mode':(b.mouse?' adds':' removes')+' the USB mouse')+': the dongle restarts. Continue?'))return;
+  if((b.mode!==S.boot_mode||b.mouse!==S.boot_mouse)&&!confirm('The profile in use for the '+T.name+(b.mode!==S.boot_mode?' has another USB mode':(b.mouse?' adds':' removes')+' the USB mouse')+'. The dongle will restart. Continue?'))return;
   const r=await api('/api/settings',{method:'POST',body:prof.join('&')+'&'+p.toString()});
   if(r.ok){const keep=MAP_CTRL,cur=CUR.slice();S=r.json();PNOTE='';SAVED=true;render();
     // Stay where the user was.
@@ -1131,7 +1131,7 @@ async function fwDirect(uf2,label){
   $('fw-note').textContent='Checking…';
   await post('/api/fw/end');
   try{await api('/api/action?do=reboot',{method:'POST'})}catch(e){}
-  $('fw-note').textContent='Installed. The dongle is restarting with '+label+'; it reconnects by itself in a few seconds (click Connect if it doesn\'t).';
+  $('fw-note').textContent='Installed '+label+'. The dongle will restart, and then you\'ll need to reconnect your controller. If this page doesn\'t find the dongle again, click Connect.';
   return true;
 }
 // A .uf2 picked from disk (e.g. a local build or an older release).
@@ -1183,7 +1183,7 @@ async function fwWrite(){
   try{dir=await window.showDirectoryPicker({mode:'readwrite',id:'uf2drive'})}catch(e){return}
   try{await dir.getFileHandle('INFO_UF2.TXT')}
   catch(e){if(!confirm('This doesn\'t look like the dongle\'s USB drive (no INFO_UF2.TXT). Write anyway?'))return}
-  $('fw-note').textContent='Writing… the dongle installs the firmware and restarts by itself.';
+  $('fw-note').textContent='Writing… The dongle will install the firmware and restart by itself.';
   try{
     const w=await(await dir.getFileHandle(fwName,{create:true})).createWritable();
     await w.write(fwBlob);
@@ -1193,7 +1193,7 @@ async function fwWrite(){
     // can make the final close fail even though the update went through.
     console.warn(e);
   }
-  $('fw-note').textContent='Done. When the dongle reconnects, click Connect if it isn\'t picked up automatically.';
+  $('fw-note').textContent='Done. When the dongle is back, reconnect your controller. If this page doesn\'t find the dongle again, click Connect.';
   $('fw-step2').style.display='none';$('fw-step1').style.display='';
 }
 function fwSave(){

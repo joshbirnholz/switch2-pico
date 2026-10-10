@@ -1,7 +1,7 @@
 // Pop-up lists (profile and button pickers), paired controllers and the
 // firmware update.
 import { addEventListener, removeEventListener } from "@decky/api";
-import { ConfirmModal, DialogButton, Focusable, ModalRoot, ProgressBarWithInfo, showModal } from "@decky/ui";
+import { ConfirmModal, DialogButton, Focusable, ModalRoot, ProgressBar, showModal } from "@decky/ui";
 import { ReactNode, useEffect, useState } from "react";
 import { action, getStatus, installUpdate } from "./api";
 import { PIDS, Status } from "./model";
@@ -179,8 +179,8 @@ export function UpdateModal(props: { version: string; closeModal?(): void; onDon
     installUpdate().then((r) => {
       setResult(
         r.ok
-          ? { ok: true, text: `Installed ${r.version ?? props.version}. The dongle restarts and your controller reconnects by itself.` }
-          : { ok: false, text: `Update failed: ${r.error}. The dongle keeps its current firmware; you can try again.` },
+          ? { ok: true, text: `Installed ${r.version ?? props.version}. The dongle will restart, and then you'll need to reconnect your controller.` }
+          : { ok: false, text: `Update failed: ${r.error}. The dongle still has its current firmware, so you can try again.` },
       );
       props.onDone();
     });
@@ -191,13 +191,16 @@ export function UpdateModal(props: { version: string; closeModal?(): void; onDon
       <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>Updating to {props.version}</div>
       {!result && (
         <>
-          <ProgressBarWithInfo
+          <div style={{ textAlign: "center", marginBottom: 8 }}>
+            {STAGES[stage] ?? stage}
+            {stage === "write" ? ` ${pct}%` : ""}
+          </div>
+          <ProgressBar
             nProgress={stage === "write" ? pct : stage === "restart" ? 100 : undefined}
             indeterminate={stage === "download" || stage === "check"}
-            sOperationText={STAGES[stage] ?? stage}
           />
-          <div style={{ ...sub, marginTop: 12 }}>
-            Keep the dongle plugged in. If the update stops part-way, the dongle keeps running the old firmware.
+          <div style={{ ...sub, marginTop: 12, textAlign: "center" }}>
+            Keep the dongle plugged in. If the update stops partway, the dongle will keep its current firmware.
           </div>
         </>
       )}

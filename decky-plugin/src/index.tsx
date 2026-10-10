@@ -139,7 +139,7 @@ function Content() {
         action="Update"
         onLater={() => setPLater(true)}
         onAction={() =>
-          confirm(`Update the plugin to ${pupd.latest}?`, "Decky restarts to load it; the Quick Access menu closes for a moment.", "Update", async () => {
+          confirm(`Update the plugin to ${pupd.latest}?`, "Decky will restart to load it.", "Update", async () => {
             const r = await installPluginUpdate();
             toaster.toast({
               title: "Switch2-Pico",
@@ -164,7 +164,7 @@ function Content() {
             </div>
             <div style={hint}>
               {restarting
-                ? "It reconnects in a few seconds."
+                ? "It will reconnect in a few seconds."
                 : busy
                   ? "Another app (the configuration page in a browser) is using it. Close that and try again."
                   : "Plug the Switch2-Pico dongle into the Steam Deck or dock. With “Only appear on USB while a controller is connected” on, it hides until a controller connects: press a button on your controller."}
@@ -342,7 +342,7 @@ function Content() {
               label="Mouse Mode"
               description={
                 mouseOK
-                  ? "Lay a Joy-Con on its side to use it as a mouse. Turning it on or off restarts the dongle."
+                  ? "Lay a Joy-Con on its side to use it as a mouse. Turning this on or off will restart the dongle."
                   : "Only available for profiles that emulate an Xbox 360 controller."
               }
               disabled={!mouseOK}
@@ -433,7 +433,7 @@ function Content() {
           <ButtonItem
             layout="below"
             onClick={() =>
-              confirm("Reboot the dongle?", "The controller reconnects by itself after a few seconds.", "Reboot", () => {
+              confirm("Reboot the dongle?", "The dongle will restart, and then you'll need to reconnect your controller.", "Reboot", () => {
                 setRestarting(true);
                 action("reboot");
               })
