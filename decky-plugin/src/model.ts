@@ -66,6 +66,8 @@ export const MODE_NAMES = [
   "Nintendo GameCube Controller Adapter",
   "SInput Controller",
 ];
+// Names new profiles get (core/src/profiles.c).
+export const MODE_SHORT = ["Switch Pro", "DualSense Edge", "DualSense", "Xbox 360", "GameCube adapter", "SInput"];
 export const STATUS_MODES: Record<string, number> = {
   switch_pro: MODE_SWITCH, dualsense_edge: MODE_DS_EDGE, dualsense: MODE_DS, xbox360: MODE_X360, gc_adapter: MODE_GC, sinput: MODE_SINPUT,
 };

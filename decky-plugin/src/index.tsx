@@ -11,10 +11,11 @@ import {
 } from "./api";
 import { InputIcon, OutputIcon, SlotIcon } from "./icons";
 import {
-  allButtons, CTRL_GC, CtrlType, Extra, extraButtons, isJoyCon, MF_INVERT_H, MF_INVERT_V, MF_UP_DOWN_ONLY, MODE_NAMES, mouseMode, outputText, PIDS,
+  allButtons, CTRL_GC, CtrlType, Extra, extraButtons, isJoyCon, MF_INVERT_H, MF_INVERT_V, MF_UP_DOWN_ONLY, MODE_NAMES, mouseMode, PIDS,
   Profile, profileForm, quickRemap, Settings, slotLabel, Status, STATUS_MODES,
 } from "./model";
-import { AllButtonsModal, confirm, PairedModal, PickerModal, SOFT_CSS, SoftButton, UpdateModal } from "./modals";
+import { AllButtonsModal, confirm, PairedModal, SOFT_CSS, SoftButton, UpdateModal } from "./modals";
+import { pickOutput, ProfilesModal } from "./profiles";
 
 const hint: CSSProperties = { fontSize: 12.5, color: "#a3adba", lineHeight: 1.35 };
 // Everything stays within the panel's width (no horizontal scrolling).
@@ -124,13 +125,28 @@ function Content() {
     return () => clearInterval(id);
   }, []);
 
-  // Settings changes, applied right away; only a change of USB mode restarts the dongle.
-  const save = async (form: string, restarts = false) => {
-    if (restarts) setRestarting(true);
+  // Settings changes, applied right away. Only a change of the USB device
+  // (another emulated controller for the controller in use) restarts the
+  // dongle; it does that by itself.
+  const save = async (form: string): Promise<Settings | null> => {
     const r = await setSettings(form);
-    if (r.ok && r.settings) setS(r.settings);
-    else if (!restarts) toaster.toast({ title: "Switch2-Pico", body: `Not saved: ${r.error}` });
-    if (restarts) typeSeen.current = -1;
+    if (!r.ok || !r.settings) {
+      toaster.toast({ title: "Switch2-Pico", body: `Not saved: ${r.error}` });
+      return null;
+    }
+    setS(r.settings);
+    const cur = await getStatus();
+    const s = cur.ok ? cur.status : null;
+    if (s && s.ctrl_type < r.settings.types.length) {
+      const T2 = r.settings.types[s.ctrl_type];
+      const P2 = T2.profiles[T2.active];
+      const run = STATUS_MODES[s.usb_mode] ?? 0;
+      if (P2 && (P2.mode !== run || (isJoyCon(s.ctrl_type) && mouseMode(P2.mode)) !== s.usb_mouse)) {
+        setRestarting(true);
+        typeSeen.current = -1;
+      }
+    }
+    return r.settings;
   };
 
   const pluginBanner = pupd?.available && !pLater && (
@@ -182,59 +198,19 @@ function Content() {
   const ready = st.links.filter((k) => k.state === "ready");
   const runMode = STATUS_MODES[st.usb_mode] ?? 0;
 
-  const saveProfile = (np: Profile, restarts = false) => save(profileForm(t, ai, np), restarts);
+  const saveProfile = (np: Profile) => save(profileForm(t, ai, np));
 
   const pickProfile = () => {
-    if (!T) return;
-    showModal(
-      <PickerModal
-        title="Profile"
-        subtitle={T.name}
-        items={T.profiles
-          .map((p, i) => ({ p, i }))
-          .filter(({ p }) => p)
-          .map(({ p, i }) => ({
-            key: i,
-            icon: <SlotIcon label={slotLabel(T, i)} gamecube={t === CTRL_GC} />,
-            title: p!.name,
-            desc: MODE_NAMES[p!.mode],
-            selected: i === ai,
-          }))}
-        footer={T.numbered ? undefined : "On the controller: hold C + Home, then press the profile's button."}
-        onPick={(i) => {
-          const np = T.profiles[i]!;
-          const restarts = np.mode !== runMode || (isJoyCon(t) && mouseMode(np.mode)) !== st.usb_mouse;
-          save(`active_${t}=${i}`, restarts);
-        }}
-      />,
-    );
+    if (!S) return;
+    showModal(<ProfilesModal S={S} t={t} save={save} />);
   };
 
-  // What `input` sends: a list of the mode's outputs. `current` is the map
-  // as it is now (the "Show all" list keeps its own while it is open).
-  const pickOutput = (e: Extra, current: number[], onPicked?: (map: number[]) => void) => {
+  const pickOutputHere = (e: Extra, current: number[], onPicked?: (map: number[]) => void) => {
     if (!S || !P) return;
-    const outs = S.modes[mode].outputs;
-    const label = e.title ?? e.label;
-    showModal(
-      <PickerModal
-        title={e.side ? `${label} · ${e.side}` : label}
-        subtitle={`${P.name} · ${MODE_NAMES[mode]}`}
-        items={outs
-          .map((name, i) => ({ name, i }))
-          .filter(({ name }) => name !== null)
-          .map(({ name, i }) => {
-            const tx = outputText(name!);
-            return { key: i, icon: <OutputIcon mode={mode} idx={i} />, title: tx.title, desc: tx.desc, selected: current[e.input] === i };
-          })}
-        onPick={(o) => {
-          const map = current.slice();
-          map[e.input] = o;
-          saveProfile({ ...P, map });
-          onPicked?.(map);
-        }}
-      />,
-    );
+    pickOutput(S, P, e, current, (map) => {
+      saveProfile({ ...P, map });
+      onPicked?.(map);
+    });
   };
 
   const showAll = () => {
@@ -246,7 +222,7 @@ function Content() {
         buttons={allButtons(t)}
         map={P.map}
         mode={mode}
-        onPick={pickOutput}
+        onPick={pickOutputHere}
       />,
     );
   };
@@ -322,7 +298,7 @@ function Content() {
                     </span>
                   }
                 >
-                  <SoftButton style={small} onActivate={() => pickOutput(e, P.map)}>
+                  <SoftButton style={small} onActivate={() => pickOutputHere(e, P.map)}>
                     <OutputIcon mode={mode} idx={o} />
                   </SoftButton>
                 </Row>
@@ -357,7 +333,7 @@ function Content() {
               }
               disabled={!mouseOK}
               checked={mouseOK && !!P.mouse}
-              onChange={(v) => saveProfile({ ...P, mouse: v ? 1 : 0, mouse_speed: P.mouse_speed || 100 }, !st.usb_mouse)}
+              onChange={(v) => saveProfile({ ...P, mouse: v ? 1 : 0, mouse_speed: P.mouse_speed || 100 })}
             />
           </PanelSectionRow>
           {mouseOK && !!P.mouse && (
