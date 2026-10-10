@@ -269,17 +269,16 @@ Nintendo Switch 2 Pro Controller is mapped one to one. The other two paddles
 plugin after the Joy-Con 2 buttons they get by default, work but show no
 symbol in Steam; SDL accepts the GL / GR pair only together with them.
 
-The dongle tells Steam only about the optional buttons (C, Capture, the
-paddles) that a button of the profile in use actually sends: with C mapped
-to the Quick Access Menu (Decky), for example, Steam doesn't list a C button
-it would never see. SDL reads that list only when the controller appears on
-USB, so when a change of mapping, profile or controller type alters it, the
-dongle will leave USB and come back half a second later (the Bluetooth
-controller stays connected). Changes that leave the same buttons for Steam
-to map (say, C from the Quick Access menu to Home, or GL from GL to GR)
-take effect without that. Only the controller's own buttons count, not
-mappings stored for buttons it doesn't have. Steam may then treat it as a controller with a
-different layout, with its own Steam Input configuration. Defaults:
+The dongle lists C for Steam only when a button of the profile in use
+sends it: with C mapped to the Quick Access Menu (Decky), for example, Steam
+doesn't list a C button it would never see. (The other buttons are always
+listed: Steam labels them by their place in the list, so leaving one out
+would mislabel the ones after it.) SDL reads the list only when the
+controller appears on USB, so when that changes, the dongle will leave USB
+and come back half a second later (the Bluetooth controller stays
+connected); Steam may then treat it as a controller with a different
+layout, with its own Steam Input configuration. Only the controller's own
+buttons count, not mappings stored for buttons it doesn't have. Defaults:
 
 | Button | SInput |
 | --- | --- |

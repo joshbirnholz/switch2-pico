@@ -1136,37 +1136,32 @@ static void test_sinput(void) {
     // Pro defaults: both paddle pairs (GL / GR need L4 / R4 with them), Back /
     // Guide / Capture, C; no digital triggers.
     CHECK(d[12] == 0xFF && d[13] == 0xCF && d[14] == 0x3F && d[15] == 0x01 && memcmp(d + 18, mac, 6) == 0);
-    // Only the buttons the profile sends: C on the Quick Access menu, Capture
+    // C only when the profile sends it; the rest always, so no button moves
+    // (Steam labels them by position): C on the Quick Access menu, Capture
     // unassigned, GL / GR on the stick clicks.
     pm[IN_C] = GP_DECKY_QAM;
     pm[IN_CAPTURE] = GP_NONE;
     pm[IN_GL] = GP_L3;
     pm[IN_GR] = GP_R3;
     sinput_usage_masks(pm, mapping_type_inputs(CTRL_PRO), masks);
-    CHECK(masks[0] == 0xFF && masks[1] == 0x0F && masks[2] == 0x07 && masks[3] == 0x00);
-    pm[IN_GL] = GP_PADDLE_L;                       // L4 alone: the first pair only
-    sinput_usage_masks(pm, mapping_type_inputs(CTRL_PRO), masks);
-    CHECK(masks[1] == 0xCF && masks[2] == 0x07);
-    pm[IN_GL] = GP_FN_L;                           // GL: both pairs
+    CHECK(masks[0] == 0xFF && masks[1] == 0xCF && masks[2] == 0x3F && masks[3] == 0x00);
     pm[IN_C] = GP_MISC;
     sinput_usage_masks(pm, mapping_type_inputs(CTRL_PRO), masks);
-    CHECK(masks[1] == 0xCF && masks[2] == 0x37 && masks[3] == 0x01);
-    // Mapping changes that keep the same buttons: the same list.
+    CHECK(masks[1] == 0xCF && masks[2] == 0x3F && masks[3] == 0x01);
+    // Mapping changes that keep C: the same list.
     uint8_t again[4];
     pm[IN_GR] = GP_FN_L;
     pm[IN_A] = GP_NORTH;
     sinput_usage_masks(pm, mapping_type_inputs(CTRL_PRO), again);
     CHECK(memcmp(masks, again, 4) == 0);
     // Inputs the controller doesn't have don't count: a Pro Controller has
-    // no Joy-Con 2 (R) SL / SR, a GameCube controller no GL / GR.
+    // no Joy-Con 2 (R) SL / SR.
     pm[IN_C] = GP_NONE;
     pm[IN_SL_R] = GP_MISC;
     sinput_usage_masks(pm, mapping_type_inputs(CTRL_PRO), again);
     CHECK(again[3] == 0x00);
     sinput_usage_masks(pm, mapping_type_inputs(CTRL_JOYCON_PAIR), again);
     CHECK(again[3] == 0x01);
-    sinput_usage_masks(pm, mapping_type_inputs(CTRL_GAMECUBE), again);
-    CHECK(again[1] == 0x0F && again[3] == 0x00);
     CHECK(!(mapping_type_inputs(CTRL_JOYCON_L) & (1u << IN_C)) && (mapping_type_inputs(CTRL_JOYCON_R) & (1u << IN_C)));
 
     // Commands.

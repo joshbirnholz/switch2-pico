@@ -73,17 +73,14 @@ void sinput_usage_masks(const uint8_t map[IN_COUNT], uint32_t inputs, uint8_t m[
     for (int i = 0; i < IN_COUNT; i++) {
         if ((inputs & (1u << i)) && map[i] < GP_COUNT) used |= GP_BIT(map[i]);
     }
-    bool pair1 = used & (GP_BIT(GP_PADDLE_L) | GP_BIT(GP_PADDLE_R));
-    bool pair2 = used & (GP_BIT(GP_FN_L) | GP_BIT(GP_FN_R));
+    // Always the full layout up to Capture and the paddles: Steam labels the
+    // buttons by their position in it, so leaving one of those out moves the
+    // ones after it (the stick clicks then showed as the paddles). Only C,
+    // the very last button, may be left out.
     m[0] = 0xFF;                                   // face, D-pad
-    m[1] = 0x0F;                                   // L3 R3 L1 R1
-    m[2] = 0x01 | 0x02 | 0x04;                     // Start Back Guide
-    m[3] = 0;
-    // SDL takes the second paddle pair (GL / GR) only together with the first.
-    if (pair1 || pair2) m[1] |= 0xC0;
-    if (pair2) m[2] |= 0x10 | 0x20;
-    if (used & GP_BIT(GP_MIC)) m[2] |= 0x08;       // Capture
-    if (used & GP_BIT(GP_MISC)) m[3] |= 0x01;      // C
+    m[1] = 0x0F | 0xC0;                            // L3 R3 L1 R1, paddles 1
+    m[2] = 0x01 | 0x02 | 0x04 | 0x08 | 0x10 | 0x20;  // Start Back Guide Capture, paddles 2
+    m[3] = (used & GP_BIT(GP_MISC)) ? 0x01 : 0x00;   // C
 }
 
 static void put16(uint8_t *p, int v) {
