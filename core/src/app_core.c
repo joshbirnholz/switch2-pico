@@ -100,7 +100,7 @@ void s2_link_hook_controller_seen(void) {
 static void usb_present_controller(bool controller) {
     static bool waiting;
     static uint32_t switch_at;
-    bool config_only = !controller;
+    bool config_only = !controller && platform_usb_config_only_supported();
     if (config_only && !usb_mode_config_only()) {
         if (tud_suspended()) {
             waiting = true;

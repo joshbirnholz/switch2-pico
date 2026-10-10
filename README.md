@@ -472,6 +472,9 @@ enable it once under **Settings → Pages → Source: GitHub Actions**.
   connects, the dongle leaves USB and comes back as the emulated controller;
   5 seconds after it disconnects, the other way round. While the PC sleeps
   it stays the controller, so a button press can still wake the PC.
+  (Pico 2 W only for now: the nRF52840 always shows up as the emulated
+  controller, whose configuration interface works without a controller
+  too.)
 
 ### Over Wi-Fi
 

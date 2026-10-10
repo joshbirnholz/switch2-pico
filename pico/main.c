@@ -110,7 +110,7 @@ int main(void) {
     settings_init();
 
     // No controller yet: start as the configuration-only device.
-    usb_mode_set_config_only(true);
+    usb_mode_set_config_only(platform_usb_config_only_supported());
     tud_init(0);
 
     if (cyw43_arch_init()) {

@@ -149,6 +149,14 @@ extern "C" void platform_usb_rebuild(void) {
     usb_setup(false);
 }
 
+// Not on this board for now: with only the configuration interface the
+// dongle didn't show up on USB at all (and switching at runtime is untested
+// here). It stays the emulated controller, whose configuration interface
+// the page and the Decky plugin reach with or without a controller.
+extern "C" bool platform_usb_config_only_supported(void) {
+    return false;
+}
+
 extern "C" void platform_watchdog_start(void);
 extern "C" void platform_journal_init(void);
 extern "C" void platform_journal_task(void);
@@ -176,8 +184,9 @@ void setup() {
     platform_watchdog_start();
     InternalFS.begin();
     settings_init();
-    // No controller yet: start as the configuration-only device.
-    usb_mode_set_config_only(true);
+    // No controller yet: start as the configuration-only device, where the
+    // board supports it.
+    usb_mode_set_config_only(platform_usb_config_only_supported());
     usb_setup(true);
     app_core_init();
 }

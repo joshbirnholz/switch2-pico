@@ -52,6 +52,10 @@ int platform_usb_power(void);
 // The USB descriptors changed (usb_mode_set_config_only()); called while
 // disconnected. Boards that build them once rebuild them here.
 void platform_usb_rebuild(void);
+// Whether the board shows the configuration-only device while no controller
+// is connected (otherwise it stays the emulated controller, whose
+// configuration interface the page and the Decky plugin use as well).
+bool platform_usb_config_only_supported(void);
 size_t platform_saved_log(char *dst, size_t cap);
 
 // Firmware update over the configuration channel (WebUSB / HTTP), without
