@@ -244,14 +244,11 @@ function Content() {
       <PanelSection>
         {/* First: something focusable at the very top, so moving up with the
             D-pad scrolls the panel back to its top. */}
-        {T && P && (
+        {pairing.required && (
           <PanelSectionRow>
-            <Row label="Profile">
-              <SoftButton style={small} onActivate={pickProfile}>
-                {!T.numbered && <SlotIcon label={slotLabel(T, ai)} gamecube={t === CTRL_GC} />}
-                <span style={ellipsis}>{T.numbered ? `${ai + 1} · ${P.name}` : P.name}</span>
-              </SoftButton>
-            </Row>
+            <ButtonItem layout="below" onClick={() => action("pair").then(poll)}>
+              {pairing.open ? "Stop pairing" : "Pair a controller"}
+            </ButtonItem>
           </PanelSectionRow>
         )}
         <PanelSectionRow>
@@ -273,11 +270,20 @@ function Content() {
           </div>
           </Block>
         </PanelSectionRow>
-        {pairing.required && (
+        {T && P && ready.length > 0 && (
           <PanelSectionRow>
-            <ButtonItem layout="below" onClick={() => action("pair").then(poll)}>
-              {pairing.open ? "Stop pairing" : "Pair a controller"}
-            </ButtonItem>
+            <Block>
+              <SoftButton
+                style={{ ...card, flexDirection: "row", alignItems: "center", gap: 10, padding: "8px 12px", minHeight: 44 }}
+                onActivate={pickProfile}
+              >
+                <span style={{ ...hint, flex: "none" }}>Profile</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto", minWidth: 0 }}>
+                  {!T.numbered && <SlotIcon label={slotLabel(T, ai)} gamecube={t === CTRL_GC} />}
+                  <span style={ellipsis}>{T.numbered ? `${ai + 1} · ${P.name}` : P.name}</span>
+                </span>
+              </SoftButton>
+            </Block>
           </PanelSectionRow>
         )}
         {upd?.available && !later && (
