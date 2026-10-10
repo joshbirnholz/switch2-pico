@@ -1,5 +1,5 @@
 // Button icons: Kenney's Input Prompts (CC0, kenney.nl; see src/kenney.ts),
-// plus a few drawn here that the pack doesn't have (Capture, PS, Misc).
+// plus a few drawn here that the pack doesn't have (Capture, PS).
 import { ReactNode } from "react";
 import { KENNEY } from "./kenney";
 import { deckyQam, MODE_DS, MODE_DS_EDGE, MODE_GC, MODE_SINPUT, MODE_SWITCH } from "./model";
@@ -72,20 +72,19 @@ export function OutputIcon({ mode, idx }: { mode: number; idx: number }) {
     return <Text text="?" />;
   }
   if (mode === MODE_SINPUT) {
-    // Nintendo labels by position (South B, East A, West Y, North X).
+    // Nintendo labels by position (South B, East A, West Y, North X); Steam
+    // shows the second paddle pair and the extra button as GL, GR and C.
     const names: Record<number, string> = {
       1: "switch_button_b", 2: "switch_button_a", 3: "switch_button_y", 4: "switch_button_x",
       5: "switch_button_l", 6: "switch_button_r", 7: "switch_button_zl", 8: "switch_button_zr",
       9: "switch_button_minus", 10: "switch_button_plus", 11: "switch_stick_l_press", 12: "switch_stick_r_press",
       13: "switch_button_home",
-      22: "steamdeck_button_l4", 23: "steamdeck_button_r4", 24: "steamdeck_button_l5", 25: "steamdeck_button_r5",
+      22: "steamdeck_button_l4", 23: "steamdeck_button_r4", 24: "switch_button_gl", 25: "switch_button_gr",
+      29: "switch_button_c",
     };
     if (names[idx]) return <K name={names[idx]} />;
     if (idx >= 14 && idx <= 17) return <K name={"switch_dpad_" + DIRS[idx - 14]} />;
     if (idx === 21) return <Capture />;
-    if (idx === 26) return <Combo a={<K name="switch_button_home" />} b={<K name="switch_button_b" />} />;
-    if (idx === 27) return <Combo a={<K name="switch_button_home" />} b={<K name="switch_button_r" />} />;
-    if (idx === 29) return <Text text="Misc" />;
     return <Text text="?" />;
   }
   if (mode === MODE_GC) {

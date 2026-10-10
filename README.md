@@ -34,7 +34,7 @@ Switch 2 Pro Controller  ──BLE──▶  dongle    ──USB──▶  PC / 
 | HD rumble | The host's Switch 1 HD rumble frames, including the packed multi-sample formats, are decoded and re-encoded for the Switch 2 actuators, left and right separately. |
 | Player LEDs | Follow the player number the host assigns. |
 | Battery | Reported to the host. |
-| USB modes | **Switch Pro Controller** (default; Switch consoles and PCs), **DualSense Edge** (GL, GR and C become its back paddles and Fn button, so Steam Input can map them), **DualSense**, **Xbox 360 controller**, **GameCube adapter**, or **SInput** (four back paddles, Capture and C as separate buttons in Steam Input, with Nintendo labels, gyro and rumble). Each mode has its own button map. |
+| USB modes | **Switch Pro Controller** (default; Switch consoles and PCs), **DualSense Edge** (GL, GR and C become its back paddles and Fn button, so Steam Input can map them), **DualSense**, **Xbox 360 controller**, **GameCube adapter**, or **SInput** (GL, GR, C and Capture as buttons of their own in Steam Input, with the Switch 2 Pro Controller's symbols, plus gyro and rumble). Each mode has its own button map. |
 | Nintendo GameCube Controller | Basic support: buttons, sticks, analog triggers acting as L/R past a threshold, and rumble on its motor (strength by switching it on and off every 12 ms, as SDL does). |
 | Joy-Con 2 | A **Joy-Con 2 (L)** and a **Joy-Con 2 (R)** connected together are one controller, **Joy-Con 2 (L/R)**. A single one is held sideways (SL / SR are its shoulders). Each of the three has its own profiles. **Untested on hardware** (see [Joy-Con 2](#joy-con-2)). |
 | Mouse | Mouse Mode: a Joy-Con 2's optical sensor as a USB mouse next to the controller (a profile option, Xbox 360 and SInput modes). |
@@ -255,31 +255,35 @@ Under **Mode** (on each controller tab) the dongle can present itself as:
 | DualSense | PCs and games that expect a PlayStation pad | mapped to existing buttons |
 | Xbox 360 controller | anything that only speaks XInput | mapped to existing buttons |
 | GameCube adapter | Switch and Wii U games that take GameCube controllers (Smash), Dolphin / Slippi, Steam | mapped to existing buttons |
-| SInput | PCs (Steam, SDL games); Steam Input gets every extra button, with Nintendo labels | back paddles, Capture, an extra button |
+| SInput | PCs (Steam, SDL games); Steam Input gets every extra button, with Nintendo symbols | GL, GR and C (with their symbols), plus L4 / R4 |
 
 **SInput mode** presents the dongle as an SInput controller ("Switch2-Pico
 SInput", 2E8A:10C6), Hand Held Legend's open USB protocol that SDL (and so
 Steam) reads directly: the dongle tells the host which buttons, sticks,
 triggers and sensors it has, so the four back paddles, Capture and C come
 through as buttons of their own, with Nintendo face labels (B bottom, A
-right), gyro, accelerometer, rumble and player number. Defaults:
+right), gyro, accelerometer, rumble and player number. Steam shows the
+Switch 2 Pro Controller's GL, GR and C symbols for three of them, so a
+Nintendo Switch 2 Pro Controller is mapped one to one. The other two paddles,
+L4 and R4, work but show no symbol in Steam; SDL accepts the GL / GR pair
+only together with them, so they are always reported. Defaults:
 
 | Button | SInput |
 | --- | --- |
-| GL (Pro) / SL of the (L) | left paddle 1 (L4) |
-| SR of the (L) | left paddle 2 (L5) |
-| GR (Pro) / SR of the (R) | right paddle 1 (R4) |
-| SL of the (R) | right paddle 2 (R5) |
+| GL / GR (Pro) | GL / GR |
+| SL / SR of the (L) | L4 / GL |
+| SR / SL of the (R) | R4 / GR |
 | Capture | Capture |
-| Home | Guide (Home) |
-| C | Misc, an extra button |
+| Home | Home |
+| C | C |
 
 (Held upright, a Joy-Con 2 (L)'s SL is above its SR and a Joy-Con 2 (R)'s SR
-above its SL, so the upper ones are paddles 1.) Mouse Mode works in this
+above its SL.) There are no Steam shortcut outputs in this mode (Quick
+Access Menu (Decky) and Capture do those jobs). Mouse Mode works in this
 mode too. On Linux, Steam needs to read the device through hidraw: the
 current `tools/99-switch2-pico.rules` allows it (the Decky plugin installs
-such a rule on SteamOS). **Untested on hardware**, and it needs an SDL / Steam
-recent enough to know SInput.
+such a rule on SteamOS). It needs an SDL / Steam recent enough to know
+SInput.
 
 **GameCube adapter mode** presents the dongle as Nintendo's Wii U / Switch
 GameCube controller adapter (WUP-028) with the controller in port 1 (ports
@@ -576,8 +580,6 @@ where it stopped. Please include it in bug reports.
   2 (L) together with a Joy-Con 2 (R).
 * A single sideways Joy-Con 2's motion isn't turned to match how it's held.
 * No drawing of the Joy-Con 2 on the configuration page yet.
-* SInput mode and the Decky Quick Access menu output are untested on
-  hardware.
 * Going back to firmware older than 0.10.0 resets the settings (pairings
   included): the older firmware doesn't read the larger settings.
 * The Switch 1 report carries three IMU samples per report. The controller

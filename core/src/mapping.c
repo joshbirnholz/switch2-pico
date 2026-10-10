@@ -140,9 +140,9 @@ void settings_default_mode_map(ctrl_type_t type, usb_mode_t mode, uint8_t map[IN
         map[IN_CAPTURE] = GP_TOUCHPAD;
         break;
     case USB_MODE_SINPUT:
-        // Paddles as on the controller, top to bottom: GL / GR on the Pro
-        // Controller; on a pair, the (L)'s SL then SR (L4, L5) and the (R)'s
-        // SR then SL (R4, R5). Capture, and C as the extra button.
+        // Steam shows the second paddle pair as GL / GR and the extra button
+        // as C: the Pro Controller's own. On a pair, top to bottom: the (L)'s
+        // SL then SR (L4, GL) and the (R)'s SR then SL (R4, GR). Capture.
         map[IN_CAPTURE] = GP_MIC;
         map[IN_C] = GP_MISC;
         if (type == CTRL_JOYCON_PAIR) {
@@ -151,8 +151,8 @@ void settings_default_mode_map(ctrl_type_t type, usb_mode_t mode, uint8_t map[IN
             map[IN_SR_R] = GP_PADDLE_R;
             map[IN_SL_R] = GP_FN_R;
         } else if (!gc) {
-            map[IN_GL] = GP_PADDLE_L;
-            map[IN_GR] = GP_PADDLE_R;
+            map[IN_GL] = GP_FN_L;
+            map[IN_GR] = GP_FN_R;
         }
         break;
     case USB_MODE_GC_ADAPTER:

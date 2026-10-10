@@ -523,7 +523,10 @@ static void update_input(void) {
                 }
             }
             uint32_t gp;
-            switch (mapping_macro_run(&macro, map, GP_MACRO_QAM, GP_MACRO_SHOT, prev, in.buttons, platform_millis())) {
+            // SInput has no Steam shortcuts (see usb_mode.c): nothing matches GP_COUNT.
+            bool shortcuts = mode != USB_MODE_SINPUT;
+            switch (mapping_macro_run(&macro, map, shortcuts ? GP_MACRO_QAM : GP_COUNT, shortcuts ? GP_MACRO_SHOT : GP_COUNT,
+                                      prev, in.buttons, platform_millis())) {
             // While a shortcut (Steam quick access, screenshot) plays, the
             // host sees only its buttons: nothing else pressed, sticks centered.
             case MACRO_GUIDE:

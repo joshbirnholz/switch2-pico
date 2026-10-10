@@ -99,8 +99,11 @@ static const char *gc_output_name(gp_out_t g) {
     }
 }
 
-// SInput: Nintendo labels (by position: South B, East A, West Y, North X),
-// four paddles, Capture and an extra button.
+// SInput: Nintendo labels (by position: South B, East A, West Y, North X).
+// Steam shows the second paddle pair and the extra button with the Switch 2
+// Pro Controller's GL, GR and C symbols; the first pair (L4 / R4) has none
+// (SDL takes the second pair only together with the first). No Steam
+// shortcuts: the Decky Quick Access Menu output and Capture do their jobs.
 static const char *sinput_output_name(gp_out_t g) {
     switch (g) {
     case GP_NONE: return "None";
@@ -122,13 +125,11 @@ static const char *sinput_output_name(gp_out_t g) {
     case GP_LEFT: return "Left";
     case GP_RIGHT: return "Right";
     case GP_MIC: return "Capture";
-    case GP_PADDLE_L: return "L4 (left paddle 1)";
-    case GP_FN_L: return "L5 (left paddle 2)";
-    case GP_PADDLE_R: return "R4 (right paddle 1)";
-    case GP_FN_R: return "R5 (right paddle 2)";
-    case GP_MISC: return "Misc (an extra button)";
-    case GP_MACRO_QAM: return "Home+B (Steam quick access)";
-    case GP_MACRO_SHOT: return "Home+R (Steam screenshot)";
+    case GP_PADDLE_L: return "L4 (extra button, no symbol in Steam)";
+    case GP_PADDLE_R: return "R4 (extra button, no symbol in Steam)";
+    case GP_FN_L: return "GL";
+    case GP_FN_R: return "GR";
+    case GP_MISC: return "C";
     case GP_DECKY_QAM: return "Quick Access Menu (Decky)";
     default: return NULL;
     }

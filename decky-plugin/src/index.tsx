@@ -2,7 +2,7 @@
 import { addEventListener, definePlugin, removeEventListener, toaster } from "@decky/api";
 import {
   ButtonItem, DialogButton, Field, Focusable, getGamepadNavigationTrees, Navigation, PanelSection, PanelSectionRow, showModal,
-  SliderField, staticClasses, ToggleField,
+  SideMenu, SliderField, staticClasses, ToggleField,
 } from "@decky/ui";
 import { CSSProperties, ReactNode, useEffect, useRef, useState } from "react";
 import {
@@ -490,7 +490,9 @@ async function onNotify(kind: string, a: string | number, b: string | number) {
 }
 
 // A button mapped to "Quick Access Menu (Decky)": opens the menu, or closes
-// it when it's open.
+// it when it's open. Opened as a side menu, like Steam's own button, so it
+// comes back on the tab and item it was left on (OpenQuickAccessMenu()
+// without a tab starts over at the top).
 function quickAccessVisible(): boolean {
   const trees = getGamepadNavigationTrees() ?? [];
   const win = trees.find((t: any) => t?.id === "QuickAccess-NA")?.m_Root?.m_element?.ownerDocument?.defaultView;
@@ -499,6 +501,7 @@ function quickAccessVisible(): boolean {
 function onQuickAccess() {
   try {
     if (quickAccessVisible()) Navigation.CloseSideMenus();
+    else if (Navigation.OpenSideMenu) Navigation.OpenSideMenu(SideMenu.QuickAccess);
     else Navigation.OpenQuickAccessMenu();
   } catch (e) {
     console.warn("Switch2-Pico: couldn't open the Quick Access menu", e);

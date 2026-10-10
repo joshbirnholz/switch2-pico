@@ -1142,7 +1142,7 @@ static void test_sinput(void) {
     // Default maps: paddles top to bottom, Capture, C as the extra button.
     uint8_t m[IN_COUNT];
     settings_default_mode_map(CTRL_PRO, USB_MODE_SINPUT, m);
-    CHECK(m[IN_GL] == GP_PADDLE_L && m[IN_GR] == GP_PADDLE_R && m[IN_CAPTURE] == GP_MIC && m[IN_C] == GP_MISC);
+    CHECK(m[IN_GL] == GP_FN_L && m[IN_GR] == GP_FN_R && m[IN_CAPTURE] == GP_MIC && m[IN_C] == GP_MISC);
     CHECK(m[IN_A] == GP_EAST && m[IN_B] == GP_SOUTH && m[IN_HOME] == GP_GUIDE);
     settings_default_mode_map(CTRL_JOYCON_PAIR, USB_MODE_SINPUT, m);
     CHECK(m[IN_GL] == GP_PADDLE_L && m[IN_GR] == GP_FN_L && m[IN_SR_R] == GP_PADDLE_R && m[IN_SL_R] == GP_FN_R);
