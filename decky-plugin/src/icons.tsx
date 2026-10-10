@@ -79,7 +79,7 @@ export function OutputIcon({ mode, idx }: { mode: number; idx: number }) {
       5: "switch_button_l", 6: "switch_button_r", 7: "switch_button_zl", 8: "switch_button_zr",
       9: "switch_button_minus", 10: "switch_button_plus", 11: "switch_stick_l_press", 12: "switch_stick_r_press",
       13: "switch_button_home",
-      22: "steamdeck_button_l4", 23: "steamdeck_button_r4", 24: "switch_button_gl", 25: "switch_button_gr",
+      22: "switch_button_sl", 23: "switch_button_sr", 24: "switch_button_gl", 25: "switch_button_gr",
       29: "switch_button_c",
     };
     if (names[idx]) return <K name={names[idx]} />;

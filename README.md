@@ -255,7 +255,7 @@ Under **Mode** (on each controller tab) the dongle can present itself as:
 | DualSense | PCs and games that expect a PlayStation pad | mapped to existing buttons |
 | Xbox 360 controller | anything that only speaks XInput | mapped to existing buttons |
 | GameCube adapter | Switch and Wii U games that take GameCube controllers (Smash), Dolphin / Slippi, Steam | mapped to existing buttons |
-| SInput | PCs (Steam, SDL games); Steam Input gets every extra button, with Nintendo symbols | GL, GR and C (with their symbols), plus L4 / R4 |
+| SInput | PCs (Steam, SDL games); Steam Input gets every extra button, with Nintendo symbols | GL, GR and C (with their symbols), plus SL (L) / SR (R) |
 
 **SInput mode** presents the dongle as an SInput controller ("Switch2-Pico
 SInput", 2E8A:10C6), Hand Held Legend's open USB protocol that SDL (and so
@@ -264,9 +264,10 @@ triggers and sensors it has, so the four back paddles, Capture and C come
 through as buttons of their own, with Nintendo face labels (B bottom, A
 right), gyro, accelerometer, rumble and player number. Steam shows the
 Switch 2 Pro Controller's GL, GR and C symbols for three of them, so a
-Nintendo Switch 2 Pro Controller is mapped one to one. The other two paddles,
-L4 and R4, work but show no symbol in Steam; SDL accepts the GL / GR pair
-only together with them.
+Nintendo Switch 2 Pro Controller is mapped one to one. The other two paddles
+(Steam's L4 / R4), named **SL (L)** and **SR (R)** on the page and in the
+plugin after the Joy-Con 2 buttons they get by default, work but show no
+symbol in Steam; SDL accepts the GL / GR pair only together with them.
 
 The dongle tells Steam only about the optional buttons (C, Capture, the
 paddles) that a button of the profile in use actually sends: with C mapped
@@ -283,8 +284,8 @@ different layout, with its own Steam Input configuration. Defaults:
 | Button | SInput |
 | --- | --- |
 | GL / GR (Pro) | GL / GR |
-| SL / SR of the (L) | L4 / GL |
-| SR / SL of the (R) | R4 / GR |
+| SL / SR of the (L) | SL (L) / GL |
+| SR / SL of the (R) | SR (R) / GR |
 | Capture | Capture |
 | Home | Home |
 | C | C |

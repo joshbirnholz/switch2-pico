@@ -142,7 +142,7 @@ void settings_default_mode_map(ctrl_type_t type, usb_mode_t mode, uint8_t map[IN
     case USB_MODE_SINPUT:
         // Steam shows the second paddle pair as GL / GR and the extra button
         // as C: the Pro Controller's own. On a pair, top to bottom: the (L)'s
-        // SL then SR (L4, GL) and the (R)'s SR then SL (R4, GR). Capture.
+        // SL then SR (SL (L), GL) and the (R)'s SR then SL (SR (R), GR). Capture.
         map[IN_CAPTURE] = GP_MIC;
         map[IN_C] = GP_MISC;
         if (type == CTRL_JOYCON_PAIR) {

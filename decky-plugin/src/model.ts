@@ -137,8 +137,9 @@ export function profileForm(t: number, i: number, P: Profile): string {
 
 // An output's name split into a title and, for shortcuts and the like
 // ("Home+A (Steam quick access)"), a description line.
+// "SL (L)" (the Joy-Con 2 (L)'s SL) stays whole.
 export function outputText(name: string): { title: string; desc: string } {
-  const m = /^(.*) \((.*)\)$/.exec(name);
+  const m = /^(.*) \((.{2,})\)$/.exec(name);
   if (m) return { title: m[1], desc: m[2].charAt(0).toUpperCase() + m[2].slice(1) };
   return { title: name, desc: "" };
 }

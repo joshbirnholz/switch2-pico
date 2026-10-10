@@ -101,8 +101,9 @@ static const char *gc_output_name(gp_out_t g) {
 
 // SInput: Nintendo labels (by position: South B, East A, West Y, North X).
 // Steam shows the second paddle pair and the extra button with the Switch 2
-// Pro Controller's GL, GR and C symbols; the first pair (L4 / R4) has none
-// (SDL takes the second pair only together with the first). No Steam
+// Pro Controller's GL, GR and C symbols; the first pair has none in Steam
+// (SDL takes the second pair only together with the first), so it's named
+// after the Joy-Con 2 buttons it gets by default: the (L)'s SL, the (R)'s SR. No Steam
 // shortcuts: the Decky Quick Access Menu output and Capture do their jobs.
 static const char *sinput_output_name(gp_out_t g) {
     switch (g) {
@@ -125,8 +126,8 @@ static const char *sinput_output_name(gp_out_t g) {
     case GP_LEFT: return "Left";
     case GP_RIGHT: return "Right";
     case GP_MIC: return "Capture";
-    case GP_PADDLE_L: return "L4 (extra button, no symbol in Steam)";
-    case GP_PADDLE_R: return "R4 (extra button, no symbol in Steam)";
+    case GP_PADDLE_L: return "SL (L)";
+    case GP_PADDLE_R: return "SR (R)";
     case GP_FN_L: return "GL";
     case GP_FN_R: return "GR";
     case GP_MISC: return "C";

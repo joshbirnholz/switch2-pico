@@ -37,7 +37,6 @@ ICONS = {
         "playstation_dpad_up", "playstation_dpad_down", "playstation_dpad_left", "playstation_dpad_right",
     ],
     "Steam Deck": [
-        "steamdeck_button_l4", "steamdeck_button_r4",
         "steamdeck_button_quickaccess",
     ],
     "Nintendo Gamecube": [
