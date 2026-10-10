@@ -248,12 +248,8 @@ export function ProfileEditModal(props: { S: Settings; t: number; i: number; sav
                 buttons={allButtons(t)}
                 map={P.map}
                 mode={P.mode}
-                onPick={(e, current, done) =>
-                  pickOutput(S, P, e, current, (map) => {
-                    done(map);
-                    commit({ ...P, map });
-                  })
-                }
+                onPick={(e, current, picked) => pickOutput(S, P, e, current, picked)}
+                onSave={(map) => commit({ ...P, map })}
               />,
             )
           }

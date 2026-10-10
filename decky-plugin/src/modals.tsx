@@ -93,7 +93,8 @@ export function PickerModal(props: {
 }
 
 // "Show all": every button of the controller with what it sends; each opens
-// the list of outputs (onPick), and the list here follows the choices.
+// the list of outputs (onPick). The choices apply together on leaving
+// (Done, or Back on the controller: onSave); Cancel drops them, asking first.
 export function AllButtonsModal(props: {
   title: string;
   subtitle: string;
@@ -101,17 +102,30 @@ export function AllButtonsModal(props: {
   map: number[];
   mode: number;
   onPick(e: Extra, current: number[], onPicked: (map: number[]) => void): void;
+  onSave(map: number[]): void;
   closeModal?(): void;
 }) {
   const [map, setMap] = useState(props.map);
+  const changed = map.some((o, i) => o !== props.map[i]);
+  const done = () => {
+    if (changed) props.onSave(map);
+    props.closeModal?.();
+  };
+  const cancel = () => {
+    if (!changed) return props.closeModal?.();
+    confirm("Discard your changes?", "The buttons you changed here will keep their earlier mapping.", "Discard", () =>
+      props.closeModal?.(), true);
+  };
+  const small: React.CSSProperties = { width: "auto", minWidth: 0, padding: "0 16px", height: 34 };
   return (
-    <ModalRoot closeModal={props.closeModal}>
+    <ModalRoot closeModal={done}>
       <style>{SOFT_CSS}</style>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
         <div style={{ fontSize: 22, fontWeight: 700 }}>{props.title}</div>
-        <DialogButton style={{ width: "auto", minWidth: 0, padding: "0 16px", height: 34 }} onClick={() => props.closeModal?.()}>
-          Back
-        </DialogButton>
+        <Focusable style={{ display: "flex", gap: 8 }} flow-children="row">
+          <DialogButton style={small} onClick={cancel}>Cancel</DialogButton>
+          <DialogButton style={small} onClick={done}>{changed ? "Save" : "Done"}</DialogButton>
+        </Focusable>
       </div>
       <div style={{ ...sub, marginBottom: 12 }}>{props.subtitle}</div>
       <Focusable flow-children="column" style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: "60vh", overflowY: "auto" }}>

@@ -3,7 +3,9 @@
 Quick controls for the Switch2-Pico dongle from the Steam Deck's Quick Access
 menu (Decky Loader), on a Steam Deck or any SteamOS / Linux machine with Decky.
 
-* Status of the connected controller (battery icons, what the dongle emulates).
+* At the top, one button with the connected controller (battery icons) and
+  the profile in use (its button, name and emulated controller); it opens
+  the profiles.
 * **Profile** for the connected controller type: a pop-up list with each
   profile's button and emulated controller. Pick one to use it; the pencil
   edits one (name, emulated controller, button mapping, sticks, rumble,
@@ -13,6 +15,8 @@ menu (Decky Loader), on a Steam Deck or any SteamOS / Linux machine with Decky.
 * **Button mapping** for the connected controller: its extra buttons
   (Capture, C, GL / GR, the Joy-Con 2 SL / SR) in the panel, and **Show all**
   for every button; pick what each sends from a list with button icons.
+  In Show all the changes apply together on leaving (**Save**, or Back on
+  the controller); **Cancel** asks before discarding them.
 * **Remap from the controller** (C + GL / GR or SL / SR) where available.
 * **Quick Access menu from the controller**: a button mapped to **Quick
   Access Menu (Decky)** (here or on the configuration page) opens Steam's

@@ -214,7 +214,7 @@ function Content() {
   };
 
   const showAll = () => {
-    if (!P) return;
+    if (!S || !P) return;
     showModal(
       <AllButtonsModal
         title="Button mapping"
@@ -222,7 +222,8 @@ function Content() {
         buttons={allButtons(t)}
         map={P.map}
         mode={mode}
-        onPick={pickOutputHere}
+        onPick={(e, current, picked) => pickOutput(S, P, e, current, picked)}
+        onSave={(map) => saveProfile({ ...P, map })}
       />,
     );
   };
@@ -236,41 +237,35 @@ function Content() {
     <>
       <style>{SOFT_CSS}</style>
       <PanelSection>
+        {/* One button at the very top (moving up with the D-pad scrolls the
+            panel back to it): the controller, its batteries, what the dongle
+            emulates and the profile in use; it opens the profiles. */}
         <PanelSectionRow>
           <Block>
-          <div style={{ ...card, background: "#1f252e", gap: 4 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 600, minWidth: 0 }}>
-              <span style={{ width: 8, height: 8, borderRadius: 4, background: ready.length ? "#3ecf6e" : "#5c6470", flex: "none" }} />
-              <span style={{ minWidth: 0 }}>
-                {ready.length ? T?.name ?? PIDS[ready[0].pid] : "No controller connected"}
-                {/* The battery icons right after the name. */}
-                {ready.map((k) => (
-                  <span key={k.addr} style={{ display: "inline-flex", marginLeft: 8, fontSize: 13, fontWeight: 400, verticalAlign: "middle" }}>
-                    <Battery pct={k.battery_pct} label={ready.length > 1 ? sideLetter(k.pid) : undefined} />
+            <SoftButton style={{ ...card, gap: 4, padding: "10px 12px" }} onActivate={pickProfile}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 600, minWidth: 0 }}>
+                <span style={{ width: 8, height: 8, borderRadius: 4, background: ready.length ? "#3ecf6e" : "#5c6470", flex: "none" }} />
+                <span style={{ minWidth: 0 }}>
+                  {ready.length ? T?.name ?? PIDS[ready[0].pid] : "No controller connected"}
+                  {ready.map((k) => (
+                    <span key={k.addr} style={{ display: "inline-flex", marginLeft: 8, fontSize: 13, fontWeight: 400, verticalAlign: "middle" }}>
+                      <Battery pct={k.battery_pct} label={ready.length > 1 ? sideLetter(k.pid) : undefined} />
+                    </span>
+                  ))}
+                </span>
+              </div>
+              {T && P && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, marginTop: 4 }}>
+                  {!T.numbered && <SlotIcon label={slotLabel(T, ai)} gamecube={t === CTRL_GC} />}
+                  <span style={{ minWidth: 0 }}>
+                    <div style={{ ...ellipsis, fontWeight: 600 }}>{T.numbered ? `${ai + 1} · ${P.name}` : P.name}</div>
+                    <div style={{ ...hint, ...ellipsis }}>{MODE_NAMES[ready.length ? runMode : P.mode]}</div>
                   </span>
-                ))}
-              </span>
-            </div>
-            {ready.length > 0 && <div style={hint}>{MODE_NAMES[runMode]}</div>}
-          </div>
+                </div>
+              )}
+            </SoftButton>
           </Block>
         </PanelSectionRow>
-        {T && P && ready.length > 0 && (
-          <PanelSectionRow>
-            <Block>
-              <SoftButton
-                style={{ ...card, flexDirection: "row", alignItems: "center", gap: 10, padding: "8px 12px", minHeight: 44 }}
-                onActivate={pickProfile}
-              >
-                <span style={{ ...hint, flex: "none" }}>Profile</span>
-                <span style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto", minWidth: 0 }}>
-                  {!T.numbered && <SlotIcon label={slotLabel(T, ai)} gamecube={t === CTRL_GC} />}
-                  <span style={ellipsis}>{T.numbered ? `${ai + 1} · ${P.name}` : P.name}</span>
-                </span>
-              </SoftButton>
-            </Block>
-          </PanelSectionRow>
-        )}
         {upd?.available && !later && (
           <PanelSectionRow>
             <Banner
