@@ -13,7 +13,7 @@ import {
   CTRL_GC, CtrlType, extraButtons, isJoyCon, MF_INVERT_H, MF_INVERT_V, MF_UP_DOWN_ONLY, MODE_NAMES, MODE_X360, outputText, PIDS,
   Profile, profileForm, quickRemap, Settings, slotLabel, Status, STATUS_MODES,
 } from "./model";
-import { confirm, PairedModal, PickerModal, UpdateModal } from "./modals";
+import { confirm, PairedModal, PickerModal, SOFT_CSS, SoftButton, UpdateModal } from "./modals";
 
 const hint: CSSProperties = { fontSize: 12.5, color: "#a3adba", lineHeight: 1.35 };
 // Everything stays within the panel's width (no horizontal scrolling).
@@ -61,6 +61,7 @@ function Banner(props: { text: string; action: string; onAction(): void; onLater
   );
 }
 
+// The icon only: the level is coarse (the controller's own 0–9).
 function Battery({ pct, label }: { pct: number; label?: string }) {
   const w = Math.max(1, Math.round((11 * pct) / 100));
   return (
@@ -70,7 +71,7 @@ function Battery({ pct, label }: { pct: number; label?: string }) {
         <rect x="2" y="2" width={w + 0.5} height="6" rx="1" fill={pct <= 20 ? "#ff8a7a" : "#e6e9ed"} />
         <rect x="16" y="3" width="1.5" height="4" rx="0.5" fill="#a3adba" />
       </svg>
-      {label ? `${label} ${pct}%` : `${pct}%`}
+      {label}
     </span>
   );
 }
@@ -246,16 +247,17 @@ function Content() {
 
   return (
     <>
+      <style>{SOFT_CSS}</style>
       <PanelSection>
         {/* First: something focusable at the very top, so moving up with the
             D-pad scrolls the panel back to its top. */}
         {T && P && (
           <PanelSectionRow>
             <Row label="Profile">
-              <DialogButton style={small} onClick={pickProfile}>
+              <SoftButton style={small} onActivate={pickProfile}>
                 {!T.numbered && <SlotIcon label={slotLabel(T, ai)} gamecube={t === CTRL_GC} />}
                 <span style={ellipsis}>{T.numbered ? `${ai + 1} · ${P.name}` : P.name}</span>
-              </DialogButton>
+              </SoftButton>
             </Row>
           </PanelSectionRow>
         )}
@@ -277,20 +279,11 @@ function Content() {
           </div>
           </Block>
         </PanelSectionRow>
-        {(pairing.required || ready.length > 0) && (
+        {pairing.required && (
           <PanelSectionRow>
-            <Block>
-            <Focusable style={btnRow}>
-              {pairing.required && (
-                <DialogButton style={half} onClick={() => action("pair").then(poll)}>
-                  {pairing.open ? `Stop (${Math.ceil(pairing.left_ms / 1000)} s)` : "Pair controller"}
-                </DialogButton>
-              )}
-              {ready.length > 0 && (
-                <DialogButton style={half} onClick={() => action("disconnect").then(poll)}>Disconnect</DialogButton>
-              )}
-            </Focusable>
-            </Block>
+            <ButtonItem layout="below" onClick={() => action("pair").then(poll)}>
+              {pairing.open ? "Stop pairing" : "Pair a controller"}
+            </ButtonItem>
           </PanelSectionRow>
         )}
         {upd?.available && !later && (
@@ -320,9 +313,9 @@ function Content() {
                     </span>
                   }
                 >
-                  <DialogButton style={small} onClick={() => pickOutput(e.input, e.label, e.side)}>
+                  <SoftButton style={small} onActivate={() => pickOutput(e.input, e.label, e.side)}>
                     <OutputIcon mode={mode} idx={o} />
-                  </DialogButton>
+                  </SoftButton>
                 </Row>
               </PanelSectionRow>
             );
@@ -375,13 +368,13 @@ function Content() {
                 />
               </PanelSectionRow>
               <PanelSectionRow>
-                <ToggleField label="Scroll sideways with left / right" checked={!(flags & MF_UP_DOWN_ONLY)} onChange={(v) => setFlag(MF_UP_DOWN_ONLY, !v)} />
+                <ToggleField label="Horizontal scrolling" checked={!(flags & MF_UP_DOWN_ONLY)} onChange={(v) => setFlag(MF_UP_DOWN_ONLY, !v)} />
               </PanelSectionRow>
               <PanelSectionRow>
-                <ToggleField label="Invert up / down scrolling" checked={!!(flags & MF_INVERT_V)} onChange={(v) => setFlag(MF_INVERT_V, v)} />
+                <ToggleField label="Invert scroll up/down" checked={!!(flags & MF_INVERT_V)} onChange={(v) => setFlag(MF_INVERT_V, v)} />
               </PanelSectionRow>
               <PanelSectionRow>
-                <ToggleField label="Invert left / right scrolling" checked={!!(flags & MF_INVERT_H)} onChange={(v) => setFlag(MF_INVERT_H, v)} />
+                <ToggleField label="Invert scroll left/right" checked={!!(flags & MF_INVERT_H)} onChange={(v) => setFlag(MF_INVERT_H, v)} />
               </PanelSectionRow>
             </>
           )}
@@ -389,11 +382,6 @@ function Content() {
       )}
 
       <PanelSection title="Dongle">
-        <PanelSectionRow>
-          <Row label="Paired controllers" description={`${st.bond.list.length} remembered`}>
-            <DialogButton style={small} onClick={() => showModal(<PairedModal onChange={poll} />)}>Manage</DialogButton>
-          </Row>
-        </PanelSectionRow>
         {S && (
           <PanelSectionRow>
             <ToggleField
@@ -414,6 +402,11 @@ function Content() {
             />
           </PanelSectionRow>
         )}
+        <PanelSectionRow>
+          <ButtonItem layout="below" onClick={() => showModal(<PairedModal onChange={poll} />)}>
+            Paired controllers
+          </ButtonItem>
+        </PanelSectionRow>
         <PanelSectionRow>
           <ButtonItem
             layout="below"
@@ -443,20 +436,8 @@ function Content() {
 
 // Toasts for the backend's "notify" events (also while the menu is closed).
 async function onNotify(kind: string, a: string | number, b: string | number) {
-  if (kind === "connect") {
-    const r = await getStatus();
-    if (!r.ok || !r.status) return;
-    const s = r.status;
-    const ready = s.links.filter((k) => k.state === "ready");
-    if (!ready.length) return;
-    const pair = ready.length > 1;
-    toaster.toast({
-      title: pair ? "Joy-Con 2 (L/R) connected" : `${PIDS[ready[0].pid] ?? "Controller"} connected`,
-      body: ready.map((k) => (pair ? `${sideLetter(k.pid)} ${k.battery_pct}%` : `${k.battery_pct}%`)).join(" · ") + ` · ${s.profile}`,
-    });
-  } else if (kind === "battery") {
-    toaster.toast({ title: `${PIDS[Number(a)] ?? "Controller"} battery low`, body: `${b}% left` });
-  } else if (kind === "update") {
+  // Connects and low batteries: Steam shows those itself.
+  if (kind === "update") {
     toaster.toast({ title: `Switch2-Pico ${a} available`, body: "Open the plugin to update" });
   } else if (kind === "plugin") {
     toaster.toast({ title: `Switch2-Pico plugin ${a} available`, body: "Open the plugin to update" });

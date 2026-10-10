@@ -1006,7 +1006,7 @@ async function poll(){
     const P=s.pairing||{},pbtn=$('pair-btn');
     pbtn.disabled=!P.required;
     pbtn.title=P.required?'':(S&&S.sync_button?'Turn on "Pair only after pressing Sync" first':'Not available on this board');
-    pbtn.textContent=P.open?'Stop pairing ('+Math.ceil(P.left_ms/1000)+' s)':'Pair a controller';
+    pbtn.textContent=P.open?'Stop pairing':'Pair a controller';
     const L=s.link,ready=L.state==='ready';
     const MODES={switch_pro:EMU[0],dualsense_edge:EMU[1],dualsense:EMU[2],xbox360:EMU[3],gc_adapter:EMU[4]};
     const links=s.links||[],ct=connType(s);
@@ -1019,15 +1019,16 @@ async function poll(){
     if(!sb.hidden){
       // A Joy-Con 2 pair: each one's battery.
       const two=links.length===2?links.slice().sort((a,b)=>b.pid-a.pid):null;
-      sb.innerHTML=two?two.map(k=>battHTML(k.battery_pct,(k.pid===8295?'L ':'R ')+k.battery_pct+'%'+(k.charging?' · charging':''))).join('<span class="sep"></span>')
-        :battHTML(L.battery_pct,`${L.battery_pct}%`+(L.charging?' · charging':''));
+      // The icon only: the level is coarse (the controller's own 0–9).
+      sb.innerHTML=two?two.map(k=>battHTML(k.battery_pct,(k.pid===8295?'L':'R')+(k.charging?' · charging':''))).join('<span class="sep"></span>')
+        :battHTML(L.battery_pct,L.charging?'Charging':'');
       sb.title=two?'Joy-Con 2 batteries':'Controller battery';
     }
     const su=$('st-usb');su.textContent=s.usb.mounted?'USB: '+(s.profile||MODES[s.usb_mode]||s.usb_mode):'USB not connected';su.title=s.usb.mounted?'Emulating: '+(MODES[s.usb_mode]||s.usb_mode):'';su.className='chip'+(s.usb.mounted?'':' warn');
     kv($('ctrl'),[
       ['Type',ready?cname+half:(PIDS[L.pid]||(L.pid?('0x'+L.pid.toString(16)):'—'))],['Serial',L.serial||'—'],['Address',ready?L.addr:'—'],
       ...(links.length>1?links.map(k=>[PIDS[k.pid]||'Controller',`${k.addr} · ${k.state}`+(k.power_level>=0?` · battery level ${k.power_level}/9`:'')+(k.charging?' · charging':'')+` · ${k.report_hz} Hz`]):[]),
-      ['Battery',L.battery_mv?`${L.battery_pct}%${L.charging?' (charging)':''} · `+(L.power_level>=0?`controller level ${L.power_level}/9 · `:'estimated from voltage · ')+`${(L.battery_mv/1000).toFixed(2)} V · charge state 0x${(L.charge_state||0).toString(16).padStart(2,'0')}`:'—'],
+      ['Battery',L.battery_mv?`${L.charging?'charging · ':''}`+(L.power_level>=0?`controller level ${L.power_level}/9 · `:'estimated from voltage · ')+`${(L.battery_mv/1000).toFixed(2)} V · charge state 0x${(L.charge_state||0).toString(16).padStart(2,'0')}`:'—'],
       ['Report rate',ready?L.report_hz+' Hz ('+L.conn_interval_ms+' ms interval)':'—'],
       ['Gyro scale',['not detected','16.4','14.3'][L.gyro_range]||'—'],
       ['Dongle power',s.supply?`USB ${(s.supply.vbus/1000).toFixed(2)} V (lowest ${(s.supply.vbus_min/1000).toFixed(2)}), chip ${(s.supply.vdd/1000).toFixed(2)} V (lowest ${(s.supply.vdd_min/1000).toFixed(2)})`:'—'],

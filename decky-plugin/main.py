@@ -46,7 +46,6 @@ USBDEVFS_RELEASEINTERFACE = 0x80045510 # _IOR('U', 16, unsigned int)
 
 POLL_S = 3.0                # background status poll (notifications)
 UPDATE_CHECK_S = 24 * 3600  # automatic update check interval
-LOW_BATTERY_PCT = 20
 FW_CHUNK = 4096
 
 
@@ -373,10 +372,9 @@ class Plugin:
 
     # ---- Background: notifications -----------------------------------------
     async def _monitor(self):
-        """Connects, low batteries and new firmware, as "notify" events
-        (kind, title, body) the frontend shows as toasts."""
-        connected = set()
-        low = set()
+        """Profile switches and new firmware or plugin versions, as "notify"
+        events the frontend shows as toasts (Steam itself shows controller
+        connects and low batteries)."""
         running = None   # (profile, USB mode) the dongle runs
         while True:
             try:
@@ -385,21 +383,8 @@ class Plugin:
                     continue
                 st = await self.get_status()
                 if not st["ok"]:
-                    connected.clear()
                     continue
                 s = st["status"]
-                ready = [k for k in s.get("links", []) if k.get("state") == "ready"]
-                now = {k["addr"] for k in ready}
-                if now and not now <= connected:
-                    await decky.emit("notify", "connect", "", "")
-                for k in ready:
-                    if k.get("battery_pct", 100) <= LOW_BATTERY_PCT and not k.get("charging"):
-                        if k["addr"] not in low:
-                            low.add(k["addr"])
-                            await decky.emit("notify", "battery", k["pid"], k["battery_pct"])
-                    elif k.get("battery_pct", 0) > LOW_BATTERY_PCT + 5 or k.get("charging"):
-                        low.discard(k["addr"])
-                connected = now
                 # Profile switched (C + Home on the controller, or here).
                 cur = (s.get("profile"), s.get("usb_mode"))
                 if running and cur != running:

@@ -3,8 +3,8 @@
 Quick controls for the Switch2-Pico dongle from the Steam Deck's Quick Access
 menu (Decky Loader), on a Steam Deck or any SteamOS / Linux machine with Decky.
 
-* Status of the connected controller (batteries, what the dongle emulates).
-* **Pair a controller** / **Disconnect**.
+* Status of the connected controller (battery icons, what the dongle emulates).
+* **Pair a controller**.
 * **Profile** for the connected controller type (pop-up list with the
   profile's button and emulated controller).
 * **Extra buttons** of the connected controller (C, Capture, GL / GR, the
@@ -18,8 +18,8 @@ menu (Decky Loader), on a Steam Deck or any SteamOS / Linux machine with Decky.
   the update over USB.
 * **Plugin updates**: checks for a newer version of itself the same way,
   installs it and restarts Decky to load it.
-* Notifications: a controller connected, a low battery, a profile switch
-  (C + Home), a firmware update available.
+* Notifications: a profile switch (C + Home), a firmware or plugin update
+  available (Steam itself shows controller connects and low batteries).
 
 ## How it talks to the dongle
 

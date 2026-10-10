@@ -19,6 +19,27 @@ const row: React.CSSProperties = {
 const iconBox: React.CSSProperties = { flex: "none", minWidth: 40, display: "flex", justifyContent: "center" };
 const sub: React.CSSProperties = { fontSize: 13, color: "#a3adba", marginTop: 2, lineHeight: 1.3 };
 
+// Buttons with a translucent focus highlight, as in Steam's own lists (a
+// solid white one would hide white button icons).
+export const SOFT_CSS = `
+.s2p-soft { background: rgba(255,255,255,0.07); border-radius: 4px; color: #e6e9ed; cursor: pointer; }
+.s2p-soft.s2p-sel { background: rgba(26,159,255,0.22); }
+.s2p-soft.s2p-focus { background: rgba(255,255,255,0.20); }
+`;
+export function SoftButton(props: { onActivate(): void; style?: React.CSSProperties; selected?: boolean; children: ReactNode }) {
+  return (
+    <Focusable
+      className={"s2p-soft" + (props.selected ? " s2p-sel" : "")}
+      focusClassName="s2p-focus"
+      style={props.style}
+      onActivate={() => props.onActivate()}
+      onClick={() => props.onActivate()}
+    >
+      {props.children}
+    </Focusable>
+  );
+}
+
 export interface PickItem {
   key: number;
   icon: ReactNode;
@@ -38,14 +59,16 @@ export function PickerModal(props: {
 }) {
   return (
     <ModalRoot closeModal={props.closeModal}>
+      <style>{SOFT_CSS}</style>
       <div style={{ fontSize: 22, fontWeight: 700 }}>{props.title}</div>
       {props.subtitle && <div style={{ ...sub, marginBottom: 12 }}>{props.subtitle}</div>}
-      <Focusable style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: "60vh", overflowY: "auto" }}>
+      <Focusable flow-children="column" style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: "60vh", overflowY: "auto" }}>
         {props.items.map((it) => (
-          <DialogButton
+          <SoftButton
             key={it.key}
-            style={{ ...row, background: it.selected ? "#1a3a5c" : undefined }}
-            onClick={() => {
+            style={row}
+            selected={it.selected}
+            onActivate={() => {
               props.onPick(it.key);
               props.closeModal?.();
             }}
@@ -60,7 +83,7 @@ export function PickerModal(props: {
                 <path d="M4 9.5l3.2 3L14 5.5" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             )}
-          </DialogButton>
+          </SoftButton>
         ))}
       </Focusable>
       {props.footer && <div style={{ ...sub, marginTop: 12 }}>{props.footer}</div>}
@@ -100,9 +123,11 @@ export function PairedModal(props: { closeModal?(): void; onChange(): void }) {
   const connected = new Set((st?.links ?? []).filter((k) => k.state === "ready").map((k) => k.addr));
   return (
     <ModalRoot closeModal={props.closeModal}>
-      <div style={{ fontSize: 22, fontWeight: 700 }}>Paired controllers</div>
-      <div style={{ ...sub, marginBottom: 12 }}>
-        The dongle remembers up to {st?.bond.max ?? 8}; any of them connects with a button press. Newest first.
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
+        <div style={{ fontSize: 22, fontWeight: 700 }}>Paired controllers</div>
+        <DialogButton style={{ width: "auto", minWidth: 0, padding: "0 16px", height: 34 }} onClick={() => props.closeModal?.()}>
+          Back
+        </DialogButton>
       </div>
       <Focusable style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         {!list.length && <div style={sub}>None yet.</div>}
