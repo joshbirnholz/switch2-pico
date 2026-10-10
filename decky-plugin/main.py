@@ -193,6 +193,7 @@ class Plugin:
         self.latest_at = 0.0
         self.notified_version = None
         self.plugin_latest = None   # the plugin's latest.json
+        self.plugin_latest_at = 0.0
         self.plugin_notified = None
         self.updating = False
         self.monitor = asyncio.get_event_loop().create_task(self._monitor())
@@ -315,15 +316,25 @@ class Plugin:
     # ---- Plugin self-update ------------------------------------------------
     async def check_plugin_update(self, force=False):
         """{"ok", "installed", "latest", "available"} for this plugin."""
-        installed = getattr(decky, "DECKY_PLUGIN_VERSION", "0")
+        installed = self._installed_version()
         try:
-            if force or not self.plugin_latest:
+            if force or not self.plugin_latest or time.time() - self.plugin_latest_at > 600:
                 data = await asyncio.to_thread(http_get, PLUGIN_BASE + "latest.json?%d" % int(time.time()))
                 self.plugin_latest = json.loads(data)
+                self.plugin_latest_at = time.time()
         except Exception as e:
             return {"ok": False, "installed": installed, "error": "Couldn't reach GitHub (%s)" % e}
         latest = self.plugin_latest.get("version", "0")
         return {"ok": True, "installed": installed, "latest": latest, "available": vcmp(latest, installed) > 0}
+
+    def _installed_version(self):
+        # package.json next to this file is what was installed (and what an
+        # update replaces); Decky's own idea of it as a fallback.
+        try:
+            with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "package.json")) as f:
+                return json.load(f)["version"]
+        except (OSError, ValueError, KeyError):
+            return getattr(decky, "DECKY_PLUGIN_VERSION", "0")
 
     async def install_plugin_update(self):
         """Download the latest plugin, put its files in place and restart

@@ -87,6 +87,7 @@ function Content() {
   const [later, setLater] = useState(false);
   const [pupd, setPupd] = useState<PluginUpdate | null>(null);
   const [pLater, setPLater] = useState(false);
+  const [checking, setChecking] = useState(false);
   const [restarting, setRestarting] = useState(false);
   const typeSeen = useRef(-1);
   const speedTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -395,13 +396,33 @@ function Content() {
         {prefs && (
           <PanelSectionRow>
             <ToggleField
-              label="Check for updates"
+              label="Automatic update checks"
               description="On start and once a day"
               checked={prefs.check_updates}
               onChange={(v) => setPref("check_updates", v).then(setPrefs)}
             />
           </PanelSectionRow>
         )}
+        <PanelSectionRow>
+          <ButtonItem
+            layout="below"
+            disabled={checking}
+            onClick={async () => {
+              // Now, for the dongle and this plugin; shows the banners again.
+              setChecking(true);
+              const [u, p] = await Promise.all([checkUpdate(true), checkPluginUpdate(true)]);
+              setChecking(false);
+              setUpd(u);
+              setPupd(p);
+              setLater(false);
+              setPLater(false);
+              if (!u.ok && !p.ok) toaster.toast({ title: "Switch2-Pico", body: u.error ?? p.error ?? "Couldn't check for updates" });
+              else if (!u.available && !p.available) toaster.toast({ title: "Switch2-Pico", body: "Firmware and plugin are up to date" });
+            }}
+          >
+            {checking ? "Checking…" : "Check for updates"}
+          </ButtonItem>
+        </PanelSectionRow>
         <PanelSectionRow>
           <ButtonItem layout="below" onClick={() => showModal(<PairedModal onChange={poll} />)}>
             Paired controllers
