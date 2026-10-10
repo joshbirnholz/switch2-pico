@@ -379,6 +379,24 @@ bool mapping_quick_remap_map(uint8_t map[IN_COUNT], uint32_t prev, uint32_t raw,
     return false;
 }
 
+uint32_t mapping_type_inputs(ctrl_type_t t) {
+#define B(i) (1u << (i))
+    const uint32_t all = (1u << IN_COUNT) - 1;
+    const uint32_t r_side = B(IN_SL_R) | B(IN_SR_R);   // a pair's Joy-Con 2 (R) SL / SR
+    switch (t) {
+    case CTRL_JOYCON_PAIR: return all;
+    case CTRL_GAMECUBE: return all & ~(B(IN_MINUS) | B(IN_LSTICK) | B(IN_RSTICK) | B(IN_GL) | B(IN_GR) | r_side);
+    case CTRL_JOYCON_L:
+        return all & ~(B(IN_A) | B(IN_B) | B(IN_X) | B(IN_Y) | B(IN_R) | B(IN_ZR) | B(IN_PLUS) | B(IN_RSTICK) |
+                       B(IN_HOME) | B(IN_C) | r_side);
+    case CTRL_JOYCON_R:
+        return all & ~(B(IN_UP) | B(IN_DOWN) | B(IN_LEFT) | B(IN_RIGHT) | B(IN_L) | B(IN_ZL) | B(IN_MINUS) |
+                       B(IN_LSTICK) | B(IN_CAPTURE) | r_side);
+    default: return all & ~r_side;
+    }
+#undef B
+}
+
 bool mapping_tap(mapping_tap_t *t, const uint8_t map[IN_COUNT], uint8_t value, uint32_t prev, uint32_t raw) {
     uint32_t pressed = raw & ~prev;
     if (t->held) {

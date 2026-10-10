@@ -272,9 +272,12 @@ The dongle tells Steam only about the optional buttons (C, Capture, the
 paddles) that a button of the profile in use actually sends: with C mapped
 to the Quick Access Menu (Decky), for example, Steam doesn't list a C button
 it would never see. SDL reads that list only when the controller appears on
-USB, so when a mapping, profile or controller type change alters it, the
+USB, so when a change of mapping, profile or controller type alters it, the
 dongle will leave USB and come back half a second later (the Bluetooth
-controller stays connected). Steam may then treat it as a controller with a
+controller stays connected). Changes that leave the same buttons for Steam
+to map (say, C from the Quick Access menu to Home, or GL from GL to GR)
+take effect without that. Only the controller's own buttons count, not
+mappings stored for buttons it doesn't have. Steam may then treat it as a controller with a
 different layout, with its own Steam Input configuration. Defaults:
 
 | Button | SInput |

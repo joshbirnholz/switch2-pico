@@ -135,6 +135,10 @@ typedef enum { MACRO_IDLE, MACRO_GUIDE, MACRO_GUIDE_SOUTH, MACRO_GUIDE_R1 } macr
 macro_phase_t mapping_macro_run(mapping_macro_t *m, const uint8_t map[IN_COUNT], uint8_t qam, uint8_t shot,
                                 uint32_t prev, uint32_t raw, uint32_t now_ms);
 bool mapping_macro_busy(const mapping_macro_t *m);
+// The inputs controller type `t` has, as bits (1 << in_button_t): what the
+// configuration page shows for it.
+uint32_t mapping_type_inputs(ctrl_type_t t);
+
 // Outputs handled outside the host report (OUT_DECKY_QAM / GP_DECKY_QAM):
 // true when a button mapped to `value` is released after a tap, with no
 // other button pressed meanwhile (so C + Home and C + GL still work when C

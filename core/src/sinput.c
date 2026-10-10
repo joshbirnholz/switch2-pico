@@ -68,10 +68,10 @@ static const struct {
 // The buttons the host is told about (usage masks). Always: face buttons,
 // D-pad, stick clicks, bumpers, Start, Back, Guide. Triggers are analog only:
 // with their digital bits too SDL would add two more buttons for them.
-void sinput_usage_masks(const uint8_t map[IN_COUNT], uint8_t m[4]) {
+void sinput_usage_masks(const uint8_t map[IN_COUNT], uint32_t inputs, uint8_t m[4]) {
     uint32_t used = 0;
     for (int i = 0; i < IN_COUNT; i++) {
-        if (map[i] < GP_COUNT) used |= GP_BIT(map[i]);
+        if ((inputs & (1u << i)) && map[i] < GP_COUNT) used |= GP_BIT(map[i]);
     }
     bool pair1 = used & (GP_BIT(GP_PADDLE_L) | GP_BIT(GP_PADDLE_R));
     bool pair2 = used & (GP_BIT(GP_FN_L) | GP_BIT(GP_FN_R));
@@ -323,9 +323,10 @@ void sinput_task(void) {
     ctrl_type_t t = s2_link_state() == S2_LINK_READY ? mapping_ctrl_type(s2_link_mapping_ctx())
                                                      : settings_boot_ctrl(&g_settings);
     uint8_t masks[4];
-    sinput_usage_masks(settings_active_map(&g_settings, t), masks);
-    // SDL reads the button list only when the device appears: when it changes
-    // (a mapping, the profile or the controller type), appear anew.
+    sinput_usage_masks(settings_active_map(&g_settings, t), mapping_type_inputs(t), masks);
+    // SDL reads the button list only when the device appears: when the list
+    // itself changes (not just any mapping; see sinput_usage_masks()),
+    // appear anew.
     // (After a moment: the page's or plugin's request that changed it gets
     // its answer first.)
     static bool changed;

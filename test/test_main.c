@@ -1128,7 +1128,7 @@ static void test_sinput(void) {
     uint8_t masks[4];
     uint8_t pm[IN_COUNT];
     settings_default_mode_map(CTRL_PRO, USB_MODE_SINPUT, pm);
-    sinput_usage_masks(pm, masks);
+    sinput_usage_masks(pm, mapping_type_inputs(CTRL_PRO), masks);
     sinput_build_features(mac, masks, r);
     const uint8_t *d = r + 2;
     CHECK(r[0] == 0x02 && r[1] == 0x02 && d[0] == 1 && d[2] == 0xFF && d[4] == 7 && (d[5] >> 5) == 3);
@@ -1142,15 +1142,32 @@ static void test_sinput(void) {
     pm[IN_CAPTURE] = GP_NONE;
     pm[IN_GL] = GP_L3;
     pm[IN_GR] = GP_R3;
-    sinput_usage_masks(pm, masks);
+    sinput_usage_masks(pm, mapping_type_inputs(CTRL_PRO), masks);
     CHECK(masks[0] == 0xFF && masks[1] == 0x0F && masks[2] == 0x07 && masks[3] == 0x00);
     pm[IN_GL] = GP_PADDLE_L;                       // L4 alone: the first pair only
-    sinput_usage_masks(pm, masks);
+    sinput_usage_masks(pm, mapping_type_inputs(CTRL_PRO), masks);
     CHECK(masks[1] == 0xCF && masks[2] == 0x07);
     pm[IN_GL] = GP_FN_L;                           // GL: both pairs
     pm[IN_C] = GP_MISC;
-    sinput_usage_masks(pm, masks);
+    sinput_usage_masks(pm, mapping_type_inputs(CTRL_PRO), masks);
     CHECK(masks[1] == 0xCF && masks[2] == 0x37 && masks[3] == 0x01);
+    // Mapping changes that keep the same buttons: the same list.
+    uint8_t again[4];
+    pm[IN_GR] = GP_FN_L;
+    pm[IN_A] = GP_NORTH;
+    sinput_usage_masks(pm, mapping_type_inputs(CTRL_PRO), again);
+    CHECK(memcmp(masks, again, 4) == 0);
+    // Inputs the controller doesn't have don't count: a Pro Controller has
+    // no Joy-Con 2 (R) SL / SR, a GameCube controller no GL / GR.
+    pm[IN_C] = GP_NONE;
+    pm[IN_SL_R] = GP_MISC;
+    sinput_usage_masks(pm, mapping_type_inputs(CTRL_PRO), again);
+    CHECK(again[3] == 0x00);
+    sinput_usage_masks(pm, mapping_type_inputs(CTRL_JOYCON_PAIR), again);
+    CHECK(again[3] == 0x01);
+    sinput_usage_masks(pm, mapping_type_inputs(CTRL_GAMECUBE), again);
+    CHECK(again[1] == 0x0F && again[3] == 0x00);
+    CHECK(!(mapping_type_inputs(CTRL_JOYCON_L) & (1u << IN_C)) && (mapping_type_inputs(CTRL_JOYCON_R) & (1u << IN_C)));
 
     // Commands.
     sinput_command_t c;
