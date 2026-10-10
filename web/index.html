@@ -700,10 +700,11 @@ function renderMap(mode){
     return `<div class="grp g-${k}"><h4>${t}</h4><div class="${lay||''}">${cells.map(c=>cell(...c)).join('')}</div></div>`};
   // Shoulder columns. Joy-Con 2: the (L)'s SL / SR arrive as GL / GR and
   // the (R)'s as SL_R / SR_R (a pair; a single one's are GL / GR), each
-  // under its own Joy-Con.
-  const shoulder=MAP_CTRL===2?[['L','ZL','GL','GR'],['R','ZR','SL_R','SR_R']]:
-    MAP_CTRL===3?[['L','ZL','GL','GR'],['R','ZR','SL_R','SR_R']]:
-    MAP_CTRL===4?[['L','ZL','SL_R','SR_R'],['R','ZR','GL','GR']]:
+  // under its own Joy-Con, top to bottom as on it: the (L)'s SL above its
+  // SR, the (R)'s SR above its SL.
+  const shoulder=MAP_CTRL===2?[['L','ZL','GL','GR'],['R','ZR','SR_R','SL_R']]:
+    MAP_CTRL===3?[['L','ZL','GL','GR'],['R','ZR','SR_R','SL_R']]:
+    MAP_CTRL===4?[['L','ZL','SL_R','SR_R'],['R','ZR','GR','GL']]:
     [['L','ZL','GL'],['R','ZR','GR','SL_R','SR_R']];
   m.innerHTML=grp('ls')+grp('dpad')+grp('face')+grp('rs')+
     `<div class="col g-lsh">${shoulder[0].map(n=>cell(n,SIDE_LABEL[n]||n)).join('')}</div>`+

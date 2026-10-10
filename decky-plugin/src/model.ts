@@ -88,7 +88,9 @@ export const PIDS: Record<number, string> = {
 // Inputs (in_button_t).
 export const IN_CAPTURE = 13, IN_GL = 18, IN_GR = 19, IN_C = 20, IN_SL_R = 21, IN_SR_R = 22;
 
-// A controller's extra buttons: the input, its label, and which Joy-Con it is on.
+// A controller's extra buttons: the input, its label, and which Joy-Con it is
+// on. SL / SR top to bottom as on the Joy-Con: the (L)'s SL above its SR, the
+// (R)'s SR above its SL.
 export interface Extra { input: number; label: string; side?: string }
 export function extraButtons(t: number): Extra[] {
   switch (t) {
@@ -100,12 +102,12 @@ export function extraButtons(t: number): Extra[] {
       return [
         { input: IN_C, label: "C" }, { input: IN_CAPTURE, label: "Capture" },
         { input: IN_GL, label: "SL", side: "Joy-Con 2 (L)" }, { input: IN_GR, label: "SR", side: "Joy-Con 2 (L)" },
-        { input: IN_SL_R, label: "SL", side: "Joy-Con 2 (R)" }, { input: IN_SR_R, label: "SR", side: "Joy-Con 2 (R)" },
+        { input: IN_SR_R, label: "SR", side: "Joy-Con 2 (R)" }, { input: IN_SL_R, label: "SL", side: "Joy-Con 2 (R)" },
       ];
     case CTRL_JC_L:
       return [{ input: IN_CAPTURE, label: "Capture" }, { input: IN_GL, label: "SL" }, { input: IN_GR, label: "SR" }];
     case CTRL_JC_R:
-      return [{ input: IN_C, label: "C" }, { input: IN_GL, label: "SL" }, { input: IN_GR, label: "SR" }];
+      return [{ input: IN_C, label: "C" }, { input: IN_GR, label: "SR" }, { input: IN_GL, label: "SL" }];
   }
   return [];
 }
