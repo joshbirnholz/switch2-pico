@@ -267,7 +267,8 @@ XUSB10) and WinUSB the configuration interface; the mice get Windows' mouse
 driver. XInput games see an Xbox 360 controller as before. Linux's xpad
 driver knows the pid.codes vendor ID. Software that recognises an Xbox 360
 controller by Microsoft's USB ID won't, and Steam may show it as a generic
-XInput controller. **Untested on Windows.**
+XInput controller. Tested on Windows with the nRF52840: the controller, the
+configuration page and Mouse Mode all work.
 
 **SInput mode** presents the dongle as an SInput controller ("Switch2-Pico
 SInput", 2E8A:10C6), Hand Held Legend's open USB protocol that SDL (and so
