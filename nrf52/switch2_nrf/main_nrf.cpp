@@ -124,7 +124,7 @@ static void usb_setup(bool attach) {
     TinyUSBDevice.setID(id->vid, id->pid);
     TinyUSBDevice.setManufacturerDescriptor(id->manufacturer);
     TinyUSBDevice.setProductDescriptor(id->product);
-    TinyUSBDevice.setSerialDescriptor("000000000001");
+    TinyUSBDevice.setSerialDescriptor(usb_mode_serial());
     bool config_only = usb_mode_config_only();
     if (!config_only) TinyUSBDevice.addInterface(s_pro_itf);
     if (g_settings.webusb_enabled || config_only) {
@@ -141,6 +141,13 @@ static void usb_setup(bool attach) {
         for (int i = 0; i < USB_MOUSE_COUNT; i++) TinyUSBDevice.addInterface(s_mouse_itf[i]);
     }
     if (attach) TinyUSBDevice.attach();
+}
+
+// The BOS descriptor is ours (core/src/usb_ms_desc.c: its Microsoft OS 2.0
+// descriptors differ by mode); nrf52/build.sh links Adafruit_USBD_WebUSB's
+// tud_descriptor_bos_cb() calls here (--wrap).
+extern "C" uint8_t const *__wrap_tud_descriptor_bos_cb(void) {
+    return usb_bos_descriptor();
 }
 
 // The core switched between the controller and the configuration-only

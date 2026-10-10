@@ -39,11 +39,7 @@ uint8_t const *tud_descriptor_device_cb(void) {
     const usb_identity_t *id = usb_mode_identity();
     s_device.idVendor = id->vid;
     s_device.idProduct = id->pid;
-    // Xbox 360 mode is vendor class at device level, like a real one. Linux
-    // then doesn't match class-only interface drivers (usbhid) to any of its
-    // interfaces, so with the Joy-Con 2 mouse the class is per interface
-    // (xpad still matches: it names the vendor too).
-    uint8_t cls = usb_mode_has_mouse() || usb_mode_config_only() ? 0x00 : id->device_class;
+    uint8_t cls = usb_mode_config_only() ? 0x00 : id->device_class;
     s_device.bDeviceClass = s_device.bDeviceSubClass = s_device.bDeviceProtocol = cls;
     // A distinct bcdDevice keeps Windows from reusing a cached "no MS OS
     // descriptor" answer from a genuine controller.
@@ -52,15 +48,8 @@ uint8_t const *tud_descriptor_device_cb(void) {
     return (uint8_t const *)&s_device;
 }
 
-#define BOS_LEN (TUD_BOS_DESC_LEN + TUD_BOS_WEBUSB_DESC_LEN + TUD_BOS_MICROSOFT_OS_DESC_LEN)
-static const uint8_t s_bos[] = {
-    TUD_BOS_DESCRIPTOR(BOS_LEN, 2),
-    TUD_BOS_WEBUSB_DESCRIPTOR(WEBUSB_VENDOR_REQUEST_URL, 1),
-    TUD_BOS_MS_OS_20_DESCRIPTOR(0xB2, WEBUSB_VENDOR_REQUEST_MS),
-};
-
 uint8_t const *tud_descriptor_bos_cb(void) {
-    return g_settings.webusb_enabled || usb_mode_config_only() ? s_bos : NULL;
+    return g_settings.webusb_enabled || usb_mode_config_only() ? usb_bos_descriptor() : NULL;
 }
 
 // ---------------------------------------------------------------------------
@@ -114,7 +103,7 @@ static const char *string_for(uint8_t index) {
     switch (index) {
     case 1: return usb_mode_identity()->manufacturer;
     case 2: return usb_mode_identity()->product;
-    case 3: return "000000000001";
+    case 3: return usb_mode_serial();
     case 4: return "Switch2-Pico Config";
     default: return NULL;
     }

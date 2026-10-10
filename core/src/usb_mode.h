@@ -16,10 +16,16 @@ extern "C" {
 
 typedef struct {
     uint16_t vid, pid, bcd_device;
-    uint8_t device_class;   // 0xFF for the Xbox 360 controller
+    uint8_t device_class;
     const char *manufacturer;
     const char *product;
+    const char *serial;     // NULL: the default one
 } usb_identity_t;
+
+// The USB serial number string of the active identity.
+const char *usb_mode_serial(void);
+// The BOS descriptor (WebUSB, Microsoft OS 2.0; core/src/usb_ms_desc.c).
+const uint8_t *usb_bos_descriptor(void);
 
 usb_mode_t usb_mode_active(void);
 const usb_identity_t *usb_mode_identity(void);

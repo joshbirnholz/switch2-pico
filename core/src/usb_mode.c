@@ -14,7 +14,11 @@ static const usb_identity_t IDENTITIES[USB_MODE_COUNT] = {
                                  "DualSense Edge Wireless Controller"},
     [USB_MODE_DUALSENSE] = {0x054C, 0x0CE6, 0x0100, 0x00, "Sony Interactive Entertainment",
                             "DualSense Wireless Controller"},
-    [USB_MODE_XBOX360] = {0x045E, 0x028E, 0x0114, 0xFF, "Microsoft", "Controller"},
+    // Not Microsoft's 045E:028E: Windows' Xbox 360 driver takes a device with
+    // that ID as a whole (the configuration interface and the mice too).
+    // With this one the Microsoft OS 2.0 descriptors give it just the
+    // controller interface (usb_ms_desc.c); Linux's xpad knows the vendor.
+    [USB_MODE_XBOX360] = {0x1209, 0x0001, 0x0114, 0x00, "Switch2-Pico", "Switch2-Pico Xbox 360 Controller", "000000000360"},
     [USB_MODE_GC_ADAPTER] = {0x057E, 0x0337, 0x0100, 0x00, "Nintendo", "WUP-028"},
     // Hand Held Legend's generic SInput ID (SDL picks the protocol by it).
     [USB_MODE_SINPUT] = {0x2E8A, 0x10C6, 0x0100, 0x00, "Switch2-Pico", "Switch2-Pico SInput"},
@@ -60,6 +64,11 @@ bool usb_mode_has_mouse(void) {
 const usb_identity_t *usb_mode_identity(void) {
     if (s_config_only) return &CONFIG_ONLY;
     return &IDENTITIES[usb_mode_active()];
+}
+
+const char *usb_mode_serial(void) {
+    const char *s = usb_mode_identity()->serial;
+    return s ? s : "000000000001";
 }
 
 const char *usb_mode_name(usb_mode_t m) {

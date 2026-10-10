@@ -23,3 +23,5 @@ ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="054c", ATTR{idProduct}=="0ce6"
 ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="045e", ATTR{idProduct}=="028e", TEST=="power/wakeup", ATTR{power/wakeup}="enabled"
 ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="057e", ATTR{idProduct}=="0337", TEST=="power/wakeup", ATTR{power/wakeup}="enabled"
 ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="2e8a", ATTR{idProduct}=="10c6", TEST=="power/wakeup", ATTR{power/wakeup}="enabled"
+# Xbox 360 mode (0.16.0 on) and the configuration-only device.
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="1209", ATTR{idProduct}=="0001", ATTR{product}=="Switch2-Pico*", TEST=="power/wakeup", ATTR{power/wakeup}="enabled"

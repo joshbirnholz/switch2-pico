@@ -257,6 +257,18 @@ Under **Mode** (on each controller tab) the dongle can present itself as:
 | GameCube adapter | Switch and Wii U games that take GameCube controllers (Smash), Dolphin / Slippi, Steam | mapped to existing buttons |
 | SInput | PCs (Steam, SDL games); Steam Input gets every extra button, with Nintendo symbols | GL, GR and C (with their symbols), plus SL (L) / SR (R) |
 
+**Xbox 360 mode** presents an XInput controller ("Switch2-Pico Xbox 360
+Controller", 1209:0001, the pid.codes test ID) rather than Microsoft's own
+ID (045E:028E, before 0.16.0): Windows' Xbox 360 driver takes a device with
+Microsoft's ID as a whole, so the configuration page got "access denied"
+and Joy-Con 2 Mouse Mode had no mice. With this ID the dongle's Microsoft
+OS 2.0 descriptors give that driver only the controller (compatible ID
+XUSB10) and WinUSB the configuration interface; the mice get Windows' mouse
+driver. XInput games see an Xbox 360 controller as before. Linux's xpad
+driver knows the pid.codes vendor ID. Software that recognises an Xbox 360
+controller by Microsoft's USB ID won't, and Steam may show it as a generic
+XInput controller. **Untested on Windows.**
+
 **SInput mode** presents the dongle as an SInput controller ("Switch2-Pico
 SInput", 2E8A:10C6), Hand Held Legend's open USB protocol that SDL (and so
 Steam) reads directly: the dongle tells the host which buttons, sticks,
@@ -449,8 +461,8 @@ With the dongle plugged in, open **https://joshbirnholz.github.io/switch2-pico/*
 in Chrome or Edge (Chrome also offers this link in a notification when the
 dongle is plugged in), click **Connect over USB** and pick the dongle ("Pro
 Controller", "DualSense Edge Wireless Controller", "DualSense Wireless
-Controller", "Controller" or "Switch2-Pico SInput", depending on its USB
-mode; a real controller with those names isn't listed).
+Controller", "Switch2-Pico Xbox 360 Controller", "Switch2-Pico SInput" or
+"Switch2-Pico (no controller)", depending on its USB mode; a real controller with those names isn't listed).
 You can also open `web/index.html` from this repository directly (download
 it and double-click it; WebUSB works from a local file too).
 

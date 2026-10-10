@@ -62,6 +62,7 @@ add_executable(switch2_pico
         ${CORE}/settings.c
         ${CORE}/usb_hid.c
         ${CORE}/usb_mode.c
+        ${CORE}/usb_ms_desc.c
         ${CORE}/usb_pro_desc.c
         ${CORE}/x360.c
         ${CORE}/gc_adapter.c
@@ -73,7 +74,6 @@ add_executable(switch2_pico
         ${PICO_SRC}/platform_pico.c
         ${PICO_SRC}/s2_ble_btstack.c
         ${PICO_SRC}/usb_descriptors.c
-        ${PICO_SRC}/webusb_desc.c
         ${PICO_SRC}/status_led.c
         ${PICO_SRC}/bootsel.c
         ${PICO_SRC}/web/wifi_ap.c
