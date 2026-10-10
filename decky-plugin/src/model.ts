@@ -49,7 +49,6 @@ export interface Settings {
   types: CtrlType[];
   inputs: string[];
   quick_remap: number;
-  usb_detach: number;
   decky_options?: number;
 }
 

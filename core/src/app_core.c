@@ -85,11 +85,35 @@ void s2_link_hook_controller_seen(void) {
     tud_remote_wakeup();
 }
 
-// "Only appear as a controller while one is connected": otherwise the
-// dongle is a configuration-only USB device (see usb_mode_set_config_only()).
-// Switching means leaving the bus and coming back as the other device.
+// The dongle appears as a controller only while one is connected; otherwise
+// it is a configuration-only USB device (see usb_mode_set_config_only()).
+// Switching means leaving the bus and coming back as the other device, so:
+// - a controller connecting switches right away;
+// - one going away switches only after USB_GONE_MS (a dropped connection
+//   that comes right back doesn't make the host see two new devices);
+// - not while the host sleeps (the controller is let go then, and a button
+//   press has to wake the host through the device it armed), nor for
+//   USB_RESUMED_MS after it wakes (the controller reconnects meanwhile).
+#define USB_GONE_MS    5000
+#define USB_RESUMED_MS 15000
+
 static void usb_present_controller(bool controller) {
-    bool config_only = g_settings.usb_detach_when_idle && !controller;
+    static bool waiting;
+    static uint32_t switch_at;
+    bool config_only = !controller;
+    if (config_only && !usb_mode_config_only()) {
+        if (tud_suspended()) {
+            waiting = true;
+            switch_at = platform_deadline_ms(USB_RESUMED_MS);
+            return;
+        }
+        if (!waiting) {
+            waiting = true;
+            switch_at = platform_deadline_ms(USB_GONE_MS);
+        }
+        if (!platform_time_reached(switch_at)) return;
+    }
+    waiting = false;
     if (config_only == usb_mode_config_only()) return;
     tud_disconnect();
     usb_mode_set_config_only(config_only);
@@ -635,7 +659,6 @@ static void usb_watch_task(void) {
 }
 
 static void maintenance_task(void) {
-    // The setting may change at any time (from the page or the plugin).
     if (!s_usb_reconnect) usb_present_controller(s2_link_state() == S2_LINK_READY);
     if (s_usb_reconnect && platform_time_reached(s_usb_reconnect_at)) {
         s_usb_reconnect = false;

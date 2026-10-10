@@ -271,13 +271,13 @@ static void api_settings_get(http_response_t *r) {
               "\"gyro_bias\":[%d,%d,%d],"
               "\"rumble_freq_mode\":%u,\"rumble_freq_slope\":%u,"
               "\"usb_interval\":%u,\"led_follow_host\":%u,"
-              "\"quick_remap\":%u,\"usb_detach\":%u,\"usb_wakeup\":%u,\"webusb\":%u,\"hotkey\":%u,\"wifi_autostart\":%u,\"wifi_channel\":%u,"
+              "\"quick_remap\":%u,\"usb_wakeup\":%u,\"webusb\":%u,\"hotkey\":%u,\"wifi_autostart\":%u,\"wifi_channel\":%u,"
               "\"wifi_ssid\":",
               s->gyro_enabled,
               s->gyro_range, s->gyro_scale_pct, s->accel_scale_pct, s->gyro_bias[0], s->gyro_bias[1],
               s->gyro_bias[2], s->rumble_freq_mode,
               s->rumble_freq_slope, s->usb_report_interval_ms,
-              s->led_follow_host, !s->quick_remap_off, s->usb_detach_when_idle, s->usb_remote_wakeup, s->webusb_enabled, s->hotkey_enabled,
+              s->led_follow_host, !s->quick_remap_off, s->usb_remote_wakeup, s->webusb_enabled, s->hotkey_enabled,
               s->wifi_autostart, s->wifi_channel);
     jb_str(&j, s->wifi_ssid);
     jb_printf(&j, ",\"wifi_has_pass\":%s,\"ble_tx_power\":%u,\"idle_disconnect\":%u,\"idle_minutes\":%u,"
@@ -433,7 +433,6 @@ static bool apply_kv(settings_t *s, const char *k, const char *v, bool *usb_reco
         {"rumble_freq_slope", &s->rumble_freq_slope, 1, false},
         {"usb_interval", &s->usb_report_interval_ms, 1, true},
         {"led_follow_host", &s->led_follow_host, 1, false},
-        {"usb_detach", &s->usb_detach_when_idle, 1, false},
         {"usb_wakeup", &s->usb_remote_wakeup, 1, false},
         {"hotkey", &s->hotkey_enabled, 1, false},
         {"ble_tx_power", &s->ble_tx_power, 1, false},

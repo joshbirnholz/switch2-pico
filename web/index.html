@@ -370,7 +370,6 @@ body.offline #usb-help{display:flex}
       <label class="kvrow">Report interval<select data-k="usb_interval" id="usb-interval"><option value="4">4 ms (250 Hz)</option><option value="8">8 ms (125 Hz)</option><option value="16">16 ms (62.5 Hz)</option></select></label>
       <label class="check"><input type="checkbox" data-k="led_follow_host">Player lights follow the host</label>
       <label class="check"><input type="checkbox" data-k="usb_wakeup">Wake a sleeping PC from the controller</label>
-      <label class="check top"><input type="checkbox" data-k="usb_detach" id="usb-detach"><span>Only appear as a controller while one is connected<span class="hint" style="display:block" id="usb-detach-note" hidden>With no controller connected, the dongle will show up as a “Switch2-Pico” USB device that games don’t see. This page and the Decky plugin can still configure it.</span></span></label>
     </section>
     <details class="card" open>
       <summary>Connection details</summary>
@@ -963,7 +962,6 @@ function render(){
   S.types.forEach((T,t)=>CUR[t]=T.active);
   showTab(MAP_CTRL);
   renderProfile();
-  detachNote();
   setDirty(false);
 }
 // The profile the dongle runs with: the one in use for the controller type
@@ -976,7 +974,6 @@ async function deckyOptionsChanged(){
   try{await api('/api/settings',{method:'POST',body:'decky_options='+on});S.decky_options=on}
   catch(e){$('decky-options').checked=!on;stashMap();renderMap(MAP_MODE)}
 }
-function detachNote(){$('usb-detach-note').hidden=!$('usb-detach').checked}
 async function loadSettings(){S=(await api('/api/settings')).json();render()}
 async function save(){
   stashProfile();
@@ -1238,7 +1235,6 @@ document.querySelectorAll('[data-page="ctrl"],[data-page="dev"]').forEach(pg=>{
   pg.addEventListener('input',e=>{if(e.target.matches('input,select')&&S)setDirty(true)});
   pg.addEventListener('change',e=>{if(e.target.matches('input,select')&&S)setDirty(true)});
 });
-$('usb-detach').addEventListener('change',detachNote);
 window.addEventListener('beforeunload',e=>{if(DIRTY){e.preventDefault();e.returnValue=''}});
 setInterval(()=>{if(SEC==='tools'&&$('log-follow').checked&&LOG_VIEW==='now'&&!document.hidden)loadLog().catch(()=>{})},2000);
 fwCheck();

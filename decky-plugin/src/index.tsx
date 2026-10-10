@@ -383,16 +383,6 @@ function Content() {
       )}
 
       <PanelSection title="Dongle">
-        {S && (
-          <PanelSectionRow>
-            <ToggleField
-              label="Only appear as a controller while one is connected"
-              description={S.usb_detach ? "With no controller connected, the dongle will show up as a USB device that games don't see." : undefined}
-              checked={!!S.usb_detach}
-              onChange={(v) => save(`usb_detach=${v ? 1 : 0}`)}
-            />
-          </PanelSectionRow>
-        )}
         {prefs && (
           <PanelSectionRow>
             <ToggleField

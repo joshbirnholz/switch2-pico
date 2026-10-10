@@ -465,13 +465,13 @@ enable it once under **Settings → Pages → Source: GitHub Actions**.
   the configuration interface.
 * The WebUSB interface is a second USB interface next to the controller, and
   is always on.
-* With *Only appear as a controller while one is connected* (**Device →
-  USB**), the dongle shows up while no controller is connected as a plain
-  USB device, "Switch2-Pico (no controller)" (1209:0001, pid.codes' test
-  ID), with only the configuration interface: games don't see a controller,
-  but this page and the Decky plugin can still configure it. When a
-  controller connects, the dongle leaves USB and comes back as the
-  emulated controller (and the other way round when it disconnects).
+* While no controller is connected, the dongle shows up as a plain USB
+  device, "Switch2-Pico (no controller)" (1209:0001, pid.codes' test ID),
+  with only the configuration interface: games don't see a controller, but
+  this page and the Decky plugin can still configure it. When a controller
+  connects, the dongle leaves USB and comes back as the emulated controller;
+  5 seconds after it disconnects, the other way round. While the PC sleeps
+  it stays the controller, so a button press can still wake the PC.
 
 ### Over Wi-Fi
 
@@ -494,7 +494,7 @@ On the page you can:
 * see the live input, battery, report rate and connection details
 * remap every button, including GL, GR and C
 * set stick deadzones, gyro sensitivity and calibration, and rumble strength and frequency mode
-* toggle USB behaviour: report rate, LED following, wake-on-controller, attach only while connected
+* toggle USB behaviour: report rate, LED following, wake-on-controller
 * change the Wi-Fi name and password, reboot, enter firmware update mode, factory reset
 * read the firmware log (useful for bug reports)
 

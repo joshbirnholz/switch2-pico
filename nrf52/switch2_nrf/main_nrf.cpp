@@ -176,9 +176,8 @@ void setup() {
     platform_watchdog_start();
     InternalFS.begin();
     settings_init();
-    // No controller yet: with "only as a controller while one is
-    // connected", start as the configuration-only device.
-    usb_mode_set_config_only(g_settings.usb_detach_when_idle);
+    // No controller yet: start as the configuration-only device.
+    usb_mode_set_config_only(true);
     usb_setup(true);
     app_core_init();
 }

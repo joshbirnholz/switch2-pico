@@ -1,6 +1,6 @@
 {
   "name": "switch2-pico-decky",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "description": "Quick controls for the Switch2-Pico dongle from the Steam Deck's Quick Access menu",
   "type": "module",
   "scripts": {

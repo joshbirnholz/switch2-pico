@@ -222,7 +222,7 @@ typedef struct {
     // ---- USB ----
     uint8_t usb_report_interval_ms;     // 0x30 input report period (4..16)
     uint8_t led_follow_host;            // mirror the host's player LEDs on the controller
-    uint8_t usb_detach_when_idle;       // only attach to USB while a controller is connected
+    uint8_t usb_detach_when_idle;       // unused since 0.15.0 (the dongle always does that now)
     uint8_t usb_remote_wakeup;          // wake a sleeping host when the controller wakes up
 
     // ---- Wi-Fi configuration access point ----

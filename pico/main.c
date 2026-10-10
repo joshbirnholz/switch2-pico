@@ -109,9 +109,8 @@ int main(void) {
     if (watchdog_enable_caused_reboot()) LOG("boot: last reset: watchdog (main loop stuck)");
     settings_init();
 
-    // No controller yet: with "only as a controller while one is
-    // connected", start as the configuration-only device.
-    usb_mode_set_config_only(g_settings.usb_detach_when_idle);
+    // No controller yet: start as the configuration-only device.
+    usb_mode_set_config_only(true);
     tud_init(0);
 
     if (cyw43_arch_init()) {

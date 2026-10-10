@@ -21,7 +21,6 @@ menu (Decky Loader), on a Steam Deck or any SteamOS / Linux machine with Decky.
   through hidraw in SInput mode, unless a rule for its ID (2e8a:10c6) is
   already there.
 * **Paired controllers**: forget one or all.
-* **Only on USB while a controller is connected** (the dongle's setting).
 * **Reboot dongle**.
 * **Firmware updates**: checks GitHub on start and once a day, and installs
   the update over USB.
