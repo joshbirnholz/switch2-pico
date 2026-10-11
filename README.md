@@ -525,11 +525,7 @@ With the plugin, any button can open Steam's **Quick Access menu** (in any
 mode and profile): map it to **Quick Access Menu (Decky)**. The dongle counts
 taps of it (released without another button pressed meanwhile, so C still
 works for C + Home and C + GL) and the plugin opens the menu, or closes it
-when it's open. Like the Steam Deck's ... button, held it is Home / Guide
-for Steam's chords (Guide + R for a screenshot, and so on): from the moment
-another button is pressed (that one reaches Steam a moment after Guide), or
-after half a second on its own (Steam shows its chord help); released then,
-it doesn't open the menu. That part needs no plugin. This
+when it's open. This
 output only works in SteamOS Game Mode with the plugin running, so the
 configuration page lists it only with **Device → Decky plugin → Show
 additional Decky options** on; using the plugin turns that on for the

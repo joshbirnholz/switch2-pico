@@ -139,31 +139,15 @@ bool mapping_macro_busy(const mapping_macro_t *m);
 // configuration page shows for it.
 uint32_t mapping_type_inputs(ctrl_type_t t);
 
-// The Quick Access Menu (Decky) output (OUT_DECKY_QAM / GP_DECKY_QAM), like
-// the Steam Deck's ... button: a tap (released with no other button pressed
-// meanwhile, and within QAM_HOLD_MS) opens the Quick Access menu through the
-// Decky plugin; held, it is Home / Guide for Steam's chords: from the moment
-// another button is pressed, or once it has been held QAM_HOLD_MS alone.
-// The other buttons reach the host QAM_CHORD_DELAY_MS after Guide, so Steam
-// sees Guide first. `cancel`: a combo of the dongle's own is held (C + Home,
-// C + GL / GR): neither, until the button is released. `prev` / `raw`: the
-// controller's own buttons.
-#define QAM_HOLD_MS        500
-#define QAM_CHORD_DELAY_MS 40
+// Outputs handled outside the host report (OUT_DECKY_QAM / GP_DECKY_QAM):
+// true when a button mapped to `value` is released after a tap, with no
+// other button pressed meanwhile (so C + Home and C + GL still work when C
+// is mapped to it). `prev` / `raw`: the controller's own buttons.
 typedef struct {
-    uint32_t held;          // raw S2 bit of the button being held (0: none)
-    uint32_t since;         // when it was pressed
-    uint32_t guide_at;      // when it became Guide
-    bool guide;             // it is Guide now
-    bool cancelled;
-} mapping_qam_t;
-typedef struct {
-    bool tap;               // open / close the Quick Access menu
-    bool guide;             // send Home / Guide
-    bool hold_others;       // keep the other buttons from the host for now
-} mapping_qam_out_t;
-mapping_qam_out_t mapping_qam_step(mapping_qam_t *q, const uint8_t map[IN_COUNT], uint8_t value, uint32_t prev,
-                                   uint32_t raw, bool cancel, uint32_t now_ms);
+    uint32_t held;      // raw S2 bit of the button being held (0: none)
+    bool spoiled;       // another button was pressed while it was held
+} mapping_tap_t;
+bool mapping_tap(mapping_tap_t *t, const uint8_t map[IN_COUNT], uint8_t value, uint32_t prev, uint32_t raw);
 
 void mapping_pack_stick(const uint16_t v[2], uint8_t out[3]);
 

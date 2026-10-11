@@ -397,43 +397,23 @@ uint32_t mapping_type_inputs(ctrl_type_t t) {
 #undef B
 }
 
-mapping_qam_out_t mapping_qam_step(mapping_qam_t *q, const uint8_t map[IN_COUNT], uint8_t value, uint32_t prev,
-                                   uint32_t raw, bool cancel, uint32_t now_ms) {
-    mapping_qam_out_t o = {false, false, false};
+bool mapping_tap(mapping_tap_t *t, const uint8_t map[IN_COUNT], uint8_t value, uint32_t prev, uint32_t raw) {
     uint32_t pressed = raw & ~prev;
-    if (!q->held) {
-        for (int i = 0; i < IN_COUNT; i++) {
-            if (map[i] == value && (pressed & IN_BITS[i])) {
-                memset(q, 0, sizeof *q);
-                q->held = IN_BITS[i];
-                q->since = now_ms;
-                // Pressed while others are held: a chord already.
-                if (raw & ~IN_BITS[i]) {
-                    q->guide = true;
-                    q->guide_at = now_ms;
-                }
-                break;
-            }
+    if (t->held) {
+        if (pressed & ~t->held) t->spoiled = true;
+        if (raw & t->held) return false;
+        t->held = 0;
+        return !t->spoiled;
+    }
+    for (int i = 0; i < IN_COUNT; i++) {
+        if (map[i] == value && (pressed & IN_BITS[i])) {
+            t->held = IN_BITS[i];
+            // Pressed together with others (e.g. Home already held): not a tap.
+            t->spoiled = (raw & ~IN_BITS[i]) != 0;
+            break;
         }
-        if (!q->held) return o;
     }
-    if (!(raw & q->held)) {
-        // Released: a tap unless it became Guide (or was cancelled).
-        o.tap = !q->guide && !q->cancelled;
-        q->held = 0;
-        return o;
-    }
-    if (cancel) {
-        q->cancelled = true;
-        q->guide = false;
-    }
-    if (!q->cancelled && !q->guide && ((pressed & ~q->held) || now_ms - q->since >= QAM_HOLD_MS)) {
-        q->guide = true;
-        q->guide_at = now_ms;
-    }
-    o.guide = q->guide;
-    o.hold_others = q->guide && now_ms - q->guide_at < QAM_CHORD_DELAY_MS;
-    return o;
+    return false;
 }
 
 bool mapping_macro_busy(const mapping_macro_t *m) {

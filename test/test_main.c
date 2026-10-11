@@ -519,45 +519,18 @@ static void test_gp_map(void) {
     // Quick Access Menu (Decky): a press is counted elsewhere, never a host button.
     map[IN_C] = GP_DECKY_QAM;
     CHECK(mapping_gp_buttons(&s, map, NULL, &sin) == 0);
-    // A tap (released, nothing else pressed meanwhile, within QAM_HOLD_MS):
-    // the Quick Access menu; nothing for the host.
-    mapping_qam_t q = {0};
-    mapping_qam_out_t o = mapping_qam_step(&q, map, GP_DECKY_QAM, 0, S2_BTN_C, false, 1000);
-    CHECK(!o.tap && !o.guide);
-    o = mapping_qam_step(&q, map, GP_DECKY_QAM, S2_BTN_C, S2_BTN_C, false, 1100);
-    CHECK(!o.tap && !o.guide);
-    o = mapping_qam_step(&q, map, GP_DECKY_QAM, S2_BTN_C, 0, false, 1200);
-    CHECK(o.tap && !o.guide);
-    // Held with another button: Guide at once, the other button a moment
-    // later; no tap on release.
-    mapping_qam_step(&q, map, GP_DECKY_QAM, 0, S2_BTN_C, false, 2000);
-    o = mapping_qam_step(&q, map, GP_DECKY_QAM, S2_BTN_C, S2_BTN_C | S2_BTN_R, false, 2050);
-    CHECK(o.guide && o.hold_others);
-    o = mapping_qam_step(&q, map, GP_DECKY_QAM, S2_BTN_C | S2_BTN_R, S2_BTN_C | S2_BTN_R, false, 2050 + QAM_CHORD_DELAY_MS);
-    CHECK(o.guide && !o.hold_others);
-    o = mapping_qam_step(&q, map, GP_DECKY_QAM, S2_BTN_C | S2_BTN_R, S2_BTN_C, false, 2200);
-    CHECK(o.guide && !o.tap);
-    o = mapping_qam_step(&q, map, GP_DECKY_QAM, S2_BTN_C, 0, false, 2300);
-    CHECK(!o.tap && !o.guide);
-    // Held alone: Guide after QAM_HOLD_MS, and no tap.
-    mapping_qam_step(&q, map, GP_DECKY_QAM, 0, S2_BTN_C, false, 3000);
-    o = mapping_qam_step(&q, map, GP_DECKY_QAM, S2_BTN_C, S2_BTN_C, false, 3000 + QAM_HOLD_MS - 1);
-    CHECK(!o.guide);
-    o = mapping_qam_step(&q, map, GP_DECKY_QAM, S2_BTN_C, S2_BTN_C, false, 3000 + QAM_HOLD_MS);
-    CHECK(o.guide);
-    o = mapping_qam_step(&q, map, GP_DECKY_QAM, S2_BTN_C, 0, false, 3600);
-    CHECK(!o.tap);
-    // The dongle's own combos (C + Home): neither Guide nor a tap.
-    mapping_qam_step(&q, map, GP_DECKY_QAM, 0, S2_BTN_C, false, 4000);
-    o = mapping_qam_step(&q, map, GP_DECKY_QAM, S2_BTN_C, S2_BTN_C | S2_BTN_HOME, true, 4050);
-    CHECK(!o.guide);
-    o = mapping_qam_step(&q, map, GP_DECKY_QAM, S2_BTN_C | S2_BTN_HOME, S2_BTN_C, false, 5000);
-    CHECK(!o.guide);
-    o = mapping_qam_step(&q, map, GP_DECKY_QAM, S2_BTN_C, 0, false, 5100);
-    CHECK(!o.tap);
-    // Other buttons alone: nothing.
-    o = mapping_qam_step(&q, map, GP_DECKY_QAM, 0, S2_BTN_A, false, 6000);
-    CHECK(!o.tap && !o.guide);
+    // Counted on a clean tap (released, nothing else pressed meanwhile).
+    mapping_tap_t tap = {0};
+    CHECK(!mapping_tap(&tap, map, GP_DECKY_QAM, 0, S2_BTN_C));
+    CHECK(!mapping_tap(&tap, map, GP_DECKY_QAM, S2_BTN_C, S2_BTN_C));
+    CHECK(mapping_tap(&tap, map, GP_DECKY_QAM, S2_BTN_C, 0));
+    // C + Home (profile switch) or C + GL: not a tap.
+    CHECK(!mapping_tap(&tap, map, GP_DECKY_QAM, 0, S2_BTN_C));
+    CHECK(!mapping_tap(&tap, map, GP_DECKY_QAM, S2_BTN_C, S2_BTN_C | S2_BTN_HOME));
+    CHECK(!mapping_tap(&tap, map, GP_DECKY_QAM, S2_BTN_C | S2_BTN_HOME, S2_BTN_HOME));
+    CHECK(!mapping_tap(&tap, map, GP_DECKY_QAM, S2_BTN_HOME, S2_BTN_HOME | S2_BTN_C));   // Home first
+    CHECK(!mapping_tap(&tap, map, GP_DECKY_QAM, S2_BTN_HOME | S2_BTN_C, 0));
+    CHECK(!mapping_tap(&tap, map, GP_DECKY_QAM, 0, S2_BTN_A) && !mapping_tap(&tap, map, GP_DECKY_QAM, S2_BTN_A, 0));
     CHECK(mapping_out_button_bit(OUT_DECKY_QAM) == 0);
 }
 
