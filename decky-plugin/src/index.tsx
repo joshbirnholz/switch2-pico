@@ -90,6 +90,9 @@ function Content() {
   const [pupd, setPupd] = useState<PluginUpdate | null>(null);
   const [pLater, setPLater] = useState(false);
   const [checking, setChecking] = useState(false);
+  // A check from the button: its result shows under the button (until the
+  // panel is opened again), not as the banners at the top or a toast.
+  const [manual, setManual] = useState(false);
   const [restarting, setRestarting] = useState(false);
   const typeSeen = useRef(-1);
   const speedTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -149,7 +152,7 @@ function Content() {
     return r.settings;
   };
 
-  const pluginBanner = pupd?.available && !pLater && (
+  const pluginBanner = pupd?.available && !pLater && !manual && (
     <PanelSectionRow>
       <Banner
         text={`Plugin ${pupd.latest} is available`}
@@ -270,7 +273,7 @@ function Content() {
             </SoftButton>
           </Block>
         </PanelSectionRow>
-        {upd?.available && !later && (
+        {upd?.available && !later && !manual && (
           <PanelSectionRow>
             <Banner
               text={`Firmware ${upd.latest} is available`}
@@ -384,21 +387,50 @@ function Content() {
             layout="below"
             disabled={checking}
             onClick={async () => {
-              // Now, for the dongle and this plugin; shows the banners again.
+              // Now, for the dongle and this plugin; the result shows below.
               setChecking(true);
               const [u, p] = await Promise.all([checkUpdate(true), checkPluginUpdate(true)]);
               setChecking(false);
               setUpd(u);
               setPupd(p);
-              setLater(false);
-              setPLater(false);
-              if (!u.ok && !p.ok) toaster.toast({ title: "Switch2-Pico", body: u.error ?? p.error ?? "Couldn't check for updates" });
-              else if (!u.available && !p.available) toaster.toast({ title: "Switch2-Pico", body: "Firmware and plugin are up to date" });
+              setManual(true);
             }}
           >
             {checking ? "Checking…" : "Check for updates"}
           </ButtonItem>
         </PanelSectionRow>
+        {manual && !checking && upd && pupd && (
+          <PanelSectionRow>
+            <Block>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%" }}>
+                {!upd.ok && <div style={{ ...hint, color: "#ffb4b4" }}>Firmware: {upd.error ?? "couldn't check"}</div>}
+                {!pupd.ok && <div style={{ ...hint, color: "#ffb4b4" }}>Plugin: {pupd.error ?? "couldn't check"}</div>}
+                {upd.ok && pupd.ok && !upd.available && !pupd.available && (
+                  <div style={hint}>Firmware and plugin are up to date.</div>
+                )}
+                {upd.available && (
+                  <Focusable style={{ ...btnRow, alignItems: "center" }}>
+                    <span style={{ ...hint, flex: 1 }}>Firmware {upd.latest} is available.</span>
+                    <DialogButton
+                      style={{ ...half, flex: "none", width: "auto", padding: "0 14px" }}
+                      onClick={() => showModal(<UpdateModal version={upd.latest!} onDone={() => checkUpdate(true).then(setUpd)} />)}
+                    >
+                      Update now
+                    </DialogButton>
+                  </Focusable>
+                )}
+                {pupd.available && (
+                  <Focusable style={{ ...btnRow, alignItems: "center" }}>
+                    <span style={{ ...hint, flex: 1 }}>Plugin {pupd.latest} is available.</span>
+                    <DialogButton style={{ ...half, flex: "none", width: "auto", padding: "0 14px" }} onClick={() => updatePlugin(pupd)}>
+                      Update
+                    </DialogButton>
+                  </Focusable>
+                )}
+              </div>
+            </Block>
+          </PanelSectionRow>
+        )}
         <PanelSectionRow>
           <ButtonItem layout="below" onClick={() => showModal(<PairedModal onChange={poll} />)}>
             Paired controllers

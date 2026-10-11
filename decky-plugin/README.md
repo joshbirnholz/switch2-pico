@@ -37,7 +37,9 @@ menu (Decky Loader), on a Steam Deck or any SteamOS / Linux machine with Decky.
   installs it through Decky's own installer (as Decky's store does), which
   reloads the plugin.
 * Notifications: a profile switch (C + Home), a firmware or plugin update
-  available (Steam itself shows controller connects and low batteries).
+  found by the automatic check (Steam itself shows controller connects and
+  low batteries). **Check for updates** shows its result under the button
+  instead, with the Update buttons, until the plugin is opened again.
 
 ## How it talks to the dongle
 
