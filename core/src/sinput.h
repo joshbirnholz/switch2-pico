@@ -68,6 +68,11 @@ typedef struct {
     uint8_t player_num;     // 1 = player 1; 0 = none
 } sinput_command_t;
 
+// The player LEDs for the host's player number: a Switch's patterns for
+// 1-8; anything else (0: none, or past 8, as Steam may send outside games)
+// is the default, the first LED.
+uint8_t sinput_player_pattern(uint8_t player);
+
 // Parses output report 0x03 (`buf` starts with the report ID).
 bool sinput_parse_output(const uint8_t *buf, uint16_t len, sinput_command_t *out);
 

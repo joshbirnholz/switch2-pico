@@ -179,6 +179,12 @@ static uint8_t amp8(uint16_t a) {
     return (uint8_t)(a > 255 ? a >> 8 : a);
 }
 
+uint8_t sinput_player_pattern(uint8_t player) {
+    // As a Switch lights them for players 1-8.
+    static const uint8_t PATTERNS[8] = {0x1, 0x3, 0x7, 0xF, 0x9, 0xA, 0xB, 0x6};
+    return player >= 1 && player <= 8 ? PATTERNS[player - 1] : 0x1;
+}
+
 bool sinput_parse_output(const uint8_t *buf, uint16_t len, sinput_command_t *o) {
     memset(o, 0, sizeof *o);
     if (len < 2 || buf[0] != 0x03) return false;
@@ -295,8 +301,8 @@ void sinput_on_output(const uint8_t *buf, uint16_t len, bool via_control, uint8_
     }
     if (c.player && c.player_num != s_status.player_lights) {
         s_status.player_lights = c.player_num;
-        int n = c.player_num > 4 ? 4 : c.player_num;
-        if (n) procon_hook_player_lights((uint8_t)((1u << n) - 1));
+        LOG("sinput: host player number %u", c.player_num);
+        procon_hook_player_lights(sinput_player_pattern(c.player_num));
     }
 }
 
