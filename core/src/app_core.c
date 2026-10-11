@@ -511,16 +511,24 @@ static void update_input(void) {
         // i.e. within SUSPEND_DISCONNECT_MS) wakes it.
         if ((in.buttons & ~raw_prev) && tud_suspended()) s2_link_hook_controller_seen();
         mode_select_step(in.buttons);
-        // "Quick Access Menu (Decky)": counted on a tap of the controller's
-        // own buttons (the host's view hides Home while C is held).
+        // "Quick Access Menu (Decky)", from the controller's own buttons (the
+        // host's view hides Home while C is held): a tap is counted for the
+        // plugin; held, it is Home / Guide for Steam's chords (mapping.h).
+        mapping_qam_out_t qam;
         {
-            static mapping_tap_t qam_tap;
+            static mapping_qam_t qam_state;
             usb_mode_t m = usb_mode_active();
-            if (first) memset(&qam_tap, 0, sizeof qam_tap);
-            if (mapping_tap(&qam_tap, settings_active_map(&g_settings, mapping_ctrl_type(s2_link_mapping_ctx())),
-                            m == USB_MODE_SWITCH_PRO ? OUT_DECKY_QAM : GP_DECKY_QAM, raw_prev, in.buttons)) {
-                s_decky_qam++;
-            }
+            if (first) memset(&qam_state, 0, sizeof qam_state);
+            // The dongle's own combos aren't chords: C + Home, C + GL / GR.
+            bool quick_on = !g_settings.quick_remap_off && m != USB_MODE_DUALSENSE_EDGE && m != USB_MODE_SINPUT;
+            bool cancel = (in.buttons & (S2_BTN_C | S2_BTN_HOME)) == (S2_BTN_C | S2_BTN_HOME) ||
+                          (quick_on && mapping_quick_remap_held(in.buttons));
+            qam = mapping_qam_step(&qam_state, settings_active_map(&g_settings, mapping_ctrl_type(s2_link_mapping_ctx())),
+                                   m == USB_MODE_SWITCH_PRO ? OUT_DECKY_QAM : GP_DECKY_QAM, raw_prev, in.buttons, cancel,
+                                   platform_millis());
+            if (qam.tap) s_decky_qam++;
+            // Nothing of it while choosing a profile; the GameCube adapter has no Guide.
+            if (s_msel.active || s_mode_switch >= 0 || m == USB_MODE_GC_ADAPTER) qam.guide = qam.hold_others = false;
         }
         // From here on, `in` holds what the host may see.
         uint32_t prev = host_prev;
@@ -567,6 +575,7 @@ static void update_input(void) {
                 break;
             default:
                 gp = mapping_gp_buttons(&g_settings, map, ctx, &in);
+                if (qam.guide) gp = (qam.hold_others ? 0 : gp) | GP_BIT(GP_GUIDE);
                 if (quick && mapping_quick_remap_held(in.buttons)) gp = 0;
                 break;
             }
@@ -582,6 +591,7 @@ static void update_input(void) {
         uint32_t macro_buttons = mapping_macro_step(&macro, &g_settings, ct, prev, in.buttons, platform_millis());
         if (macro_buttons) neutral_input(&in);
         mapping_apply(&g_settings, s2_link_mapping_ctx(), &in, &out);
+        if (!macro_buttons && qam.guide) out.buttons = (qam.hold_others ? 0 : out.buttons) | mapping_out_button_bit(OUT_HOME);
         if (macro_buttons) {
             out.buttons = macro_buttons;
         } else if (!g_settings.quick_remap_off) {
