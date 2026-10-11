@@ -239,10 +239,14 @@ function Content() {
       <PanelSection>
         {/* One button at the very top (moving up with the D-pad scrolls the
             panel back to it): the controller, its batteries, what the dongle
-            emulates and the profile in use; it opens the profiles. */}
+            emulates and the profile in use; it opens the profiles (with no
+            controller connected: just that, and it opens Paired controllers). */}
         <PanelSectionRow>
           <Block>
-            <SoftButton style={{ ...card, gap: 4, padding: "10px 12px" }} onActivate={pickProfile}>
+            <SoftButton
+              style={{ ...card, gap: 4, padding: "10px 12px" }}
+              onActivate={ready.length ? pickProfile : () => showModal(<PairedModal onChange={poll} />)}
+            >
               <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 600, minWidth: 0 }}>
                 <span style={{ width: 8, height: 8, borderRadius: 4, background: ready.length ? "#3ecf6e" : "#5c6470", flex: "none" }} />
                 <span style={{ minWidth: 0 }}>
@@ -254,12 +258,12 @@ function Content() {
                   ))}
                 </span>
               </div>
-              {T && P && (
+              {T && P && ready.length > 0 && (
                 <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, marginTop: 4 }}>
                   {!T.numbered && <SlotIcon label={slotLabel(T, ai)} gamecube={t === CTRL_GC} />}
                   <span style={{ minWidth: 0 }}>
                     <div style={{ ...ellipsis, fontWeight: 600 }}>{T.numbered ? `${ai + 1} · ${P.name}` : P.name}</div>
-                    <div style={{ ...hint, ...ellipsis }}>{MODE_NAMES[ready.length ? runMode : P.mode]}</div>
+                    <div style={{ ...hint, ...ellipsis }}>{MODE_NAMES[runMode]}</div>
                   </span>
                 </div>
               )}

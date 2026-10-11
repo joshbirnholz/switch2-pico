@@ -5,7 +5,8 @@ menu (Decky Loader), on a Steam Deck or any SteamOS / Linux machine with Decky.
 
 * At the top, one button with the connected controller (battery icons) and
   the profile in use (its button, name and emulated controller); it opens
-  the profiles.
+  the profiles. With no controller connected it shows just that, and opens
+  Paired controllers.
 * **Profile** for the connected controller type: a pop-up list with each
   profile's button and emulated controller. Pick one to use it; the pencil
   edits one (name, emulated controller, button mapping, sticks, rumble,
