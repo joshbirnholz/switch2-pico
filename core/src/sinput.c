@@ -180,8 +180,9 @@ static uint8_t amp8(uint16_t a) {
 }
 
 uint8_t sinput_player_pattern(uint8_t player) {
-    // As a Switch lights them for players 1-8.
-    static const uint8_t PATTERNS[8] = {0x1, 0x3, 0x7, 0xF, 0x9, 0xA, 0xB, 0x6};
+    // As SDL (and so Steam) lights a Switch controller's for players 1-8, so
+    // they match Switch Pro mode (where the host sends the pattern itself).
+    static const uint8_t PATTERNS[8] = {0x1, 0x3, 0x7, 0xF, 0x9, 0x5, 0xD, 0x6};
     return player >= 1 && player <= 8 ? PATTERNS[player - 1] : 0x1;
 }
 

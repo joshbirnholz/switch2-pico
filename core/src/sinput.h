@@ -68,7 +68,7 @@ typedef struct {
     uint8_t player_num;     // 1 = player 1; 0 = none
 } sinput_command_t;
 
-// The player LEDs for the host's player number: a Switch's patterns for
+// The player LEDs for the host's player number: SDL's Switch patterns for
 // 1-8; anything else (0: none, or past 8, as Steam may send outside games)
 // is the default, the first LED.
 uint8_t sinput_player_pattern(uint8_t player);

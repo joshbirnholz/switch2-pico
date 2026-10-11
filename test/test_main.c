@@ -1175,7 +1175,8 @@ static void test_sinput(void) {
     uint8_t led[48] = {0x03, 0x03, 2};
     CHECK(sinput_parse_output(led, sizeof led, &c) && c.player && c.player_num == 2);
     CHECK(sinput_player_pattern(1) == 0x1 && sinput_player_pattern(2) == 0x3 && sinput_player_pattern(4) == 0xF);
-    CHECK(sinput_player_pattern(5) == 0x9 && sinput_player_pattern(8) == 0x6);
+    CHECK(sinput_player_pattern(5) == 0x9 && sinput_player_pattern(6) == 0x5 && sinput_player_pattern(7) == 0xD &&
+          sinput_player_pattern(8) == 0x6);
     CHECK(sinput_player_pattern(0) == 0x1 && sinput_player_pattern(9) == 0x1 && sinput_player_pattern(255) == 0x1);
     CHECK(!sinput_parse_output(erm, 1, &c) && !sinput_parse_output((const uint8_t[]){0x01, 0x02}, 2, &c));
 
