@@ -518,7 +518,9 @@ On the page you can:
 
 `decky-plugin/` is a [Decky Loader](https://decky.xyz) plugin with quick
 controls in the Quick Access menu: the profile, button mapping, Joy-Con 2
-Mouse Mode, pairing and paired controllers, reboot and firmware updates. It talks to the dongle over USB like the
+Mouse Mode, pairing and paired controllers, reboot and firmware updates, and
+a motion (DSU / cemuhook) server that gives emulators the controller's gyro
+under Steam Input. It talks to the dongle over USB like the
 configuration page. See [decky-plugin/README.md](decky-plugin/README.md).
 
 With the plugin, any button can open Steam's **Quick Access menu** (in any

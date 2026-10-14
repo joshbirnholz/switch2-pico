@@ -29,6 +29,15 @@ menu (Decky Loader), on a Steam Deck or any SteamOS / Linux machine with Decky.
   (`/etc/udev/rules.d/70-switch2-pico.rules`) so Steam can read the dongle
   through hidraw in SInput mode, unless a rule for its ID (2e8a:10c6) is
   already there.
+* **Motion server (DSU)**: the connected controller's gyro and accelerometer
+  for emulators (Cemu, Dolphin, Ryujinx, the Yuzu / Citra forks...), which
+  under Steam Input only see Steam's virtual controller. A cemuhook / DSU
+  server on UDP port 26761 (settable; 26760 is SteamDeckGyroDSU's), with the
+  controller in slot 0; in the emulator, add the DSU server 127.0.0.1 and
+  that port. Motion only (buttons and sticks come through Steam Input). It
+  reads the emulated controller's input reports from its hidraw node, next to
+  Steam, so it works in SInput, DualSense (Edge) and Switch Pro modes (the
+  Xbox 360 and GameCube adapter reports have no motion). Off by default.
 * **Paired controllers**: pair a controller, forget one or all.
 * **Reboot dongle**.
 * **Firmware updates**: checks GitHub on start and once a day, and installs

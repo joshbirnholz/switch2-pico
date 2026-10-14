@@ -21,11 +21,13 @@ import fcntl
 import glob
 import json
 import os
+import select
 import shutil
 import ssl
 import struct
 import subprocess
 import tempfile
+import threading
 import time
 import urllib.request
 import zipfile
@@ -241,13 +243,219 @@ def http_get(url, timeout=20):
     with urllib.request.urlopen(req, timeout=timeout, context=SSL_CONTEXT) as r:
         return r.read()
 
+# ---------------------------------------------------------------------------
+# Motion (DSU / cemuhook) server: the connected controller's gyro and
+# accelerometer for emulators (Cemu, Dolphin, Ryujinx, ...), which under
+# Steam Input only see Steam's virtual controller. The motion comes from the
+# emulated controller's own input reports, read from its hidraw node next to
+# Steam (hidraw lets several readers have every report).
+# ---------------------------------------------------------------------------
+DSU_DEFAULT_PORT = 26761   # not 26760: SteamDeckGyroDSU's (the Deck's own gyro)
+DSU_CLIENT_TIMEOUT_S = 5.0
+DSU_PROTOCOL = 1001
+DSU_MAC = bytes.fromhex("025332500001")
+
+# Emulated controllers with motion in their input reports: name by USB ID.
+MOTION_MODES = {
+    (0x057E, 0x2009): "switch_pro",
+    (0x054C, 0x0CE6): "dualsense",
+    (0x054C, 0x0DF2): "dualsense",
+    (0x2E8A, 0x10C6): "sinput",
+}
+
+
+def find_motion_hidraw():
+    """(/dev/hidrawN, mode, (vid, pid)) of the dongle's controller interface,
+    or (None, None, (vid, pid) or None) when it has no motion (or isn't there)."""
+    ids = None
+    for node in sorted(glob.glob("/sys/class/hidraw/hidraw*")):
+        itf = os.path.dirname(os.path.realpath(os.path.join(node, "device")))   # .../X-Y:1.N
+        dev = os.path.dirname(itf)
+        if _read(os.path.join(itf, "bInterfaceNumber")) != "00":
+            continue
+        # The dongle: its configuration interface is on the same device.
+        if not any(_read(os.path.join(p, "interface")) == CONFIG_INTERFACE_NAME
+                   for p in glob.glob(os.path.join(dev, os.path.basename(dev) + ":*"))):
+            continue
+        try:
+            ids = (int(_read(os.path.join(dev, "idVendor")), 16), int(_read(os.path.join(dev, "idProduct")), 16))
+        except (TypeError, ValueError):
+            continue
+        mode = MOTION_MODES.get(ids)
+        if mode:
+            return "/dev/" + os.path.basename(node), mode, ids
+    return None, None, ids
+
+
+def _s16(b, o):
+    return struct.unpack_from("<h", b, o)[0]
+
+
+def motion_from_report(mode, r):
+    """(accel g, gyro deg/s) in SDL's frame (x right, y up, z towards the
+    player) from one input report (report ID first), or None. The layouts and
+    scales are the firmware's (core/src/sinput.c, ds5.c, procon.c)."""
+    if mode == "sinput" and len(r) >= 35 and r[0] == 0x01:
+        a, g = 8.0 / 32768.0, 2000.0 / 32768.0
+        # Report: X = -x, Y = -z, Z = y.
+        acc = (-_s16(r, 23) * a, _s16(r, 27) * a, -_s16(r, 25) * a)
+        gyr = (-_s16(r, 29) * g, _s16(r, 33) * g, -_s16(r, 31) * g)
+        return acc, gyr
+    if mode == "dualsense" and len(r) >= 28 and r[0] == 0x01:
+        gyr = tuple(_s16(r, 16 + 2 * i) / 16.0 for i in range(3))
+        acc = tuple(_s16(r, 22 + 2 * i) / 8192.0 for i in range(3))
+        return acc, gyr
+    if mode == "switch_pro" and len(r) >= 49 and r[0] == 0x30:
+        # Three samples a report, the Switch frame (s1 = (y, -x, z) of the
+        # Switch 2's); the latest.
+        o = 13 + 2 * 12
+        a, g = 1.0 / 4096.0, 936.0 / 13371.0
+        s1a = [_s16(r, o + 2 * i) for i in range(3)]
+        s1g = [_s16(r, o + 6 + 2 * i) for i in range(3)]
+        return ((-s1a[1] * a, s1a[2] * a, -s1a[0] * a), (-s1g[1] * g, s1g[2] * g, -s1g[0] * g))
+    return None
+
+
+def dsu_motion(acc, gyr):
+    """SDL frame to DSU's: accel (g) and gyro pitch / yaw / roll (deg/s); a
+    controller lying flat reads -1 g on Y (as SteamDeckGyroDSU sends)."""
+    return (-acc[0], -acc[1], -acc[2]), (gyr[0], -gyr[1], -gyr[2])
+
+
+def dsu_packet(server_id, msg_type, payload):
+    body = struct.pack("<I", msg_type) + payload
+    head = b"DSUS" + struct.pack("<HHII", DSU_PROTOCOL, len(body), 0, server_id)
+    pkt = bytearray(head + body)
+    struct.pack_into("<I", pkt, 8, zlib.crc32(pkt) & 0xFFFFFFFF)
+    return bytes(pkt)
+
+
+def dsu_slot_info(slot, connected):
+    # Slot, state (2 connected), model (2 full gyro), connection (1 USB), MAC, battery (5 full).
+    if slot != 0 or not connected:
+        return struct.pack("<BBBB6sB", slot, 0, 0, 0, bytes(6), 0)
+    return struct.pack("<BBBB6sB", 0, 2, 2, 1, DSU_MAC, 5)
+
+
+def dsu_pad_data(counter, timestamp_us, acc, gyr):
+    """Motion only: buttons and sticks neutral (the game has them through
+    Steam Input already)."""
+    return (dsu_slot_info(0, True) + struct.pack("<BI", 1, counter & 0xFFFFFFFF) +
+            bytes(4) + bytes([128, 128, 128, 128]) + bytes(12) + bytes(12) +
+            struct.pack("<Q6f", timestamp_us, *acc, *gyr))
+
+
+class DsuServer:
+    """A cemuhook / DSU server on UDP `port` with the dongle's controller in
+    slot 0, fed from its hidraw node by a reader thread."""
+
+    def __init__(self, loop, port):
+        self.loop = loop
+        self.port = port
+        self.server_id = int.from_bytes(os.urandom(4), "little")
+        self.clients = {}      # addr -> last request time
+        self.counter = 0
+        self.transport = None
+        self.stop = threading.Event()
+        self.thread = None
+        self.mode = None       # what the reader is reading ("sinput", ...)
+        self.ids = None
+        self.error = ""
+
+    async def start(self):
+        server = self
+
+        class Proto(asyncio.DatagramProtocol):
+            def datagram_received(self, data, addr):
+                server._request(data, addr)
+
+        self.transport, _ = await self.loop.create_datagram_endpoint(Proto, local_addr=("0.0.0.0", self.port))
+        self.thread = threading.Thread(target=self._reader, daemon=True)
+        self.thread.start()
+
+    def close(self):
+        self.stop.set()
+        if self.transport:
+            self.transport.close()
+
+    def status(self):
+        now = time.time()
+        return {"running": True, "port": self.port, "mode": self.mode, "ids": self.ids, "error": self.error,
+                "clients": sum(1 for t in self.clients.values() if now - t < DSU_CLIENT_TIMEOUT_S)}
+
+    def _send(self, addr, msg_type, payload):
+        if self.transport:
+            self.transport.sendto(dsu_packet(self.server_id, msg_type, payload), addr)
+
+    def _request(self, data, addr):
+        if len(data) < 20 or data[:4] != b"DSUC":
+            return
+        msg_type = struct.unpack_from("<I", data, 16)[0]
+        if msg_type == 0x100000:            # protocol version
+            self._send(addr, msg_type, struct.pack("<H", DSU_PROTOCOL))
+        elif msg_type == 0x100001:          # slot info
+            count = max(0, min(4, struct.unpack_from("<i", data, 20)[0])) if len(data) >= 24 else 0
+            for slot in data[24:24 + count]:
+                self._send(addr, msg_type, dsu_slot_info(slot, self.mode is not None) + b"\x00")
+        elif msg_type == 0x100002:          # subscribe to pad data
+            self.clients[addr] = time.time()
+
+    def _publish(self, acc, gyr):
+        now = time.time()
+        self.counter += 1
+        payload = dsu_pad_data(self.counter, int(time.monotonic() * 1e6), acc, gyr)
+        for addr, t in list(self.clients.items()):
+            if now - t > DSU_CLIENT_TIMEOUT_S:
+                del self.clients[addr]
+            else:
+                self._send(addr, 0x100002, payload)
+
+    def _reader(self):
+        while not self.stop.is_set():
+            path, mode, ids = find_motion_hidraw()
+            self.ids = ids
+            if not path:
+                self.mode = None
+                self.error = "" if ids else "dongle not found"
+                self.stop.wait(1.0)
+                continue
+            try:
+                fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+            except OSError as e:
+                self.mode, self.error = None, str(e)
+                self.stop.wait(1.0)
+                continue
+            self.mode, self.error = mode, ""
+            last = 0.0
+            try:
+                while not self.stop.is_set():
+                    r, _, _ = select.select([fd], [], [], 0.5)
+                    if not r:
+                        continue
+                    data = os.read(fd, 128)
+                    m = motion_from_report(mode, data)
+                    if not m:
+                        continue
+                    # At most every 4 ms (250 Hz): plenty for emulators.
+                    now = time.monotonic()
+                    if now - last < 0.004:
+                        continue
+                    last = now
+                    acc, gyr = dsu_motion(*m)
+                    self.loop.call_soon_threadsafe(self._publish, acc, gyr)
+            except OSError:
+                pass   # unplugged or re-enumerated (mode change): look again
+            finally:
+                os.close(fd)
+                self.mode = None
+
 
 class Plugin:
     async def _main(self):
         self.dongle = Dongle()
         self.lock = asyncio.Lock()
         self.prefs_path = os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "prefs.json")
-        self.prefs = {"check_updates": True}
+        self.prefs = {"check_updates": True, "dsu_enabled": False, "dsu_port": DSU_DEFAULT_PORT}
         try:
             with open(self.prefs_path) as f:
                 self.prefs.update(json.load(f))
@@ -264,12 +472,42 @@ class Plugin:
         loop = asyncio.get_event_loop()
         self.monitor = loop.create_task(self._monitor())
         self.events = loop.create_task(self._events())
+        self.dsu = None
+        await self._dsu_apply()
         await asyncio.to_thread(install_udev_rule)
         decky.logger.info("Switch2-Pico plugin started")
 
     async def _unload(self):
         self.monitor.cancel()
         self.events.cancel()
+        if self.dsu:
+            self.dsu.close()
+
+    # ---- Motion (DSU) server ---------------------------------------------
+    async def _dsu_apply(self):
+        """Start, restart (another port) or stop the server per the prefs."""
+        want = bool(self.prefs.get("dsu_enabled"))
+        port = int(self.prefs.get("dsu_port") or DSU_DEFAULT_PORT)
+        if self.dsu and (not want or self.dsu.port != port):
+            self.dsu.close()
+            self.dsu = None
+        self.dsu_error = ""
+        if want and not self.dsu:
+            server = DsuServer(asyncio.get_event_loop(), port)
+            try:
+                await server.start()
+                self.dsu = server
+                decky.logger.info("DSU server on UDP port %d", port)
+            except OSError as e:
+                server.close()
+                self.dsu_error = "Port %d: %s" % (port, e.strerror or e)
+                decky.logger.warning("DSU server: %s", self.dsu_error)
+
+    async def get_dsu_status(self):
+        if self.dsu:
+            return self.dsu.status()
+        return {"running": False, "port": int(self.prefs.get("dsu_port") or DSU_DEFAULT_PORT),
+                "error": getattr(self, "dsu_error", ""), "clients": 0, "mode": None}
 
     # ---- Transport -------------------------------------------------------
     async def _request(self, method, path, body=b"", timeout_ms=3000):
@@ -315,6 +553,10 @@ class Plugin:
         return self.prefs
 
     async def set_pref(self, key, value):
+        if key == "dsu_port":
+            value = int(value)
+            if not 1024 <= value <= 65535:
+                return self.prefs
         self.prefs[key] = value
         try:
             os.makedirs(os.path.dirname(self.prefs_path), exist_ok=True)
@@ -322,6 +564,8 @@ class Plugin:
                 json.dump(self.prefs, f)
         except OSError as e:
             decky.logger.warning("prefs not saved: %s", e)
+        if key in ("dsu_enabled", "dsu_port"):
+            await self._dsu_apply()
         return self.prefs
 
     async def check_update(self, force=False):

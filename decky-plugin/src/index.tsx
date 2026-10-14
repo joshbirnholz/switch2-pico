@@ -2,11 +2,11 @@
 import { addEventListener, definePlugin, removeEventListener, toaster } from "@decky/api";
 import {
   ButtonItem, DialogButton, Field, Focusable, getGamepadNavigationTrees, Navigation, PanelSection, PanelSectionRow, showModal,
-  SideMenu, SliderField, staticClasses, ToggleField,
+  SideMenu, SliderField, staticClasses, TextField, ToggleField,
 } from "@decky/ui";
 import { CSSProperties, ReactNode, useEffect, useRef, useState } from "react";
 import {
-  action, checkPluginUpdate, checkUpdate, getPrefs, getSettings, getStatus, installPluginUpdate, PluginUpdate, Prefs, setPref,
+  action, checkPluginUpdate, checkUpdate, DsuStatus, getDsuStatus, getPrefs, getSettings, getStatus, installPluginUpdate, PluginUpdate, Prefs, setPref,
   setSettings, UpdateInfo,
 } from "./api";
 import { InputIcon, OutputIcon, SlotIcon } from "./icons";
@@ -371,6 +371,8 @@ function Content() {
         </PanelSection>
       )}
 
+      {prefs && <DsuSection prefs={prefs} setPrefs={setPrefs} runMode={runMode} />}
+
       <PanelSection title="Dongle">
         {prefs && (
           <PanelSectionRow>
@@ -460,6 +462,76 @@ function Content() {
         </PanelSectionRow>
       </PanelSection>
     </>
+  );
+}
+
+// The motion (DSU / cemuhook) server: the connected controller's gyro for
+// emulators (main.py DsuServer).
+const MOTION_NAMES: Record<string, string> = {
+  sinput: "SInput", dualsense: "DualSense", switch_pro: "Switch Pro",
+};
+function DsuSection(props: { prefs: Prefs; setPrefs(p: Prefs): void; runMode: number }) {
+  const [ds, setDs] = useState<DsuStatus | null>(null);
+  const [port, setPort] = useState(String(props.prefs.dsu_port));
+  const portTimer = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => {
+    const load = () => getDsuStatus().then(setDs);
+    load();
+    const id = setInterval(load, 1000);
+    return () => {
+      clearInterval(id);
+      clearTimeout(portTimer.current);
+    };
+  }, []);
+  const on = props.prefs.dsu_enabled;
+  let line = "";
+  if (on && ds) {
+    if (ds.error && !ds.running) line = ds.error;
+    else if (ds.mode) {
+      line = `Port ${ds.port} · motion from the ${MODE_NAMES[props.runMode] ?? MOTION_NAMES[ds.mode]} · ` +
+        (ds.clients === 1 ? "1 emulator connected" : `${ds.clients} emulators connected`);
+    } else if (ds.error) line = `Port ${ds.port} · ${ds.error}`;
+    else line = `Port ${ds.port} · no motion in this mode (Xbox 360 and GameCube adapter have none)`;
+  }
+  return (
+    <PanelSection title="Motion server (DSU)">
+      <PanelSectionRow>
+        <ToggleField
+          label="Motion server"
+          description="The controller's gyro and accelerometer for emulators (Cemu, Dolphin, Ryujinx…), which Steam Input doesn't pass on."
+          checked={on}
+          onChange={(v) => setPref("dsu_enabled", v).then(props.setPrefs)}
+        />
+      </PanelSectionRow>
+      {on && (
+        <>
+          <PanelSectionRow>
+            <TextField
+              label="UDP port"
+              description="In the emulator: DSU / cemuhook server 127.0.0.1 and this port (not 26760, which SteamDeckGyroDSU uses for the Deck's own gyro)."
+              mustBeNumeric
+              rangeMin={1024}
+              rangeMax={65535}
+              value={port}
+              onChange={(e) => {
+                const v = e.target.value.replace(/[^0-9]/g, "").slice(0, 5);
+                setPort(v);
+                clearTimeout(portTimer.current);
+                const n = Number(v);
+                if (n >= 1024 && n <= 65535) portTimer.current = setTimeout(() => setPref("dsu_port", n).then(props.setPrefs), 800);
+              }}
+            />
+          </PanelSectionRow>
+          {line && (
+            <PanelSectionRow>
+              <Block>
+                <div style={{ ...hint, color: ds?.error && !ds.running ? "#ffb4b4" : hint.color }}>{line}</div>
+              </Block>
+            </PanelSectionRow>
+          )}
+        </>
+      )}
+    </PanelSection>
   );
 }
 
