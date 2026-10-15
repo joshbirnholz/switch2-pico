@@ -164,7 +164,8 @@ export function ProfilesModal(props: { S: Settings; t: number; save: SaveFn; clo
 
 // One profile's settings.
 export function ProfileEditModal(props: { S: Settings; t: number; i: number; save: SaveFn; closeModal?(): void }) {
-  const { t, i } = props;
+  const t = props.t;
+  const [i, setI] = useState(props.i);   // its button (moves with "Button")
   const [S, setS] = useState(props.S);
   const [P, setP] = useState<Profile>(props.S.types[t].profiles[i]!);
   const [name, setName] = useState(P.name);
@@ -205,6 +206,36 @@ export function ProfileEditModal(props: { S: Settings; t: number; i: number; sav
       );
     });
 
+  // Onto another button: a free one, or swapped with the profile there (as
+  // dragging on the configuration page). The profile in use stays in use.
+  const moveTo = async (j: number) => {
+    if (j === i) return;
+    const other = T.profiles[j];
+    const form = [profileForm(t, j, P), other ? profileForm(t, i, other) : `prof_${t}_${i}=`];
+    if (T.active === i) form.push(`active_${t}=${j}`);
+    else if (T.active === j) form.push(`active_${t}=${i}`);
+    const s = await props.save(form.join("&"));
+    if (s) {
+      setS(s);
+      setI(j);
+    }
+  };
+  const pickButton = () =>
+    showModal(
+      <PickerModal
+        title="Button"
+        subtitle={`${P.name} · on the controller: hold C + Home, then press it`}
+        items={T.profiles.map((p, j) => ({
+          key: j,
+          icon: <SlotIcon label={slotLabel(T, j)} gamecube={t === CTRL_GC} />,
+          title: slotLabel(T, j),
+          desc: j === i ? P.name : p ? `${p.name} (swaps with it)` : "Free",
+          selected: j === i,
+        }))}
+        onPick={moveTo}
+      />,
+    );
+
   const del = () =>
     confirm(
       `Delete ${P.name}?`,
@@ -232,6 +263,17 @@ export function ProfileEditModal(props: { S: Settings; t: number; i: number; sav
             if (v.trim()) nameTimer.current = setTimeout(() => commit({ ...P, name: v }), 600);
           }}
         />
+        {!T.numbered && (
+          <SoftButton style={row} onActivate={pickButton}>
+            <span style={iconBox}>
+              <SlotIcon label={slotLabel(T, i)} gamecube={t === CTRL_GC} />
+            </span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <div style={sub}>Button</div>
+              <div style={{ fontWeight: 600 }}>{slotLabel(T, i)}</div>
+            </span>
+          </SoftButton>
+        )}
         <SoftButton style={row} onActivate={changeMode}>
           <span style={{ flex: 1, minWidth: 0 }}>
             <div style={sub}>Emulated controller</div>

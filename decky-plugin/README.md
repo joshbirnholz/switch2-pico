@@ -9,7 +9,8 @@ menu (Decky Loader), on a Steam Deck or any SteamOS / Linux machine with Decky.
   Paired controllers.
 * **Profile** for the connected controller type: a pop-up list with each
   profile's button and emulated controller. Pick one to use it; the pencil
-  edits one (name, emulated controller, button mapping, sticks, rumble,
+  edits one (name, its button (moving it, or swapping it with the profile
+  already there), emulated controller, button mapping, sticks, rumble,
   Mouse Mode, and Delete, which asks first); **Add a profile** makes a new
   one on a free button with that controller's defaults. Changes are saved
   right away.
