@@ -59,6 +59,9 @@ void s2t_enable_input(uint8_t link);
 bool s2t_poll_power(uint8_t link);
 void s2t_local_address(uint8_t out[6]);     // big-endian
 uint16_t s2t_mtu(uint8_t link);
+// Read the link's signal strength; completes with s2c_on_rssi() (possibly
+// before it returns). False when it can't be read right now.
+bool s2t_read_rssi(uint8_t link);
 
 // ---- implemented by the shared core (s2_link.c) ----
 void s2c_on_stack_ready(void);
@@ -74,6 +77,7 @@ void s2c_on_input_enabled(uint8_t link, bool ok);
 void s2c_on_power_info(uint8_t link, bool ok, uint8_t info);
 void s2c_on_conn_interval(uint8_t link, uint16_t conn_interval);
 void s2c_on_disconnected(uint8_t link, uint8_t reason);
+void s2c_on_rssi(uint8_t link, int8_t rssi);   // dBm
 
 #ifdef __cplusplus
 }

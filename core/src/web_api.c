@@ -152,9 +152,10 @@ static void api_status(http_response_t *r) {
         // Its own battery: the controller's level when it gave one, else from the voltage.
         unsigned pct = k.power_level >= 0 ? (unsigned)k.power_level * 100u / 9u : battery_mv_to_percent(k.battery_mv);
         jb_printf(&j, "%s{\"state\":\"%s\",\"addr\":\"%s\",\"pid\":%u,\"battery_mv\":%u,\"battery_pct\":%u,\"power_level\":%d,"
-                      "\"charging\":%s,\"report_hz\":%.0f,\"rumble_packets\":%lu}",
+                      "\"charging\":%s,\"report_hz\":%.0f,\"rumble_packets\":%lu,\"rssi\":%d}",
                   first ? "" : ",", s2_link_state_name(k.state), a, k.pid, k.battery_mv, pct, k.power_level,
-                  (k.power_info & 2) ? "true" : "false", (double)k.report_rate_hz, (unsigned long)k.rumble_packets);
+                  (k.power_info & 2) ? "true" : "false", (double)k.report_rate_hz, (unsigned long)k.rumble_packets,
+                  k.last_rssi);
         first = false;
     }
     jb_printf(&j, "]");

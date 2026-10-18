@@ -1065,6 +1065,8 @@ function gcTriggers(tr,raw){
     const t=$(id);if(t)t.textContent=tr?(i?`R ${v}`:`L ${v}`):'';
   });
 }
+// Bluetooth signal strength, with a rough reading of it.
+function signal(dbm){return `${dbm} dBm (${dbm>=-67?'good':dbm>=-80?'fair':'weak'})`}
 function kv(el,rows){el.innerHTML=rows.map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join('')}
 // Stick head in the drawing, moved by the stick output (12-bit, y up).
 function stick(el,x,y){if(el)el.setAttribute('transform',`translate(${((x-2048)/2048*50).toFixed(1)} ${(-(y-2048)/2048*50).toFixed(1)})`)}
@@ -1105,8 +1107,9 @@ async function poll(){
     const su=$('st-usb');if(s.usb_config_only){su.textContent='USB: no controller';su.title='Shows up as a configuration-only USB device until a controller connects';su.className='chip'}else{su.textContent=s.usb.mounted?'USB: '+(s.profile||MODES[s.usb_mode]||s.usb_mode):'USB not connected';su.title=s.usb.mounted?'Emulating: '+(MODES[s.usb_mode]||s.usb_mode):'';su.className='chip'+(s.usb.mounted?'':' warn');}
     kv($('ctrl'),[
       ['Type',ready?cname+half:(PIDS[L.pid]||(L.pid?('0x'+L.pid.toString(16)):'—'))],['Serial',L.serial||'—'],['Address',ready?L.addr:'—'],
-      ...(links.length>1?links.map(k=>[PIDS[k.pid]||'Controller',`${k.addr} · ${k.state}`+(k.power_level>=0?` · battery level ${k.power_level}/9`:'')+(k.charging?' · charging':'')+` · ${k.report_hz} Hz`]):[]),
+      ...(links.length>1?links.map(k=>[PIDS[k.pid]||'Controller',`${k.addr} · ${k.state}`+(k.power_level>=0?` · battery level ${k.power_level}/9`:'')+(k.charging?' · charging':'')+` · ${k.report_hz} Hz`+(k.rssi?` · ${signal(k.rssi)}`:'')]):[]),
       ['Battery',L.battery_mv?`${L.charging?'charging · ':''}`+(L.power_level>=0?`controller level ${L.power_level}/9 · `:'estimated from voltage · ')+`${(L.battery_mv/1000).toFixed(2)} V · charge state 0x${(L.charge_state||0).toString(16).padStart(2,'0')}`:'—'],
+      ['Signal',ready&&L.rssi?signal(L.rssi):'—'],
       ['Report rate',ready?L.report_hz+' Hz ('+L.conn_interval_ms+' ms interval)':'—'],
       ['Gyro scale',['not detected','16.4','14.3'][L.gyro_range]||'—'],
       ['Dongle power',s.supply?`USB ${(s.supply.vbus/1000).toFixed(2)} V (lowest ${(s.supply.vbus_min/1000).toFixed(2)}), chip ${(s.supply.vdd/1000).toFixed(2)} V (lowest ${(s.supply.vdd_min/1000).toFixed(2)})`:'—'],

@@ -661,6 +661,21 @@ void s2t_local_address(uint8_t out[6]) {
     for (int i = 0; i < 6; i++) out[i] = mac[5 - i];
 }
 
+bool s2t_read_rssi(uint8_t l) {
+    if (l >= S2T_LINKS) return false;
+    uint16_t conn = s_l[l].conn;
+    BLEConnection *c = conn != BLE_CONN_HANDLE_INVALID ? Bluefruit.Connection(conn) : nullptr;
+    if (!c) return false;
+    // The SoftDevice measures once monitoring is on (0: not yet).
+    int8_t rssi = c->getRssi();
+    if (!rssi) {
+        c->monitorRssi();
+        return false;
+    }
+    s2c_on_rssi(l, rssi);
+    return true;
+}
+
 uint16_t s2t_mtu(uint8_t l) {
     if (l >= S2T_LINKS) return 23;
     uint16_t conn = s_l[l].conn;

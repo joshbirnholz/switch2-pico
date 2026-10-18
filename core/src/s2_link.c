@@ -62,6 +62,9 @@ typedef struct {
 } cmd_t;
 
 #define CMD_QUEUE_LEN 12
+#define RSSI_HIST 10
+#define RSSI_READ_MS 1000
+#define RSSI_LOG_MS 300000
 
 typedef struct link {
     uint8_t idx;
@@ -124,6 +127,15 @@ typedef struct link {
     bool pose_raw;            // ... going by the latest report
     uint32_t pose_since;      // pose_raw has differed from mouse_pose since
     uint32_t mouse_on_since;  // the sensor was turned on then
+
+    // Signal strength (dBm), read every second: the last RSSI_HIST seconds
+    // (logged when the link drops) and the range since the last log line.
+    int8_t rssi_hist[RSSI_HIST];
+    uint8_t rssi_n, rssi_pos;
+    int8_t rssi_min, rssi_max;
+    int32_t rssi_sum;
+    uint16_t rssi_count;
+    uint32_t rssi_next, rssi_log_at;
 } link_t;
 
 static link_t s_links[S2T_LINKS];
@@ -1504,10 +1516,50 @@ void s2c_on_conn_interval(uint8_t link, uint16_t conn_interval) {
     LOG("s2: link %u connection interval now %u", k->idx, conn_interval);
 }
 
+// The signal over the last seconds, oldest first (a link that dropped by
+// supervision timeout, 0x08, shows whether it faded or cut out).
+static void log_rssi_history(const link_t *k) {
+    if (!k->rssi_n) return;
+    char buf[RSSI_HIST * 5 + 1];
+    int n = 0;
+    for (int i = 0; i < k->rssi_n; i++) {
+        int8_t v = k->rssi_hist[(k->rssi_pos + RSSI_HIST - k->rssi_n + i) % RSSI_HIST];
+        n += snprintf(buf + n, sizeof buf - (size_t)n, "%s%d", i ? " " : "", v);
+    }
+    LOG("s2: link %u signal over the last %u s: %s dBm", k->idx, k->rssi_n, buf);
+}
+
+static void rssi_task(link_t *k) {
+    if (!platform_time_reached(k->rssi_next)) return;
+    k->rssi_next = platform_deadline_ms(RSSI_READ_MS);
+    s2t_read_rssi(k->idx);
+    if (k->state == S2_LINK_READY && k->rssi_count && platform_time_reached(k->rssi_log_at)) {
+        LOG("s2: link %u signal %ld dBm (%d to %d over the last 5 minutes)", k->idx,
+            (long)(k->rssi_sum / (int32_t)k->rssi_count), k->rssi_min, k->rssi_max);
+        k->rssi_count = 0;
+        k->rssi_sum = 0;
+    }
+    if (!k->rssi_log_at || platform_time_reached(k->rssi_log_at)) k->rssi_log_at = platform_deadline_ms(RSSI_LOG_MS);
+}
+
+void s2c_on_rssi(uint8_t link, int8_t rssi) {
+    link_t *k = link_at(link);
+    if (!k || !k->connected || rssi == 0 || rssi == 127) return;   // 127: not available
+    k->info.last_rssi = rssi;
+    k->rssi_hist[k->rssi_pos] = rssi;
+    k->rssi_pos = (uint8_t)((k->rssi_pos + 1) % RSSI_HIST);
+    if (k->rssi_n < RSSI_HIST) k->rssi_n++;
+    if (!k->rssi_count || rssi < k->rssi_min) k->rssi_min = rssi;
+    if (!k->rssi_count || rssi > k->rssi_max) k->rssi_max = rssi;
+    k->rssi_sum += rssi;
+    k->rssi_count++;
+}
+
 void s2c_on_disconnected(uint8_t link, uint8_t reason) {
     link_t *k = link_at(link);
     if (!k || (!k->connected && k->state != S2_LINK_CONNECTING)) return;
     LOG("s2: link %u disconnected (reason 0x%02x)", k->idx, reason);
+    log_rssi_history(k);
     if (k->state == S2_LINK_CONNECTING) record_failure(1, reason);
     else if (k->state == S2_LINK_DISCOVERING) record_failure(2, reason);
     else if (k->state == S2_LINK_INITIALISING) record_failure(k->init_step <= ST_PAIR_FINALIZE ? 3 : 4, reason);
@@ -1722,6 +1774,7 @@ void s2_link_task(void) {
             k->rate_window = platform_deadline_ms(1000);
         }
         cmd_pump(k);
+        if (k->connected) rssi_task(k);
         if (k->state == S2_LINK_READY) {
             led_task(k);
             features_task(k);
@@ -1773,7 +1826,8 @@ static void fill_info(const link_t *k, s2_link_info_t *out) {
     *out = k->info;
     out->state = k->state;
     out->gyro_cal_busy = s_cal_active;
-    out->last_rssi = s_last_rssi;
+    // While connected: the link's own; else the last advertisement's.
+    if (!k->connected || !k->info.last_rssi) out->last_rssi = s_last_rssi;
     if (!k->imu_detected) out->gyro_range_detected = 0;
 }
 

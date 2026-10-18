@@ -97,6 +97,8 @@ function Content() {
   const typeSeen = useRef(-1);
   const speedTimer = useRef<ReturnType<typeof setTimeout>>();
   const [speed, setSpeed] = useState<number | null>(null);   // slider while it moves
+  const strengthTimer = useRef<ReturnType<typeof setTimeout>>();
+  const [strength, setStrength] = useState<number | null>(null);
 
   const loadSettings = async () => {
     const r = await getSettings();
@@ -371,6 +373,41 @@ function Content() {
         </PanelSection>
       )}
 
+      {T && P && ready.length > 0 && (
+        <PanelSection title="Rumble">
+          <PanelSectionRow>
+            <ToggleField
+              label="Rumble"
+              checked={!!P.rumble}
+              onChange={(v) => saveProfile({ ...P, rumble: v ? 1 : 0 }).then((s) => s && v && testRumble())}
+            />
+          </PanelSectionRow>
+          {!!P.rumble && (
+            <PanelSectionRow>
+              <SliderField
+                label="Strength"
+                description="The controller will give a short buzz at the new strength."
+                value={strength ?? P.strength}
+                min={0}
+                max={200}
+                step={10}
+                showValue
+                valueSuffix="%"
+                onChange={(v) => {
+                  // Saved once the slider rests, then a buzz to feel it.
+                  setStrength(v);
+                  clearTimeout(strengthTimer.current);
+                  strengthTimer.current = setTimeout(
+                    () => saveProfile({ ...P, strength: v }).then((s) => { setStrength(null); if (s && v) testRumble(); }),
+                    400,
+                  );
+                }}
+              />
+            </PanelSectionRow>
+          )}
+        </PanelSection>
+      )}
+
       {prefs && <DsuSection prefs={prefs} setPrefs={setPrefs} runMode={runMode} />}
 
       <PanelSection title="Dongle">
@@ -538,6 +575,11 @@ function DsuSection(props: { prefs: Prefs; setPrefs(p: Prefs): void; runMode: nu
 // Decky's own installer (as for its store and "Install from URL"): it may
 // replace the plugin's files and reloads the plugin; it asks to confirm.
 // Older loaders without it: the backend does it (and restarts Decky).
+// A short buzz through the same path as a game's rumble (so at the profile's strength).
+function testRumble() {
+  action("motors&l=160&r=160").catch(() => {});
+}
+
 async function updatePlugin(u: PluginUpdate) {
   const backend = (window as unknown as { DeckyBackend?: { call(route: string, ...args: unknown[]): Promise<unknown> } }).DeckyBackend;
   if (backend && u.url) {

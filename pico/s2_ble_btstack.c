@@ -289,6 +289,11 @@ static void hci_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, 
             if (l >= 0) s2c_on_conn_interval((uint8_t)l, hci_subevent_le_connection_update_complete_get_conn_interval(packet));
         }
         break;
+    case GAP_EVENT_RSSI_MEASUREMENT: {
+        int l = link_of(gap_event_rssi_measurement_get_con_handle(packet));
+        if (l >= 0) s2c_on_rssi((uint8_t)l, (int8_t)gap_event_rssi_measurement_get_rssi(packet));
+        break;
+    }
     case HCI_EVENT_DISCONNECTION_COMPLETE: {
         int l = link_of(hci_event_disconnection_complete_get_connection_handle(packet));
         if (l >= 0) {
@@ -441,6 +446,11 @@ uint16_t s2t_mtu(uint8_t l) {
     uint16_t mtu = 23;
     if (l < S2T_LINKS && s_links[l].con != HCI_CON_HANDLE_INVALID) gatt_client_get_mtu(s_links[l].con, &mtu);
     return mtu;
+}
+
+bool s2t_read_rssi(uint8_t l) {
+    if (l >= S2T_LINKS || s_links[l].con == HCI_CON_HANDLE_INVALID) return false;
+    return gap_read_rssi(s_links[l].con) == ERROR_CODE_SUCCESS;
 }
 
 void s2t_enable_input(uint8_t l) {
