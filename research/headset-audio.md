@@ -252,6 +252,30 @@ off and always turns it back on). Run with KDE Connect closed:
   The controller now has this laptop (`DC:A9:04:75:01:F6`) as a host.
   Always use `--pair` from now on when the controller is in pairing mode.
 
+### Phase 2 progress (2026-10-20)
+
+- `dump_flash.py` reads only (memory read `0x02/0x04`, 0x40 bytes). It
+  writes as it goes, resumes, and reconnects. It was tested against a fake
+  controller (drops, lost replies, refusals) and then on the real one.
+- **Reconnecting without Sync works.** Once paired (`phase1.py --pair`),
+  a button press wakes the controller. It advertises with the laptop's
+  address in the host field (`f6 01 75 04 a9 dc`), and the raw ATT connect
+  goes straight through. Memory reads don't need pairing.
+- 8 KB trial: 128 chunks in about 12 s with nothing refused, about 10.7
+  reads/s (two connection events per read at 48.75 ms). The full 2 MB
+  would take about 51 min. Offset 0 starts `01 00 64 aa 20 53 59 53`
+  (" SYS"), followed by high-entropy data, so it's probably encrypted or
+  compressed.
+- **The faster interval didn't apply yet.** Writing the debugfs
+  `conn_min_interval` got "Permission denied" even as root, with no
+  lockdown (cause unknown, maybe SELinux). `MinConnectionInterval=6` and
+  `MaxConnectionInterval=12` in `/etc/bluetooth/main.conf` [LE] reach the
+  kernel: btmon shows Set Default System Configuration 6/12 accepted after
+  a BlueZ restart. Yet the next LE Create Connection still asked for
+  0x18-0x28 (30-50 ms). BlueZ doesn't know the device (no stored
+  connection parameters were loaded), so the cause is still open. Phase 3
+  needs the short interval, so this has to be solved before then.
+
 Keep scripts in `research/audio/`. Keep dumps and captures out of git
 (`research/audio/data/`, gitignored). The flash dump is Nintendo's
 firmware and must never be committed or uploaded anywhere.
