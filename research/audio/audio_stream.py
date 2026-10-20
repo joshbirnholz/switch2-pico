@@ -3,9 +3,10 @@
 output formats, with libopus as the test equipment.
 
 Sends only what's known: the dongle's connect sequence (no pairing; the
-controller must already be paired, see phase1.py --pair), the 0x17/0x02
-stream setup from the console, and writes to the audio-out
-characteristic.
+controller must already be paired, see phase1.py --pair), 0x10/0x01
+(firmware versions, read only), the console's 0x17/0x02 stream setup,
+0x18/0x01, 0x18/0x03 07 (seen from the console; ndeadly's commands.md),
+and writes to the audio-out characteristic.
 
 Run it yourself in a terminal (it asks you to talk and listen), with
 earbuds-with-mic (4-pole) in the controller's jack, KDE Connect closed:
@@ -234,6 +235,9 @@ def main():
     p.add_argument("--tone-seconds", type=float, default=4)
     p.add_argument("--beeps", action="store_true",
                    help="play beeps from the laptop's speaker during the mic test instead of the silent prompts")
+    p.add_argument("--paths", type=lambda x: int(x, 0), default=0x07,
+                   help="0x18/0x03 byte (the console's is 07); --no-paths to skip")
+    p.add_argument("--no-paths", dest="paths", action="store_const", const=None)
     p.add_argument("--setup", default="80bb000002f000",
                    help="0x17/0x02 payload (hex); the console's is 80 bb 00 00 02 f0 00")
     args = p.parse_args()
@@ -254,11 +258,23 @@ def main():
         cmd = Commander(att, *chars[CHAR_CMD], chars[CHAR_CMD_RSP][0], lambda s: log.write(s + "\n"))
         cmd.start()
         init(cmd)
+        rsp = cmd.send(0x10, 0x01)
+        if rsp and len(rsp) >= 8 + 11:
+            v = rsp[8:]
+            out(f"firmware {v[0]}.{v[1]}.{v[2]} type {v[3]}, bluetooth patch {v[4]}.{v[5]}.{v[6]}, "
+                f"DSP {v[8]}.{v[9]}.{v[10]}")
+        else:
+            out(f"0x10/0x01 -> {rsp.hex(' ') if rsp else 'no response'}")
         setup = bytes.fromhex(args.setup)
         rsp = cmd.send(0x17, 0x02, setup)
         out(f"0x17/0x02 {setup.hex(' ')} -> {rsp.hex(' ') if rsp else 'no response'}")
         rsp = cmd.send(0x18, 0x01)
         out(f"0x18/0x01 -> {rsp.hex(' ') if rsp else 'no response'}")
+        if args.paths is not None:
+            # Seen from the console with 07 (ndeadly commands.md); 07 is also the
+            # "headset with mic" jack state, so maybe it selects the audio paths.
+            rsp = cmd.send(0x18, 0x03, bytes([args.paths]))
+            out(f"0x18/0x03 {args.paths:02x} -> {rsp.hex(' ') if rsp else 'no response'}")
 
         mic = MicCapture(raw, out)
         att.subscribe(chars[CHAR_AUDIO_IN][0], mic)

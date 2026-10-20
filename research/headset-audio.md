@@ -383,6 +383,38 @@ off and always turns it back on). Run with KDE Connect closed:
   probably the rumble actuator, the same thing the earlier PCM test felt.
   Next: stereo Opus (TOC 0xFC/0xF4/0xEC), since USB audio is stereo out.
 
+### Third audio stream test (7.5 ms, silent mic prompts, stereo output)
+
+- **At 7.5 ms every mic frame arrives:** 132.5 notifications/s, 52.9
+  frames/s, nothing lost; 22 s of mic gave 22.0 s of audio.
+- **The codec is confirmed: Opus CELT-only, FB, 20 ms, mono, 50 bytes
+  CBR (20 kbit/s).** The mic frames match libopus encoding faint white
+  noise: second byte mostly 0x59/0x51/0x5a, the same entropy profile.
+  Random bytes after an 0xF8 TOC decode ~300× louder and look nothing
+  like them. And libopus at 20 kbit/s CBR encodes digital silence as
+  `f8 ff fe` + zero bytes, exactly the controller's frame when nothing is
+  plugged in.
+- **But the mic isn't live.** Taps, rubbing and close whispering (prompted
+  and timestamped) left no trace. The decoded level stays at ~-75 dBFS
+  the whole time. The encoder is fed an input with no mic signal in it:
+  muted, no gain, or no mic bias.
+- Output: a thump from the controller's body at formats 1-4 (mono 20 ms,
+  stereo 20 ms 50 B, stereo 20 ms 100 B, stereo 10 ms), none at 5 (stereo
+  5 ms), and **nothing from the headphones** in any of them.
+- Jack state on plugging in: byte 13 went 0x04, then 0x07.
+- ndeadly's commands.md lists more of the 0x18 family: `0x18/0x01`
+  (8-byte response, matches ours), `0x18/0x02` (no example),
+  **`0x18/0x03`, seen from the console as `18 91 01 03 00 01 00 00 07`
+  and echoed as `07`**, and `0x18/0x04` (no details). 0x07 is also the
+  "headset with mic" jack state, so `0x18/0x03` may select the active
+  audio paths, and we never sent it. Next run: `0x18/0x03 07` after the
+  stream setup, plus `0x10/0x01` (firmware versions, read only).
+- Also from commands.md, for safety: `0x02/0x02` (write block),
+  `0x02/0x03` (erase sector) and `0x02/0x05` (memory write, allowed at
+  >= 0x1F5000) write flash. `0x03/0x07-0x09` and `0x15/0x03` write
+  pairing data. `0x0D/*` is firmware update. `0x06/0x02` and `0x06/0x03`
+  shut down or reboot the controller. Never send any of these.
+
 Keep scripts in `research/audio/`. Keep dumps and captures out of git
 (`research/audio/data/`, gitignored). The flash dump is Nintendo's
 firmware and must never be committed or uploaded anywhere.
