@@ -102,8 +102,12 @@ def main():
     args.address = "3C:A9:AB:69:58:AF"
     att, chars = connect(args, out)
     from record import Recorder
-    rec = Recorder(f"console-out-{stamp}").start()
-    out("recording the USB card from now")
+    try:
+        rec = Recorder(f"console-out-{stamp}").start()
+        out("recording the USB card from now")
+    except Exception as e:
+        rec = None
+        out(f"NOT recording: {e}")
     try:
         cmd = ConsoleCommander(att, out)
         # 0x001b is the CCCD of 0x001a (subscribed above); the console also
@@ -169,11 +173,12 @@ def main():
             out(f"link closed: {att.close_reason}")
         att.close()
         log.close()
-        secs = rec.stop()
-        from measure_tone import report
-        print(f"\nrecorded {secs:.1f} s; 1 kHz at the jack per step:")
-        report(f"console-out-{stamp}", log_path, 1000.0,
-               out=lambda l: print(l) if (">>" in l or "recording" in l) else None)
+        if rec:
+            secs = rec.stop()
+            from measure_tone import report
+            print(f"\nrecorded {secs:.1f} s; 1 kHz at the jack per step:")
+            report(f"console-out-{stamp}", log_path, 1000.0,
+                   out=lambda l: print(l) if (">>" in l or "recording" in l) else None)
 
 
 if __name__ == "__main__":

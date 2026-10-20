@@ -10,6 +10,7 @@ Set the card up first: Auto Gain Control off, Mic Capture Volume ~30
 (amixer -c Creation), or the input clips.
 """
 import json
+import signal
 import sys
 import time
 from pathlib import Path
@@ -26,17 +27,21 @@ def find_device():
     for i, d in enumerate(sd.query_devices()):
         if d["max_input_channels"] > 0 and "Cable Creation" in d["name"]:
             return i
-    raise SystemExit("USB sound card (Cable Creation) not found")
+    raise RuntimeError("USB sound card (Cable Creation) not found, or in use (another record.py?)")
 
 
 class Recorder:
-    """Records from the USB card in the background, from start() to stop().
-    The tests start it once the controller has connected."""
+    """Records from the USB card in the background, from start() to stop(),
+    writing to disk as it goes (a killed recording keeps what it had). The
+    tests start it once the controller has connected. The card can only be
+    open once: a running record.py blocks it."""
 
     def __init__(self, name):
         self.name = name
-        self.chunks = []
+        self.frames = 0
         self.start_time = None
+        DATA.mkdir(exist_ok=True)
+        self.file = sf.SoundFile(DATA / f"{name}.wav", "w", samplerate=RATE, channels=1, subtype="PCM_16")
         self.stream = sd.InputStream(samplerate=RATE, channels=1, dtype="int16", device=find_device(),
                                      callback=self._cb)
 
@@ -44,7 +49,9 @@ class Recorder:
         if self.start_time is None:
             # wall clock of this block's first sample
             self.start_time = time.time() - (t.currentTime - t.inputBufferAdcTime) - frames / RATE
-        self.chunks.append(indata.copy())
+            (DATA / f"{self.name}.json").write_text(json.dumps({"start": self.start_time, "rate": RATE}))
+        self.file.write(indata.copy())
+        self.frames += frames
 
     def start(self):
         self.stream.start()
@@ -53,26 +60,23 @@ class Recorder:
     def stop(self):
         self.stream.stop()
         self.stream.close()
-        x = np.concatenate(self.chunks) if self.chunks else np.zeros((0, 1), np.int16)
-        DATA.mkdir(exist_ok=True)
-        sf.write(DATA / f"{self.name}.wav", x, RATE)
-        (DATA / f"{self.name}.json").write_text(json.dumps({"start": self.start_time, "rate": RATE}))
-        return len(x) / RATE
+        self.file.close()
+        return self.frames / RATE
 
 
 def main():
     seconds = float(sys.argv[1])
     name = sys.argv[2] if len(sys.argv) > 2 else time.strftime("rec-%Y%m%d-%H%M%S")
-    dev = find_device()
-    DATA.mkdir(exist_ok=True)
-    frames = int(seconds * RATE)
-    start = time.time()
-    x = sd.rec(frames, samplerate=RATE, channels=1, dtype="int16", device=dev)
-    sd.wait()
-    sf.write(DATA / f"{name}.wav", x, RATE)
-    (DATA / f"{name}.json").write_text(json.dumps({"start": start, "rate": RATE, "device": sd.query_devices(dev)["name"]}))
-    x = x[:, 0].astype(float)
-    print(f"{name}: {seconds:.0f} s, rms {np.sqrt((x ** 2).mean()):.1f}, peak {np.abs(x).max():.0f}, "
+    signal.signal(signal.SIGTERM, lambda *a: (_ for _ in ()).throw(KeyboardInterrupt()))
+    r = Recorder(name).start()
+    try:
+        time.sleep(seconds)
+    except KeyboardInterrupt:
+        pass
+    secs = r.stop()
+    x, _ = sf.read(DATA / f"{name}.wav", dtype="int16")
+    x = x.astype(float)
+    print(f"{name}: {secs:.0f} s, rms {np.sqrt((x ** 2).mean()):.1f}, peak {np.abs(x).max():.0f}, "
           f"clipped {(np.abs(x) >= 32767).sum()}")
 
 
