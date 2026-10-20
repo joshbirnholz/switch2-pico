@@ -198,6 +198,12 @@ def main():
     sniffer = Sniffer.Sniffer(port, rates["default"])
     dec = Decoder(out, log, sniffer)
 
+    def rekey():
+        # Every scan() also sends an all-zero key (SnifferCollector
+        # _startScanning), which wipes the LTK: send it again after each.
+        if opt("ltk"):
+            dec.send_ltk(bytes.fromhex(opt("ltk")))
+
     stats = Counter()
     want = [int(a, 16) for a in address.split(":")]
     followed = {"done": False}
@@ -224,6 +230,7 @@ def main():
         if not followed["done"]:
             followed["done"] = True
             sniffer.follow(d)
+            rekey()
             out(f"{time.time():.3f} controller seen (RSSI {d.RSSI}): following it")
 
     sniffer.subscribe("NEW_BLE_PACKET", on_packet)
@@ -240,8 +247,8 @@ def main():
     # the sniffer saw it once and then nothing.
     sniffer.scan(findScanRsp=True, findAux=True)
     time.sleep(0.5)
+    rekey()
     if opt("ltk"):
-        dec.send_ltk(bytes.fromhex(opt("ltk")))
         out(f"LTK {opt('ltk')} sent to the sniffer")
     out(f"scanning on {port}, channel {channel or '37/38/39'} (firmware {sniffer.swversion}); will follow {address} once it advertises. Ctrl+C to stop")
     quiet = 0
@@ -260,6 +267,8 @@ def main():
                 followed["done"] = False
                 quiet = 0
                 sniffer.scan(findScanRsp=True, findAux=True)
+                time.sleep(0.2)
+                rekey()
             stats.clear()
     except KeyboardInterrupt:
         pass
