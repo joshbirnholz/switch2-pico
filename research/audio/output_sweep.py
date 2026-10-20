@@ -119,7 +119,7 @@ def main():
 
     def out(line=""):
         print(line, flush=True)
-        log.write(line + "\n")
+        log.write(f"{time.time():.3f} {line}\n")   # wall clock, for measure_tone.py
         log.flush()
 
     class A:
