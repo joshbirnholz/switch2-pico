@@ -294,8 +294,40 @@ off and always turns it back on). Run with KDE Connect closed:
     0x180000-0x19FFFF has entropy ~7.4.
   - 0x1F0000-0x1FFFFF: nearly erased (the user stick calibration at
     0x1FC040 is empty).
-  - Not done yet: `--probe` past 2 MB, binwalk, the DSP's architecture,
-    and codec table searches.
+  - binwalk finds no known formats in the image or in the DSP blob.
+
+### DSP image and codec (2026-10-20)
+
+- **DSP header** (at 0x175000, 24 bytes, little-endian): `DSPH`, version
+  1, payload size `0x32AB0`, `0x00030200` (maybe version 3.2.0),
+  `0x10090000` (maybe the load address), and the CRC32 of the payload
+  (`0xF1CA2A7A`, verified). The payload is stored plain, not encrypted.
+  Extract it with `dd` into `data/dsp.bin` (gitignored).
+- **Architecture: Tensilica Xtensa, windowed ABI** (`arch_guess.py`). The
+  `entry a1,N` prologue (`36 x1 00`) appears ~3200× more often than chance
+  (238 functions), and `retw.n` (`1d f0`) ~170×. No other candidate
+  scores. This fits a Cadence HiFi DSP, as in MediaTek/Airoha audio SoCs.
+- **The codec is Opus** (`find_tables.py`), from exact tables:
+  - CELT `eband5ms` (int16) at 0x1A2FF8;
+  - the CELT energy probability model (`e_prob_model`) at 0x1A5358;
+  - a SILK NLSF codebook row at 0x1A5548;
+  - Q15 complex FFT twiddles for 480/240/120/60 points around
+    0x1A3276-0x1A4D0C, which match CELT's standard 48 kHz/960 mode.
+  - Two more increasing tables are not identified yet: u8 `0 2 5 9 14 20
+    27 …135` at 0x1A2909, and int16 `0 1 … 8 16 24 36 44 … 106 134` at
+    0x1A2E16.
+  - No SBC, ADPCM, G.722, MS-ADPCM or µ-law tables. LC3 isn't in the
+    table list yet.
+- **The idle mic frame `f8 ff fe` is the standard Opus silence packet.**
+  TOC `0xF8` means config 31: CELT-only, fullband, 20 ms, mono, one frame.
+  libopus 1.6 decodes it to 960 samples of digital silence, with or
+  without the 47 zero bytes of padding. The old "Opus ruled out" result
+  came from idle captures only, and silence can't tell codecs apart.
+- Open questions: the `0x17/0x02` payload says 240 samples per frame
+  (5 ms), but the idle packet is 20 ms. Do real mic frames use other TOCs
+  (e.g. 0xE8, config 29 = CELT FB 5 ms)? And does the output lane take
+  Opus too? Phase 4 can test that directly: encode a 1 kHz tone with
+  libopus (CELT-only, FB, 5 ms and 20 ms) and write the packets to `…b06`.
 
 Keep scripts in `research/audio/`. Keep dumps and captures out of git
 (`research/audio/data/`, gitignored). The flash dump is Nintendo's
