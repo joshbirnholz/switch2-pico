@@ -13,13 +13,18 @@ tried before.
 Sends the same setup as audio_stream.py (no new commands) and writes only
 to audio-out. Run it yourself, headphones in the controller's jack, held
 near your ear:
-  research/audio/wifi-off.sh .venv/bin/python research/audio/output_sweep.py [--states]
+  research/audio/wifi-off.sh .venv/bin/python research/audio/output_sweep.py [--states | --timing]
 
 First sweep: layout 6, [00][0F][32][frame], played the tone from the
 controller's body (actuators?), not the jack; the others did nothing.
 --states keeps that packet and tries every state byte 0x00-0x1F, 0x2F,
 0x4F and 0x8F, 1.5 s each. The tone is at -40 dBFS unless --level=X
 (linear, 0.1 = -20 dBFS) says otherwise.
+
+Both sweeps showed the same thing: per connection, the first stream with
+the leading 00 is silent, the second plays, none after that do. --timing
+tests whether that's warm-up then a stop (one 20 s stream with a seconds
+counter) or the gaps (2 s bursts, each after resending 0x17/0x02).
 """
 import math
 import sys
@@ -67,6 +72,38 @@ def state_layouts():
             for st in states]
 
 
+def timing_test(att, cmd, handle, level, out):
+    """In each connection so far, the first stream with the leading 00 was
+    silent, the second played and none after that did, whatever the state
+    byte. A: one continuous stream with a seconds counter. B: short bursts,
+    each after resending the 0x17/0x02 stream setup."""
+    build = lambda seq, f: bytes([0x00, 0x0F, len(f)]) + f
+
+    def stream(seconds, tick):
+        enc = Encoder(bitrate=20000)
+        pcm = tone(seconds, level=level)
+        t0 = time.monotonic()
+        for i in range(len(pcm) // FRAME):
+            if tick and i % 50 == 0:
+                out(f"   second {i // 50 + 1}")
+            att.write_cmd(handle, build(i, enc.encode(pcm[i * FRAME:(i + 1) * FRAME])))
+            ahead = (i + 1) * 0.02 - (time.monotonic() - t0)
+            if ahead > 0.02:
+                time.sleep(ahead - 0.02)
+            if att.closed.is_set():
+                return
+
+    out("\n== A: one continuous 20 s stream. Note the seconds where you hear the tone.")
+    stream(20, True)
+    time.sleep(2)
+    out("\n== B: four 2 s bursts, the stream setup resent before each. Note which play.")
+    for k in range(1, 5):
+        rsp = cmd.send(0x17, 0x02, bytes.fromhex("80bb000002f000"))
+        out(f">> burst {k} (0x17/0x02 -> {'ack' if rsp else 'no response'})")
+        stream(2, False)
+        time.sleep(1.5)
+
+
 def main():
     args_in = [a for a in sys.argv[1:] if not a.startswith("--")]
     address = args_in[0] if args_in else "3C:A9:AB:69:58:AF"
@@ -102,6 +139,11 @@ def main():
         time.sleep(1.5)
 
         handle = chars[CHAR_AUDIO_OUT][0]
+        if "--timing" in sys.argv:
+            out(f"tone: 1 kHz at {20 * math.log10(level):.0f} dBFS")
+            timing_test(att, cmd, handle, level, out)
+            out(f"\nstream: {mic.summary()}")
+            return
         pcm = tone(seconds, level=level)
         out(f"tone: 1 kHz at {20 * math.log10(level):.0f} dBFS, {seconds} s per step")
         out("\n== Listen for a 1 kHz tone in the headphones. Note each number with a tone, a thump, or anything else.")

@@ -482,6 +482,16 @@ off and always turns it back on). Run with KDE Connect closed:
   0x00-0x1F plus 0x2F/0x4F/0x8F. In audio-in this byte is a bitfield (bit 3
   = frame present, 0x07 headset, 0x05 headphones), so it may pick the
   destination.
+- **The state byte isn't the trigger.** Full `--states` sweep at -20 dBFS
+  (`sweep-20261020-135703`): a tone at step 1 or 2 only. Repeat at -40
+  dBFS, stopped after step 3: the tone at step 2 (state 0x01). Nothing
+  from the headphones in either. In all three runs, **per connection, the
+  first stream with the leading 00 is silent, the second plays (from the
+  controller's body), and none after that play**, whatever the state byte
+  (0x0F in the first sweep, 0x01 since).
+- Next: `output_sweep.py --timing`. A: one continuous 20 s stream with a
+  seconds counter (warm-up, then a stop?). B: 2 s bursts, each after
+  resending 0x17/0x02 (do the gaps end the playing state?).
 
 Keep scripts in `research/audio/`. Keep dumps and captures out of git
 (`research/audio/data/`, gitignored). The flash dump is Nintendo's
