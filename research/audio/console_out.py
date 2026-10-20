@@ -23,6 +23,7 @@ mode (Sync) unless it's still paired with this laptop; --pair runs the
 Records the USB card from connection and measures the tone at the end.
 
 Usage: research/audio/wifi-off.sh .venv/bin/python research/audio/console_out.py [--pair] [--level=0.03] [--seconds=6]
+           [--no-filler]
 (With the laptop on Ethernet and Wi-Fi already off, run it directly.)
 """
 import sys
@@ -146,6 +147,8 @@ def main():
         handle = chars[CHAR_AUDIO_OUT][0]
         enc = Encoder(channels=2, bitrate=48000)
         filler = bytes([0x00, 0x02, 0x78]) + bytes(120)
+        use_filler = "--no-filler" not in sys.argv
+        out(f"filler packets: {'yes' if use_filler else 'no'}")
 
         def stream(pcm, label):
             out(f">> {label}")
@@ -156,7 +159,8 @@ def main():
                 ahead = (2 * i + 1) * 0.010 - (time.monotonic() - t0)
                 if ahead > 0:
                     time.sleep(ahead)
-                att.write_cmd(handle, filler)
+                if use_filler:
+                    att.write_cmd(handle, filler)
                 ahead = (2 * i + 2) * 0.010 - (time.monotonic() - t0)
                 if ahead > 0:
                     time.sleep(ahead)

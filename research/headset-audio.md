@@ -726,3 +726,17 @@ rate/frame/mode, and decode attempts guided by whatever Phase 2 turned up.
 - Bandwidth isn't a concern: the compressed stream is tens of kbit/s, and
   the dongle already asks for a 7.5-15 ms interval.
 - Follow `CLAUDE.md` for any UI text.
+
+### First audio from the jack (2026-10-20, `console_out.py`)
+
+The console's sequence and format replayed from the laptop (unencrypted,
+15 ms interval, re-paired with `--pair`): **the 1 kHz tone reached the
+headphone jack**: -26 to -40 dBFS around 850-1000 Hz for about 0.3 s, then
+0.2 s of silence, then a steady 1150 Hz at -39 dBFS that continues after
+the stream stops. Its peaks fall on multiples of 50 Hz, which looks like
+the decoder underrunning and looping its last 20 ms. So encryption and
+the 5 ms interval aren't needed for the jack to play; delivery timing is
+the remaining problem. The console sends 100 packets/s (frames plus
+fillers) at a 5 ms interval; the laptop at 15 ms managed ~75-110
+writes/s before. Next: the 7.5 ms interval, and `--no-filler` (50
+packets/s).
