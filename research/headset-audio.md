@@ -329,6 +329,41 @@ off and always turns it back on). Run with KDE Connect closed:
   Opus too? Phase 4 can test that directly: encode a 1 kHz tone with
   libopus (CELT-only, FB, 5 ms and 20 ms) and write the packets to `…b06`.
 
+### First audio stream test (2026-10-20, `audio_stream.py`, 48.75 ms interval)
+
+- `0x17/0x02 80 bb 00 00 02 f0 00` was ACKed with an empty payload.
+  `0x18/0x01` returns `00 00 40 f0 00 00 60 00`, the same as seen on the
+  console.
+- Subscribing to audio-in (value 0x002e, CCCD 0x002f) gave 112-byte
+  notifications, one per connection event (20.4/s). Every other one
+  carries a frame, and none were lost by sequence number. Byte 13 = 0x0f
+  (headset with mic, plus the frame bit).
+- **With a mic plugged in, every frame is a real Opus packet:** 1929 of
+  1929 were distinct, all 50 bytes, all TOC `0xF8` (CELT FB 20 ms mono),
+  so CBR at 20 kbit/s. libopus decoded every one without an error.
+- **But only 1 in 5 frames gets through:** 10 frames/s where 20 ms frames
+  need 50/s. The controller sends one notification per connection event,
+  so it needs about 100 events/s (an interval of 10 ms or less). Decoded,
+  the stream is a flat noise floor of about -75 dBFS with no speech. CELT
+  predicts each frame's band energies from the previous frame, so with
+  80% of frames missing the decoder can't track them. This doesn't show
+  yet whether the codec is right.
+- Output: writes without response were throttled to a few per connection
+  event. Only format 1 (Opus CELT 20 ms, 50 bytes, bare, 50 packets/s)
+  went out at real-time rate; format 2 took 31.7 s for 4 s of audio.
+  Josh "thinks he heard something at 1 and 2, but isn't sure". No 1 kHz
+  showed up acoustically in the mic stream either, but the mic stream
+  can't be decoded at this interval anyway.
+- **Why main.conf's interval didn't apply:** the kernel keeps an LE
+  parameter entry per address, created with the defaults in effect at the
+  first connection. bluetoothd's Load Connection Parameters only clears
+  old entries when it loads more than one (`param_count > 1`), and it
+  loaded none, so the entry with 30-50 ms survived the restart.
+  `set_conn_params.py` (root) sends Load Connection Parameters with one
+  entry for the controller (7.5-15 ms, 2 s timeout), which updates it.
+  Without root it gets status 0x14 (Permission Denied), so the request
+  itself is well formed.
+
 Keep scripts in `research/audio/`. Keep dumps and captures out of git
 (`research/audio/data/`, gitignored). The flash dump is Nintendo's
 firmware and must never be committed or uploaded anywhere.
