@@ -244,6 +244,7 @@ def main():
         dec.send_ltk(bytes.fromhex(opt("ltk")))
         out(f"LTK {opt('ltk')} sent to the sniffer")
     out(f"scanning on {port}, channel {channel or '37/38/39'} (firmware {sniffer.swversion}); will follow {address} once it advertises. Ctrl+C to stop")
+    quiet = 0
     try:
         while True:
             time.sleep(1)
@@ -251,6 +252,14 @@ def main():
             pcap.flush()
             log.flush()
             print(f"   [{time.strftime('%H:%M:%S')}] {dict(stats)}", flush=True)
+            # Following the controller but hearing nothing (its connection
+            # request was missed): scan again and wait for the next advert.
+            quiet = quiet + 1 if followed["done"] and not stats else 0
+            if quiet >= 3:
+                out(f"{time.time():.3f} lost the controller (connection missed?): scanning again")
+                followed["done"] = False
+                quiet = 0
+                sniffer.scan(findScanRsp=True, findAux=True)
             stats.clear()
     except KeyboardInterrupt:
         pass
