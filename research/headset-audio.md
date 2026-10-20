@@ -587,6 +587,14 @@ off and always turns it back on). Run with KDE Connect closed:
   either byte order. (Also: SnifferAPI sends an all-zero key with every
   `scan()`, so the key has to be resent after each.) Next: as an LE Secure
   Connections LTK (`sendSCLTK`), which fits Rand = EDIV = 0.
+- With two sniffer boards next to the controller (`sniff-20261020-191314`),
+  board B caught the whole reconnection including both `ENC_REQ` and
+  `ENC_RSP`, with key A loaded as a **legacy** LTK, and still didn't
+  decrypt. Offline, key A decrypts that session's START_ENC_RSPs (MIC OK).
+  So the firmware won't use it as a legacy key in that order. Still
+  untested with a complete capture: key A as an SC LTK, and key B as legacy.
+- The console's ENC_REQ SKDm/IVm repeat between sessions in shifted pieces
+  (`dca4a469…`, `07a23bee…`), so its "random" values aren't very random.
 - The jack recording during these sessions (`console1.wav`, USB card)
   shows the console's audio at about -34 dBFS whenever it was connected,
   with a thump at each connect and disconnect.
