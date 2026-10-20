@@ -7,8 +7,9 @@ extcap/SnifferAPI) copied to research/audio/data/nrf_sniffer/ (gitignored;
 Nordic's licence, not ours). Needs pyserial and psutil in the venv, and
 access to the sniffer's serial port (sudo setfacl -m u:$USER:rw /dev/ttyACM0).
 
-Follows the controller's advertising, then the connection the console
-makes. Prints commands, command responses and link-layer control PDUs as
+Scans, then follows the controller as soon as it advertises (as Nordic's
+Wireshark plugin does), then the connection the console makes. Prints a
+packet count every second, so a dead capture shows. Prints commands, command responses and link-layer control PDUs as
 they happen, and once a second a summary of the high-rate reports (input,
 rumble, audio). Recognises the Nintendo 0x15/0x04 key exchange, computes the
 LTK (A1 ^ B1, as core/src/s2_link.c does) and hands it to the sniffer so a
@@ -29,7 +30,7 @@ HERE = Path(__file__).resolve().parent
 DATA = HERE / "data"
 sys.path.insert(0, str(DATA / "nrf_sniffer"))
 
-from SnifferAPI import Devices, Filelock, Packet, Pcap, Sniffer, UART  # noqa: E402
+from SnifferAPI import Filelock, Packet, Pcap, Sniffer, UART  # noqa: E402
 
 # The library locks the port with a file in /var/lock, which only root may
 # write; nothing else here uses the sniffer, so skip the lock.
@@ -187,15 +188,35 @@ def main():
     sniffer = Sniffer.Sniffer(port, rates["default"])
     dec = Decoder(out, log, sniffer)
 
+    stats = Counter()
+    want = [int(a, 16) for a in address.split(":")]
+    followed = {"done": False}
+
     def on_packet(n):
         p = n.msg["packet"]
+        stats["packets"] += 1
+        b = p.blePacket
+        if b is not None and b.type != Packet.PACKET_TYPE_ADVERTISING:
+            stats["connection"] += 1
         pcap.write(Pcap.create_packet(bytes([p.boardId] + p.getList()), p.time))
         try:
             dec.packet(p)
         except Exception as e:   # keep capturing whatever one packet does
             out(f"   decode error: {e!r}")
 
+    def on_device(n):
+        d = n.msg
+        if list(d.address[:6]) != want:
+            return
+        stats["controller adverts"] += 1
+        if not followed["done"]:
+            followed["done"] = True
+            sniffer.follow(d)
+            out(f"{time.time():.3f} controller seen (RSSI {d.RSSI}): following it")
+
     sniffer.subscribe("NEW_BLE_PACKET", on_packet)
+    sniffer.subscribe("DEVICE_ADDED", on_device)
+    sniffer.subscribe("DEVICE_UPDATED", on_device)
     sniffer.setAdvHopSequence([37, 38, 39])
     sniffer.setSupportedProtocolVersion(3)
     sniffer.start()
@@ -204,14 +225,15 @@ def main():
     if opt("ltk"):
         dec.send_ltk(bytes.fromhex(opt("ltk")))
         out(f"LTK {opt('ltk')} sent to the sniffer")
-    dev = Devices.Device(address=[int(a, 16) for a in address.split(":")] + [0], name='""', RSSI=0)
-    sniffer.addDevice(dev)
-    sniffer.follow(dev)
-    out(f"following {address} on {port} (firmware {sniffer.swversion}); Ctrl+C to stop")
+    out(f"scanning on {port} (firmware {sniffer.swversion}); will follow {address} once it advertises. Ctrl+C to stop")
     try:
         while True:
             time.sleep(1)
             dec.summary()
+            pcap.flush()
+            log.flush()
+            print(f"   [{time.strftime('%H:%M:%S')}] {dict(stats)}", flush=True)
+            stats.clear()
     except KeyboardInterrupt:
         pass
     finally:
