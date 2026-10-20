@@ -140,6 +140,18 @@ def tone(seconds, freq=1000.0, level=0.1):
     return (np.sin(2 * np.pi * freq * t) * level * 32767).astype(np.int16)
 
 
+# Silent mic test: second of the mic phase -> what to do from then on.
+SILENT_PROMPTS = {
+    0: "keep still (silence)",
+    3: "TAP the mic gently 3 times",
+    6: "keep still",
+    8: "RUB the mic with a fingertip",
+    11: "keep still",
+    13: "WHISPER a count, with the mic close to your mouth",
+    19: "keep still until the end",
+}
+
+
 def stimulus(level=0.15):
     """Quiet beeps and a sweep for the mic test: (samples, [(name, start s, end s)])."""
     parts, marks, t = [], [], 0.0
@@ -218,10 +230,10 @@ def play(att, handle, name, frame, channels, encode, seconds, out):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("address", nargs="?", default="3C:A9:AB:69:58:AF")
-    p.add_argument("--mic-seconds", type=float, default=15)
+    p.add_argument("--mic-seconds", type=float, default=22)
     p.add_argument("--tone-seconds", type=float, default=4)
-    p.add_argument("--no-stimulus", dest="stimulus", action="store_false",
-                   help="don't play beeps from the laptop during the mic test")
+    p.add_argument("--beeps", action="store_true",
+                   help="play beeps from the laptop's speaker during the mic test instead of the silent prompts")
     p.add_argument("--setup", default="80bb000002f000",
                    help="0x17/0x02 payload (hex); the console's is 80 bb 00 00 02 f0 00")
     args = p.parse_args()
@@ -254,23 +266,25 @@ def main():
         out(f"stream: {mic.summary()}")
 
         out("")
-        if args.stimulus:
+        if args.beeps:
             out(f"== MIC: hold the earbud mic right next to the laptop's speaker. In 2 s the laptop will "
                 f"play quiet beeps for about 7 s; after that, whisper a count until the end ({args.mic_seconds:.0f} s in all).")
         else:
-            out(f"== MIC: talk into the earbud mic for {args.mic_seconds:.0f} s, starting NOW "
-                "(count out loud, then a few seconds of silence)")
+            out("== MIC: silent test. Follow the prompts; each one shows for a few seconds.")
         mic.recording = True
         t_mic = time.monotonic()
         out(f"   mic recording starts at t={t_mic:.3f}")
+        prompts = {} if args.beeps else SILENT_PROMPTS
         for sec in range(int(args.mic_seconds)):
-            if args.stimulus and sec == 2:
+            if args.beeps and sec == 2:
                 import sounddevice as sd
                 stim, marks = stimulus()
                 t_stim = time.monotonic()
                 sd.play(stim, RATE)
                 out(f"   stimulus starts at t={t_stim:.3f}: " +
                     ", ".join(f"{name} +{start:.2f}-{end:.2f} s" for name, start, end in marks))
+            if sec in prompts:
+                out(f">> {prompts[sec]}   (t={time.monotonic():.3f})")
             time.sleep(1)
             if att.closed.is_set():
                 break
