@@ -275,6 +275,27 @@ off and always turns it back on). Run with KDE Connect closed:
   0x18-0x28 (30-50 ms). BlueZ doesn't know the device (no stored
   connection parameters were loaded), so the cause is still open. Phase 3
   needs the short interval, so this has to be solved before then.
+- **Full dump done** (`data/flash.bin`, 2 MB, sha256 `d7cf70ff…213a507b`
+  in `data/flash.sha256`). It took 53 min unattended with no drops and no
+  refusals: the controller stayed connected the whole time without any
+  button presses. 0x13000 matches the device-info read (serial, PID,
+  colors). Rough map, by entropy per 64 KiB:
+  - 0x000000-0x01FFFF: mixed, half erased; " SYS" header at 0.
+  - 0x020000-0x04FFFF and 0x080000-0x0AFFFF: entropy 8.0, two regions of
+    the same size, so probably A/B firmware slots, encrypted or
+    compressed.
+  - 0x040000, 0x070000, 0x0B0000, 0x0D0000: partly filled blocks between
+    them.
+  - 0x0E0000-0x16FFFF and 0x1B0000-0x1EFFFF: erased.
+  - **0x175000-0x1A7AC8 (~203 KiB): the DSP image, apparently not
+    encrypted.** At 0x175318 there's `MT3616A0 DSP    `, followed by
+    test patterns (`aa55aa55 33cc33cc 5a5a5a5a c3c3c3c3`). There are
+    repetitive, code-like byte patterns around 0x177000, and
+    0x180000-0x19FFFF has entropy ~7.4.
+  - 0x1F0000-0x1FFFFF: nearly erased (the user stick calibration at
+    0x1FC040 is empty).
+  - Not done yet: `--probe` past 2 MB, binwalk, the DSP's architecture,
+    and codec table searches.
 
 Keep scripts in `research/audio/`. Keep dumps and captures out of git
 (`research/audio/data/`, gitignored). The flash dump is Nintendo's
