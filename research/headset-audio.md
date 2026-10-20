@@ -576,9 +576,17 @@ off and always turns it back on). Run with KDE Connect closed:
   B2 = AES-128(LTK, reverse(A2)), byte for byte as sent. (The dongle's
   stored `ltk` is A1 ⊕ B1 without the reversal; it never uses it.)
 - Right after `15/03`, the console sends `LL_ENC_REQ` with Rand = 0 and
-  EDIV = 0, and the controller starts encryption: ordinary legacy LE
-  encryption with that LTK. The audio setup comes after that, so it needs
-  a capture with the key loaded (`sniff.py --ltk=…`) on a reconnection.
+  EDIV = 0, and the controller starts encryption. **Verified offline**:
+  SK = AES(LTK, SKDm‖SKDs), then AES-CCM with IV = IVm‖IVs, decrypts both
+  START_ENC_RSPs to `06` with valid MICs, using the LTK most significant
+  byte first (`321d…60ce`; the reversed order fails). So it's standard LE
+  encryption with that key. On reconnection (console asleep, then Home)
+  the console repeats 00c5af5d, the CCCDs, `07/01 02/04 10/01 16/01`, and
+  goes straight to `ENC_REQ` (no 0x15).
+- The nRF Sniffer didn't decrypt with the key given as a **legacy** LTK in
+  either byte order. (Also: SnifferAPI sends an all-zero key with every
+  `scan()`, so the key has to be resent after each.) Next: as an LE Secure
+  Connections LTK (`sendSCLTK`), which fits Rand = EDIV = 0.
 - The jack recording during these sessions (`console1.wav`, USB card)
   shows the console's audio at about -34 dBFS whenever it was connected,
   with a thump at each connect and disconnect.

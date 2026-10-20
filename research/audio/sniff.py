@@ -19,7 +19,7 @@ Writes research/audio/data/sniff-STAMP.pcap (Wireshark: nordic_ble), .log
 (every decoded packet) and ltk.txt.
 
 Usage: .venv/bin/python research/audio/sniff.py [--ltk=HEX] [--address=AA:BB:..] [--port=/dev/ttyACM0]
-                                                 [--channel=37]
+                                                 [--channel=37] [--legacy]
 """
 import sys
 import threading
@@ -158,9 +158,14 @@ class Decoder:
         self.out(f"{t:.3f} {d} {where} {c[0]:02x}/{c[3]:02x} {c[:8].hex(' ')} | {c[8:].hex(' ')}")
 
     def send_ltk(self, ltk):
-        # As Wireshark's plugin passes it: the key as typed, most significant
-        # byte first (the AES key order).
-        self.sniffer.sendLegacyLTK(list(ltk))
+        # Most significant byte first (the AES key order; checked offline
+        # against START_ENC_RSP's MIC). As an LE Secure Connections key: the
+        # console encrypts with EDIV = Rand = 0, and the firmware ignored the
+        # same key given as a legacy LTK.
+        if "--legacy" in sys.argv:
+            self.sniffer.sendLegacyLTK(list(ltk))
+        else:
+            self.sniffer.sendSCLTK(list(ltk))
 
     def summary(self):
         with self.lock:
