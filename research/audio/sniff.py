@@ -221,22 +221,34 @@ def main():
             stats["connection"] += 1
         elif b is not None and list(getattr(b, "advAddress", None) or [])[:6] == want:
             stats[f"controller adv type {b.advType} ch{p.channel}"] += 1
+            if not followed["done"]:
+                # After a re-scan the library doesn't report the controller as
+                # a new or updated device again, so start following from here.
+                devs = sniffer.getDevices()
+                for d in (devs.asList() if hasattr(devs, "asList") else list(devs)):
+                    if list(d.address[:6]) == want:
+                        start_following(d, p.RSSI)
+                        break
         pcap.write(Pcap.create_packet(bytes([p.boardId] + p.getList()), p.time))
         try:
             dec.packet(p)
         except Exception as e:   # keep capturing whatever one packet does
             out(f"   decode error: {e!r}")
 
+    def start_following(d, rssi):
+        if followed["done"]:
+            return
+        followed["done"] = True
+        sniffer.follow(d)
+        rekey()
+        out(f"{time.time():.3f} controller seen (RSSI {rssi}): following it")
+
     def on_device(n):
         d = n.msg
         if list(d.address[:6]) != want:
             return
         stats["controller adverts"] += 1
-        if not followed["done"]:
-            followed["done"] = True
-            sniffer.follow(d)
-            rekey()
-            out(f"{time.time():.3f} controller seen (RSSI {d.RSSI}): following it")
+        start_following(d, d.RSSI)
 
     sniffer.subscribe("NEW_BLE_PACKET", on_packet)
     sniffer.subscribe("DEVICE_ADDED", on_device)
