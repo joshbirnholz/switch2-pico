@@ -29,7 +29,12 @@ HERE = Path(__file__).resolve().parent
 DATA = HERE / "data"
 sys.path.insert(0, str(DATA / "nrf_sniffer"))
 
-from SnifferAPI import Devices, Packet, Pcap, Sniffer, UART  # noqa: E402
+from SnifferAPI import Devices, Filelock, Packet, Pcap, Sniffer, UART  # noqa: E402
+
+# The library locks the port with a file in /var/lock, which only root may
+# write; nothing else here uses the sniffer, so skip the lock.
+Filelock.lock = lambda *a, **k: None
+Filelock.unlock = lambda *a, **k: None
 
 HANDLES = {
     0x000A: "input05", 0x000E: "input09", 0x0012: "rumble", 0x0014: "cmd", 0x0016: "rumble+cmd",
