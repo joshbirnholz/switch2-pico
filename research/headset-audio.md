@@ -351,7 +351,7 @@ off and always turns it back on). Run with KDE Connect closed:
 - Output: writes without response were throttled to a few per connection
   event. Only format 1 (Opus CELT 20 ms, 50 bytes, bare, 50 packets/s)
   went out at real-time rate; format 2 took 31.7 s for 4 s of audio.
-  Josh "thinks he heard something at 1 and 2, but isn't sure". No 1 kHz
+  Josh "thinks [they] heard something at 1 and 2, but [isn't] sure". No 1 kHz
   showed up acoustically in the mic stream either, but the mic stream
   can't be decoded at this interval anyway.
 - **Why main.conf's interval didn't apply:** the kernel keeps an LE
