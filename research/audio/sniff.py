@@ -186,7 +186,7 @@ def main():
     port = opt("port") or (UART.find_sniffer() or ["/dev/ttyACM0"])[0]
     address = opt("address", "3C:A9:AB:69:58:AF")
     DATA.mkdir(exist_ok=True)
-    stamp = time.strftime("%Y%m%d-%H%M%S")
+    stamp = time.strftime("%Y%m%d-%H%M%S") + "-" + Path(port).name   # one run per sniffer board
     pcap = open(DATA / f"sniff-{stamp}.pcap", "wb")
     pcap.write(Pcap.get_global_header())
     log = open(DATA / f"sniff-{stamp}.log", "w")
