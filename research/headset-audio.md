@@ -415,6 +415,31 @@ off and always turns it back on). Run with KDE Connect closed:
   pairing data. `0x0D/*` is firmware update. `0x06/0x02` and `0x06/0x03`
   shut down or reboot the controller. Never send any of these.
 
+### Fourth test and probe (2026-10-20)
+
+- `0x10/0x01`: firmware **2.1.4**, type 2 (Pro), Bluetooth patch 12.0.0,
+  **DSP 0.2.3**.
+- `0x18/0x03 07` is accepted and echoed (`07`), as on the console. It
+  changed nothing: mic still dead, no output from the jack, and thumps at
+  1-4 as before.
+- `probe_audio.py` asked each feature bit with `0x0C/0x01`. Answers
+  (bytes 4-11 of the data): 0x01 / 0x02 / 0x04 / 0x20 → `07` in their own
+  slot, 0x10 (mouse) → `01`, 0x80 (magnetometer) → `01`, and **0x08 and
+  0x40 → all zero**. So no hidden headset feature bit.
+- Configurations that didn't wake the mic or the jack:
+  - feature masks 0x3F and 0xAF, then back to 0x2F;
+  - `0x18/0x03 07` resent right before `0x17/0x02`;
+  - `0x17/0x02` mode 0x01 and 0x03, then 0x02 again.
+  The thump came only once, at the first tone of the run, so it looks like
+  a reaction to audio-out starting after a pause, not to the content.
+- `arch_guess.py` on the other partly filled flash regions (0x000000,
+  0x040000, 0x070000, 0x0B0000, 0x0D0000) finds no instruction set, so
+  the main MCU firmware is encrypted everywhere. The command handlers
+  can't be read statically.
+- Not checked yet: whether these earbuds work with the jack at all (CTIA
+  vs OMTP wiring). Over USB-C the controller is a USB audio device, so the
+  jack can be tested without Bluetooth.
+
 Keep scripts in `research/audio/`. Keep dumps and captures out of git
 (`research/audio/data/`, gitignored). The flash dump is Nintendo's
 firmware and must never be committed or uploaded anywhere.
