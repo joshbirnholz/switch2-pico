@@ -595,6 +595,52 @@ off and always turns it back on). Run with KDE Connect closed:
   untested with a complete capture: key A as an SC LTK, and key B as legacy.
 - The console's ENC_REQ SKDm/IVm repeat between sessions in shifted pieces
   (`dca4a469…`, `07a23bee…`), so its "random" values aren't very random.
+
+### Decrypted: how the Switch 2 sends headphone audio (2026-10-20)
+
+**The nRF Sniffer decrypts with the key loaded as an LE Secure Connections
+LTK** (`sendSCLTK`, key most significant byte first), provided the same
+board catches both ENC_REQ and ENC_RSP. Boards right next to the
+controller and laptop Wi-Fi off (it was on 2.4 GHz) made that work.
+Capture: `sniff-20261020-191503-ttyACM1.pcap`, decoded offline with
+`decode_pcap.py` (live decoding stripped the MIC twice; fixed offline).
+
+After encryption the console sends, all inside the rumble + command
+report (0x0016) unless noted:
+1. `0a/02 03`, `09/07 01`, **`0c/02 27`** (mask 0x27, without 0x08);
+2. memory reads 0x13080, 0x130C0, 0x1FC040 (0x40 each), 0x13040 (0x10),
+   0x13100 (0x18);
+3. **`11/03`** → `01 c0 03 00 00 e7 d0 1c 3b 79 22 a0 3a 0a e8 9c 42 58 a0
+   0b 42 0a e8 9c 41 58 a0 0b 41`; then a read of 0x13060 (0x20);
+4. a **Write Request `85 00` to descriptor 0x0010** ("report rate?" of
+   input report 0x09) and **`01 00` to CCCD 0x000f**: the console reads
+   **input report 0x09 (handle 0x000e, 63 B)**, not 0x05;
+5. `0a/08 01 ff…35 00 46…`, **`11/01`** → `03 00 00 00`, `0c/04 27`,
+   `10/01`, **`01/0c`** → `61 12 50 10`, `18/01`;
+6. **`LL_CONNECTION_UPDATE_IND`: interval 4 (5 ms)**, latency 0, timeout
+   2 s. That's below the spec's 7.5 ms minimum. Then periodic
+   `CHANNEL_MAP_IND`s;
+7. **`18/04 01`** (sent three times in a row), ACKed;
+8. through the **audio + command report 0x0032**, as `[00][command]`:
+   `18/03 07`, then **`17/02 80 bb 00 00 02 f0 00`** (same as ours).
+   0x0032 is `[audio length][audio block][command]`: later writes carry a
+   123-byte audio block (`7b | 00 02 78 …`) followed by `0a/02 00 00 00 00`.
+
+**Audio out (0x002c), every 10 ms, alternating:**
+- `[00][04][78][120-byte Opus frame]`, a frame every 20 ms;
+- `[00][02][78][120 zero bytes]`, the filler in between.
+
+The frames are **Opus CELT-only, fullband, 20 ms, stereo, CBR 120 B
+(48 kbit/s), TOC 0xFC**. Silence is `fc ff fe` + zeros, exactly what
+libopus produces for digital silence at 48 kbit/s stereo CBR. All 2648
+frames in 51 s decode with libopus without errors into the music that was
+playing (`data/console-audio-out.wav`). Some frames are sent twice.
+
+Differences from our earlier attempts: stereo 120 B frames (we sent mono
+50 B), state 0x04 plus filler packets (we sent 0x0F), the 0x0016/0x0032
+command reports, `18/04 01`, `11/03`, `11/01`, `01/0c`, mask 0x27, input
+report 0x09 with `85 00`, a 5 ms interval, and encryption.
+`console_out.py` does all of that except the last two.
 - The jack recording during these sessions (`console1.wav`, USB card)
   shows the console's audio at about -34 dBFS whenever it was connected,
   with a thump at each connect and disconnect.
