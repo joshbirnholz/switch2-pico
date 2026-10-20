@@ -626,18 +626,21 @@ report (0x0016) unless noted:
    0x0032 is `[audio length][audio block][command]`: later writes carry a
    123-byte audio block (`7b | 00 02 78 …`) followed by `0a/02 00 00 00 00`.
 
-**Audio out (0x002c), every 10 ms, alternating:**
-- `[00][04][78][120-byte Opus frame]`, a frame every 20 ms;
-- `[00][02][78][120 zero bytes]`, the filler in between.
+**Audio out (0x002c):** each 20 ms Opus frame is **240 bytes, sent as two
+halves 5 ms apart** (then 15 ms to the next frame):
+- `[00][04][78]` + the first 120 bytes (starts with the TOC);
+- `[00][02][78]` + the last 120 bytes.
 
-The frames are **Opus CELT-only, fullband, 20 ms, stereo, CBR 120 B
-(48 kbit/s), TOC 0xFC**. Silence is `fc ff fe` + zeros, exactly what
-libopus produces for digital silence at 48 kbit/s stereo CBR. All 2648
-frames in 51 s decode with libopus without errors into the music that was
-playing (`data/console-audio-out.wav`). Some frames are sent twice.
+The frames are **Opus CELT-only, fullband, 20 ms, stereo, CBR 240 B
+(96 kbit/s), TOC 0xFC**. Silence is `fc ff fe` + 237 zeros, exactly what
+libopus produces for digital silence at 96 kbit/s stereo CBR, so in silence
+the second half is all zeros. That first made it look like filler, and the
+first reading of this section took the halves for 120-byte frames. 2546
+frames (04+02) decode with libopus without errors
+(`data/console-audio-out.wav`). Some halves are sent twice.
 
-Differences from our earlier attempts: stereo 120 B frames (we sent mono
-50 B), state 0x04 plus filler packets (we sent 0x0F), the 0x0016/0x0032
+Differences from our earlier attempts: stereo 240 B frames in two halves
+(we sent mono 50 B whole), state bytes 0x04/0x02 (we sent 0x0F), the 0x0016/0x0032
 command reports, `18/04 01`, `11/03`, `11/01`, `01/0c`, mask 0x27, input
 report 0x09 with `85 00`, a 5 ms interval, and encryption.
 `console_out.py` does all of that except the last two.
@@ -740,3 +743,33 @@ the remaining problem. The console sends 100 packets/s (frames plus
 fillers) at a 5 ms interval; the laptop at 15 ms managed ~75-110
 writes/s before. Next: the 7.5 ms interval, and `--no-filler` (50
 packets/s).
+
+### Headphone output solved (2026-10-20)
+
+- With each 240-byte frame split into the `04` and `02` halves, the laptop
+  plays **a clean tone from the headphone jack**. 440 Hz at -30 dBFS came
+  out at **440.00 Hz, -19 dBFS, THD -71 dB, everything else -50 dB, no
+  dropouts in 5.4 s**, starting and stopping with the stream. That was an
+  unencrypted link from the laptop at 7.5 ms (`console_out.py
+  --freq=440`, recording `console-out-20261020-192912.wav`).
+- The runs before that were explained by the format:
+  - 120-byte frames followed by 120 zero bytes in the `02` packet: the
+    controller decoded half-zero 240-byte frames into a looping, wrong-
+    pitch sound (steady 900/1150/560 Hz);
+  - no `02` packets: silence, since the frames were never complete;
+  - the "body playback" and thumps of the very first tests came from bare
+    or `[00][0F]` packets.
+- **Recipe** (`console_out.py`), as the console does it:
+  1. commands inside the rumble + command report 0x0016:
+     `07/01, 02/04 0x13000, 10/01, 16/01, [0x15 pairing],
+     0a/02 03, 09/07 01, 0c/02 27, (memory reads), 11/03, 0a/08 …,
+     11/01, 0c/04 27, 10/01, 01/0c, 18/01, 18/04 01`;
+  2. `85 00` to 0x0010 and `01 00` to 0x000f (input report 0x09);
+  3. `18/03 07`, then `17/02 80 bb 00 00 02 f0 00`, via the audio +
+     command report 0x0032 as `[00][command]`;
+  4. 240-byte frames in two halves on 0x002c, as above.
+  Not yet known which of steps 1-3 are actually required.
+- Next: find the minimal command set, retest the mic with a headset whose
+  mic works (these earbuds' mic is dead on the controller even over USB),
+  and port to the dongle (an Opus encoder on the RP2350; 96 kbit/s out is
+  ~100 writes/s).

@@ -11,9 +11,10 @@ From the decrypted console capture (sniff-20261020-191503-ttyACM1):
     [00][command]);
   - it writes 85 00 to descriptor 0x0010 and subscribes to input report
     0x09 (CCCD 0x000f);
-  - audio-out (0x002c) every 10 ms: [00][04][78][120-byte Opus frame],
-    then [00][02][78][120 zeros]. Frames are Opus CELT FB 20 ms STEREO,
-    CBR 120 bytes (48 kbit/s), TOC 0xFC; silence is fc ff fe + zeros.
+  - audio-out (0x002c): each 20 ms Opus frame (CELT FB 20 ms STEREO,
+    CBR 240 bytes = 96 kbit/s, TOC 0xFC) in two halves 5 ms apart:
+    [00][04][78][first 120 B], [00][02][78][last 120 B]. Silence is
+    fc ff fe + zeros.
 
 The link here isn't encrypted (the console's is); if the jack stays silent
 that's the next difference to look at. The controller must be in pairing
@@ -23,7 +24,7 @@ mode (Sync) unless it's still paired with this laptop; --pair runs the
 Records the USB card from connection and measures the tone at the end.
 
 Usage: research/audio/wifi-off.sh .venv/bin/python research/audio/console_out.py [--pair] [--level=0.03] [--seconds=6]
-           [--no-filler]
+           [--freq=1000]
 (With the laptop on Ethernet and Wi-Fi already off, run it directly.)
 """
 import sys
@@ -145,23 +146,23 @@ def main():
         cmd.send(0x17, 0x02, bytes.fromhex("80bb000002f000"), via="audio")
 
         handle = chars[CHAR_AUDIO_OUT][0]
-        enc = Encoder(channels=2, bitrate=48000)
-        filler = bytes([0x00, 0x02, 0x78]) + bytes(120)
-        use_filler = "--no-filler" not in sys.argv
-        out(f"filler packets: {'yes' if use_filler else 'no'}")
+        # Each 20 ms frame is 240 B (96 kbit/s stereo CBR), sent in two halves
+        # 5 ms apart: [00][04][78][first 120 B], [00][02][78][last 120 B]. In
+        # silence the frame is 3 B, so the second half is all zeros, which is
+        # why it first looked like filler.
+        enc = Encoder(channels=2, bitrate=96000)
 
         def stream(pcm, label):
             out(f">> {label}")
             t0 = time.monotonic()
             for i in range(len(pcm) // FRAME):
-                frame = enc.encode(np.repeat(pcm[i * FRAME:(i + 1) * FRAME], 2)).ljust(120, b"\0")[:120]
-                att.write_cmd(handle, bytes([0x00, 0x04, 0x78]) + frame)
-                ahead = (2 * i + 1) * 0.010 - (time.monotonic() - t0)
+                frame = enc.encode(np.repeat(pcm[i * FRAME:(i + 1) * FRAME], 2)).ljust(240, b"\0")[:240]
+                att.write_cmd(handle, bytes([0x00, 0x04, 0x78]) + frame[:120])
+                ahead = i * 0.020 + 0.005 - (time.monotonic() - t0)
                 if ahead > 0:
                     time.sleep(ahead)
-                if use_filler:
-                    att.write_cmd(handle, filler)
-                ahead = (2 * i + 2) * 0.010 - (time.monotonic() - t0)
+                att.write_cmd(handle, bytes([0x00, 0x02, 0x78]) + frame[120:])
+                ahead = (i + 1) * 0.020 - (time.monotonic() - t0)
                 if ahead > 0:
                     time.sleep(ahead)
                 if att.closed.is_set():
@@ -169,7 +170,9 @@ def main():
             out(f"== {label} done ({time.monotonic() - t0:.1f} s)")
 
         stream(np.zeros(FRAME * 50, np.int16), "1 s of silence frames, as the console starts")
-        stream(tone(seconds, level=level), f"1 kHz tone, {seconds:.0f} s at {20 * np.log10(level):.0f} dBFS, stereo 120 B frames")
+        freq = opt("freq", 1000.0, float)
+        stream(tone(seconds, freq=freq, level=level),
+               f"{freq:.0f} Hz tone, {seconds:.0f} s at {20 * np.log10(level):.0f} dBFS, stereo 240 B frames")
         stream(np.zeros(FRAME * 25, np.int16), "silence")
         out("== done")
     finally:
@@ -180,8 +183,8 @@ def main():
         if rec:
             secs = rec.stop()
             from measure_tone import report
-            print(f"\nrecorded {secs:.1f} s; 1 kHz at the jack per step:")
-            report(f"console-out-{stamp}", log_path, 1000.0,
+            print(f"\nrecorded {secs:.1f} s; the tone at the jack per step:")
+            report(f"console-out-{stamp}", log_path, opt("freq", 1000.0, float),
                    out=lambda l: print(l) if (">>" in l or "recording" in l) else None)
 
 
