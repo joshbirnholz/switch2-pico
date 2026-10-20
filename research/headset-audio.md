@@ -467,6 +467,22 @@ off and always turns it back on). Run with KDE Connect closed:
   ([state][32][frame] with state 08/0F/0D/07, with a 00 or seq prefix,
   [00][frame], and a 112-byte copy of an audio-in report).
 
+### Output sweep result (2026-10-20)
+
+- **`[00][0F][32][50-byte Opus frame]` on 0x2c plays.** It's layout 6:
+  Opus CELT FB 20 ms mono, 20 kbit/s CBR, one packet per 20 ms. Josh heard
+  the 1 kHz tone **from the controller's body** (the HD rumble actuators
+  acting as a speaker?), **not from the headphones in the jack**. So the
+  controller decodes our Opus and plays it. The format of the frame is
+  right, and the routing isn't.
+- The leading `00` is required: layout 2, `[0F][32][frame]`, did nothing.
+  So did 08/0D/07 without the 00, `[00][08][32]`, `[00][32]`,
+  `[00][frame]`, the seq and 0x50|seq prefixes, and the 112-byte mirror.
+- Next: `output_sweep.py --states`, the same packet with every state byte
+  0x00-0x1F plus 0x2F/0x4F/0x8F. In audio-in this byte is a bitfield (bit 3
+  = frame present, 0x07 headset, 0x05 headphones), so it may pick the
+  destination.
+
 Keep scripts in `research/audio/`. Keep dumps and captures out of git
 (`research/audio/data/`, gitignored). The flash dump is Nintendo's
 firmware and must never be committed or uploaded anywhere.

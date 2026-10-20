@@ -13,7 +13,12 @@ tried before.
 Sends the same setup as audio_stream.py (no new commands) and writes only
 to audio-out. Run it yourself, headphones in the controller's jack, held
 near your ear:
-  research/audio/wifi-off.sh .venv/bin/python research/audio/output_sweep.py
+  research/audio/wifi-off.sh .venv/bin/python research/audio/output_sweep.py [--states]
+
+First sweep: layout 6, [00][0F][32][frame], played the tone from the
+controller's body (actuators?), not the jack; the others did nothing.
+--states keeps that packet and tries every state byte 0x00-0x1F, 0x2F,
+0x4F and 0x8F, 2 s each.
 """
 import sys
 import time
@@ -52,8 +57,19 @@ LAYOUTS = [
 ]
 
 
+def state_layouts():
+    """Layout 6 of the first sweep, [00][0F][32][frame], played the tone from
+    the controller's body (not the jack). Same packet, every state byte."""
+    states = list(range(0x20)) + [0x2F, 0x4F, 0x8F]
+    return [(f"[00][{st:02X}][32][frame]", (lambda st: lambda seq, f: bytes([0x00, st, len(f)]) + f)(st))
+            for st in states]
+
+
 def main():
-    address = sys.argv[1] if len(sys.argv) > 1 else "3C:A9:AB:69:58:AF"
+    args_in = [a for a in sys.argv[1:] if not a.startswith("--")]
+    address = args_in[0] if args_in else "3C:A9:AB:69:58:AF"
+    layouts = state_layouts() if "--states" in sys.argv else LAYOUTS
+    seconds = 2 if "--states" in sys.argv else 3
     DATA.mkdir(exist_ok=True)
     stamp = time.strftime("%Y%m%d-%H%M%S")
     log = open(DATA / f"sweep-{stamp}.log", "w")
@@ -81,9 +97,9 @@ def main():
         time.sleep(1.5)
 
         handle = chars[CHAR_AUDIO_OUT][0]
-        pcm = tone(3)
+        pcm = tone(seconds)
         out("\n== Listen for a 1 kHz tone in the headphones. Note each number with a tone, a thump, or anything else.")
-        for k, (name, build) in enumerate(LAYOUTS, 1):
+        for k, (name, build) in enumerate(layouts, 1):
             if att.closed.is_set():
                 break
             enc = Encoder(bitrate=20000)
@@ -95,7 +111,7 @@ def main():
                 ahead = (i + 1) * 0.02 - (time.monotonic() - t0)
                 if ahead > 0.02:
                     time.sleep(ahead - 0.02)
-            time.sleep(1.5)
+            time.sleep(1.0 if "--states" in sys.argv else 1.5)
         out(f"\nstream: {mic.summary()}")
     finally:
         if att.closed.is_set():
