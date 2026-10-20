@@ -104,7 +104,7 @@ class MicCapture:
 
 def connect(args, out):
     out(f"connecting to {args.address} (press a button on the controller to wake it)")
-    deadline = time.monotonic() + 60
+    deadline = time.monotonic() + 300
     while True:
         try:
             att = Att(args.address, connect_timeout=30, log=out)

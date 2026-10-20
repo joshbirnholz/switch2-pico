@@ -7,7 +7,10 @@ samples per frame (5 ms), which doesn't describe the mic's 20 ms mono
 frames, so maybe it describes the output: 5 ms stereo. Each format plays
 a 1 kHz tone for 3 s while record.py captures the jack.
 
-Usage: research/audio/wifi-off.sh .venv/bin/python research/audio/jack_sweep.py [--level=0.03]
+Records the USB card from the moment the controller connects (unless
+--no-record) and prints the tone level per step at the end.
+
+Usage: research/audio/wifi-off.sh .venv/bin/python research/audio/jack_sweep.py [--level=0.03] [--no-record]
 """
 import sys
 import time
@@ -38,7 +41,9 @@ FORMATS = [
 def main():
     level = next((float(a.split("=", 1)[1]) for a in sys.argv if a.startswith("--level=")), 0.03)
     DATA.mkdir(exist_ok=True)
-    log = open(DATA / f"jack-{time.strftime('%Y%m%d-%H%M%S')}.log", "w")
+    stamp = time.strftime('%Y%m%d-%H%M%S')
+    log_path = DATA / f"jack-{stamp}.log"
+    log = open(log_path, "w")
 
     def out(line=""):
         print(line, flush=True)
@@ -50,6 +55,11 @@ def main():
     args = A()
     args.address = "3C:A9:AB:69:58:AF"
     att, chars = connect(args, out)
+    rec = None
+    if "--no-record" not in sys.argv:
+        from record import Recorder
+        rec = Recorder(f"jack-{stamp}").start()
+        out("recording the USB card from now")
     try:
         cmd = Commander(att, *chars[CHAR_CMD], chars[CHAR_CMD_RSP][0], lambda s: log.write(f"{time.time():.3f} {s}\n"))
         cmd.start()
@@ -88,6 +98,12 @@ def main():
             out(f"link closed: {att.close_reason}")
         att.close()
         log.close()
+        if rec:
+            secs = rec.stop()
+            from measure_tone import report
+            print(f"\nrecorded {secs:.1f} s; tone at the USB card's input per step:")
+            report(f"jack-{stamp}", log_path, 1000.0,
+                   out=lambda l: print(l) if (">>" in l or "recording" in l) else None)
 
 
 if __name__ == "__main__":

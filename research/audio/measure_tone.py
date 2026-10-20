@@ -34,8 +34,10 @@ def tone_level(x, rate, freq):
 
 
 def main():
-    rec, log = sys.argv[1], Path(sys.argv[2])
-    freq = float(sys.argv[3]) if len(sys.argv) > 3 else 1000.0
+    report(sys.argv[1], Path(sys.argv[2]), float(sys.argv[3]) if len(sys.argv) > 3 else 1000.0)
+
+
+def report(rec, log, freq=1000.0, out=print):
     meta = json.loads((DATA / f"{rec}.json").read_text())
     x, rate = sf.read(DATA / f"{rec}.wav", dtype="int16")
     x = x.astype(float)
@@ -48,8 +50,8 @@ def main():
             events.append((float(parts[0]) - t0, parts[1] if len(parts) > 1 else ""))
         except ValueError:
             continue
-    print(f"recording {len(x) / rate:.1f} s; log events {len(events)}")
-    print("\nper logged step (from this line to the next):")
+    out(f"recording {len(x) / rate:.1f} s; log events {len(events)}")
+    out("per logged step (from this line to the next):")
     for (a, what), (b, _) in zip(events, events[1:] + [(len(x) / rate, "")]):
         if b <= 0 or a >= len(x) / rate or not what.strip().startswith((">>", "second", "==")):
             continue
@@ -58,7 +60,7 @@ def main():
         if r:
             lvl, share, tot = r
             mark = "TONE" if share > 0.5 and lvl > -70 else ""
-            print(f"  {a:7.2f}-{b:6.2f} s  {freq:.0f} Hz {lvl:6.1f} dBFS  share {share:4.2f}  total {tot:6.1f} dBFS  "
+            out(f"  {a:7.2f}-{b:6.2f} s  {freq:.0f} Hz {lvl:6.1f} dBFS  share {share:4.2f}  total {tot:6.1f} dBFS  "
                   f"{mark:4}  {what.strip()[:60]}")
 
 
