@@ -554,6 +554,34 @@ off and always turns it back on). Run with KDE Connect closed:
   the encrypted link-control updates and only catches stray packets. A
   capture needs a first-time pairing (the console forgets the controller)
   so the key exchange happens in the clear.
+- Capturing that pairing took a few tries. Hopping 37/38/39 with
+  `scan()` defaults, the sniffer went silent as soon as it followed the
+  controller in pairing mode (an ordinary device followed fine). With
+  `scan(findScanRsp=True, findAux=True)` the next pairing was caught
+  (`sniff-20261020-182504`).
+- **First-time pairing, in the clear.** After the 00c5af5d exchange and
+  MTU 512, the console subscribes to the CCCDs at 0x001b (cmd-rsp), 0x001f
+  (cmd-rsp2) and 0x0023 (`d3bd69d2`). **It sends every command inside the
+  HD rumble + command report** (0x0016, write-without-response, 41-58 B):
+  `[00][16 B rumble L][16 B rumble R][8 B command header][data]`, with the
+  rumble zeroed. Responses come back on 0x001a. In order:
+  - `07/01`, `02/04` (read 0x13000), `10/01`, `16/01`;
+  - `15/01 00 02 <98:E2:55:CE:0F:9D> <98:E2:55:CE:0F:9C>`: two host
+    addresses, the console's and that minus one;
+  - `15/04`, then `15/02`, then `15/03`.
+  The controller's B1 (`5cf6ee79…5f10`) is the same one it gave the laptop.
+- **LTK = reverse(A1 ⊕ B1)**, using the 16 bytes as sent in `15/04` and
+  its response. For this pairing: `321d351468ed07c3c8949cceaaf760ce`
+  (`data/ltk.txt`). It's verified by `15/02`: the controller answers
+  B2 = AES-128(LTK, reverse(A2)), byte for byte as sent. (The dongle's
+  stored `ltk` is A1 ⊕ B1 without the reversal; it never uses it.)
+- Right after `15/03`, the console sends `LL_ENC_REQ` with Rand = 0 and
+  EDIV = 0, and the controller starts encryption: ordinary legacy LE
+  encryption with that LTK. The audio setup comes after that, so it needs
+  a capture with the key loaded (`sniff.py --ltk=…`) on a reconnection.
+- The jack recording during these sessions (`console1.wav`, USB card)
+  shows the console's audio at about -34 dBFS whenever it was connected,
+  with a thump at each connect and disconnect.
 
 Keep scripts in `research/audio/`. Keep dumps and captures out of git
 (`research/audio/data/`, gitignored). The flash dump is Nintendo's

@@ -123,24 +123,28 @@ class Decoder:
             hn = HANDLES.get(h, f"{h:#06x}")
             val = pdu[3:]
             self.log.write(f"{t:.4f} {d} {name} {hn} {val.hex()}\n")
+            if hn == "rumble+cmd" and len(val) > 0x21 and val[0x21]:
+                # The console sends its commands at 0x21 of the rumble+command
+                # report: [00][16 B rumble L][16 B rumble R][8 B header][data].
+                self.command(t, d, "cmd(in rumble)", val[0x21:])
             if hn in HIGH_RATE:
                 with self.lock:
                     self.rate[(hn, name, len(val))] += 1
                     self.heads.setdefault((hn, len(val)), val[:6].hex(' '))
                 return
-            extra = ""
             if hn == "cmd" and len(val) >= 8:
-                extra = f"  [cmd {val[0]:02x}/{val[3]:02x}]"
-                if val[0] == 0x15 and val[3] == 0x04 and len(val) >= 25:
-                    self.a1 = bytes(val[9:25])[::-1]
+                self.command(t, d, "cmd", val)
+                return
+            extra = ""
             if hn in ("cmd-rsp", "cmd-rsp2") and len(val) >= 8:
                 off = 0 if hn == "cmd-rsp" else 0x0F
                 v = val[off:]
                 extra = f"  [rsp {v[0]:02x}/{v[3]:02x}]" if len(v) >= 4 else ""
                 if len(v) >= 25 and v[0] == 0x15 and v[3] == 0x04 and self.a1:
-                    b1 = bytes(v[9:25])[::-1]
-                    ltk = bytes(x ^ y for x, y in zip(self.a1, b1))
-                    self.out(f"   LTK from the 0x15/0x04 exchange: {ltk.hex()} (also tried reversed)")
+                    # LTK = reverse(A1 ^ B1) as sent; checked against the 0x15/0x02
+                    # confirmation (B2 = AES(LTK, reverse(A2))).
+                    ltk = bytes(x ^ y for x, y in zip(self.a1, v[9:25]))[::-1]
+                    self.out(f"   LTK from the 0x15/0x04 exchange: {ltk.hex()}")
                     (DATA / "ltk.txt").write_text(ltk.hex() + "\n")
                     self.send_ltk(ltk)
             self.out(f"{t:.3f} {d} {name} {hn} {val.hex(' ')}{extra}")
@@ -148,9 +152,14 @@ class Decoder:
             self.log.write(f"{t:.4f} {d} {name} {pdu.hex()}\n")
             self.out(f"{t:.3f} {d} {name} {pdu[1:].hex(' ')}")
 
+    def command(self, t, d, where, c):
+        if c[0] == 0x15 and c[3] == 0x04 and len(c) >= 25:
+            self.a1 = bytes(c[9:25])
+        self.out(f"{t:.3f} {d} {where} {c[0]:02x}/{c[3]:02x} {c[:8].hex(' ')} | {c[8:].hex(' ')}")
+
     def send_ltk(self, ltk):
-        # Wireshark's plugin passes the key as typed (big-endian hex). Which
-        # order the firmware wants for this LTK isn't known yet; ltk.txt keeps it.
+        # As Wireshark's plugin passes it: the key as typed, most significant
+        # byte first (the AES key order).
         self.sniffer.sendLegacyLTK(list(ltk))
 
     def summary(self):
