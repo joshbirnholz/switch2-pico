@@ -524,6 +524,37 @@ off and always turns it back on). Run with KDE Connect closed:
   so they weren't a fair test. They need the 7.5 ms interval (root:
   `set_conn_params.py 6 6 0 200`; it doesn't survive a reboot).
 
+### Sniffing the Switch 2 (2026-10-20)
+
+- A spare Pro Micro nRF52840 (nice!nano clone, Adafruit UF2 bootloader
+  0.6.0, S140 6.1.1) runs Nordic's nRF Sniffer 4.1.0 from Adafruit's
+  `sniffer_nrf52840dongle_4.1.0.uf2`, which writes 0x1000-0x12000 over the
+  SoftDevice. Restore: `s140_nrf52_6.1.1_softdevice.uf2`, then the app
+  UF2. `dongle_bootloader.py` (sudo) puts a switch2-pico board into UF2
+  mode over USB. The board shows up as `1915:522a` on `/dev/ttyACM0`; give
+  the user access with `sudo setfacl -m u:$USER:rw /dev/ttyACM0`.
+  `sniff.py` drives it with Nordic's SnifferAPI (copied to
+  `data/nrf_sniffer/`, not in git).
+- **Switch 2 console**: address `98:E2:55:CE:0F:9D`. Connection request to
+  the controller: interval 15 ms, latency 0, timeout 2 s, all 37
+  channels. The controller asks for `LENGTH_REQ` 251 B; the console then
+  switches to **2M PHY** (`PHY_REQ 02 02`, instant 13) and asks for **MTU
+  512**.
+- **The console's first GATT steps** (in the clear):
+  1. Read By Type for `00c5af5d-…-81` (the response carried handle 0x0002
+     and `04 00 05 00 01 01 00`, not fully decoded yet).
+  2. **Write Request `01 00` to handle 0x0005**, `00c5af5d-…-82`. The
+     console does write to this service. It's still not ours to write.
+  3. Read By Type for `00c5af5d-…-83` (the response was missed).
+- **Then the link is encrypted, without any 0x15 exchange.** From about
+  event 70 every payload is ciphertext. Controller→console packets are 74
+  B (63-byte input report + headers + 4-byte MIC); console→controller ones
+  are 52-53 and 134 B. That controller had been paired to this console
+  before, so they already share a key. Without the key, the sniffer loses
+  the encrypted link-control updates and only catches stray packets. A
+  capture needs a first-time pairing (the console forgets the controller)
+  so the key exchange happens in the clear.
+
 Keep scripts in `research/audio/`. Keep dumps and captures out of git
 (`research/audio/data/`, gitignored). The flash dump is Nintendo's
 firmware and must never be committed or uploaded anywhere.
