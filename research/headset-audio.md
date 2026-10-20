@@ -364,6 +364,25 @@ off and always turns it back on). Run with KDE Connect closed:
   Without root it gets status 0x14 (Permission Denied), so the request
   itself is well formed.
 
+### Second audio stream test (after `set_conn_params.py`, 7.5-15 ms)
+
+- The fix took effect: 66 notifications/s (about a 15 ms interval, the top
+  of the range), still one per connection event. 33 frames/s arrive, but
+  no notification is lost by sequence number, so the controller drops a
+  third of the frames itself. Next: pin the interval at 7.5 ms
+  (`set_conn_params.py 6 6 0 200`) for about 133 events/s.
+- Mic: the decoded audio is the noise floor (RMS ~6) except for two loud
+  bursts, at 12-13 s and 19-23 s of the 20 s talking window (peak at full
+  scale). Not clear yet whether that's the voice or artefacts from lost
+  frames. Josh can listen to `data/audio-20261020-125720-full.wav`.
+- Output (all formats now at real-time rate): **formats 1 and 2 (bare
+  mono Opus, TOC 0xF8 20 ms and 0xE8 5 ms) gave a thump from the
+  controller's body. Nothing came out of the headphones.** Formats 3-4
+  (with a length byte first) and 5 (PCM16) got no reaction. So the
+  controller seems to read the first byte as an Opus TOC. The thump is
+  probably the rumble actuator, the same thing the earlier PCM test felt.
+  Next: stereo Opus (TOC 0xFC/0xF4/0xEC), since USB audio is stereo out.
+
 Keep scripts in `research/audio/`. Keep dumps and captures out of git
 (`research/audio/data/`, gitignored). The flash dump is Nintendo's
 firmware and must never be committed or uploaded anywhere.

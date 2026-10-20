@@ -141,28 +141,34 @@ def tone(seconds, freq=1000.0, level=0.1):
 
 
 def output_variants(args):
-    """(name, frame samples, function: pcm frame -> payload)."""
-    e20 = Encoder(bitrate=20000)
-    e5 = Encoder(bitrate=80000)
-    e20b = Encoder(bitrate=20000)
-    e5b = Encoder(bitrate=80000)
+    """(name, frame samples per channel, channels, function: pcm frame -> payload).
+
+    First run (48.75 and 15 ms intervals): only bare mono Opus (TOC 0xF8,
+    0xE8) got a reaction, a thump from the controller's body; nothing came
+    out of the jack. Length-prefixed packets and PCM got none. The
+    controller's USB audio is stereo out, so these try stereo Opus."""
+    m20 = Encoder(bitrate=20000)
+    s20 = Encoder(channels=2, bitrate=20000)
+    s20big = Encoder(channels=2, bitrate=40000)
+    s10 = Encoder(channels=2, bitrate=40000)
+    s5 = Encoder(channels=2, bitrate=80000)
     return [
-        ("Opus CELT 20 ms, 50 bytes, bare", 960, e20.encode),
-        ("Opus CELT 5 ms, 50 bytes, bare", 240, e5.encode),
-        ("Opus CELT 20 ms, 50 bytes, length byte first", 960, lambda p: (lambda x: bytes([len(x)]) + x)(e20b.encode(p))),
-        ("Opus CELT 5 ms, 50 bytes, length byte first", 240, lambda p: (lambda x: bytes([len(x)]) + x)(e5b.encode(p))),
-        ("PCM16 LE mono, 5 ms (480 bytes)", 240, lambda p: p.astype("<i2").tobytes()),
+        ("mono Opus CELT 20 ms, 50 bytes (thumped last time)", 960, 1, m20.encode),
+        ("STEREO Opus CELT 20 ms, 50 bytes", 960, 2, s20.encode),
+        ("STEREO Opus CELT 20 ms, 100 bytes", 960, 2, s20big.encode),
+        ("STEREO Opus CELT 10 ms, 50 bytes", 480, 2, s10.encode),
+        ("STEREO Opus CELT 5 ms, 50 bytes", 240, 2, s5.encode),
     ]
 
 
-def play(att, handle, name, frame, encode, seconds, out):
+def play(att, handle, name, frame, channels, encode, seconds, out):
     pcm = tone(seconds)
     period = frame / RATE
     n = len(pcm) // frame
     t0 = time.monotonic()
     sent = 0
     for i in range(n):
-        payload = encode(pcm[i * frame:(i + 1) * frame])
+        payload = encode(np.repeat(pcm[i * frame:(i + 1) * frame], channels))   # L = R
         if len(payload) > att.mtu - 3:
             out(f"   {name}: payload {len(payload)} bytes is over the MTU; skipped")
             return
@@ -180,7 +186,7 @@ def play(att, handle, name, frame, encode, seconds, out):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("address", nargs="?", default="3C:A9:AB:69:58:AF")
-    p.add_argument("--mic-seconds", type=float, default=20)
+    p.add_argument("--mic-seconds", type=float, default=15)
     p.add_argument("--tone-seconds", type=float, default=4)
     p.add_argument("--setup", default="80bb000002f000",
                    help="0x17/0x02 payload (hex); the console's is 80 bb 00 00 02 f0 00")
@@ -234,11 +240,11 @@ def main():
         out("== OUTPUT: hold the earbuds NEAR your ear, not in it, in case a format comes out loud.")
         out(f"   Each format plays a 1 kHz tone for {args.tone_seconds:.0f} s, with 2 s of quiet between.")
         out_handle = chars[CHAR_AUDIO_OUT][0]
-        for k, (name, frame, encode) in enumerate(output_variants(args), 1):
+        for k, (name, frame, channels, encode) in enumerate(output_variants(args), 1):
             if att.closed.is_set():
                 break
             out(f"-- {k}. {name}: listen now")
-            play(att, out_handle, name, frame, encode, args.tone_seconds, out)
+            play(att, out_handle, name, frame, channels, encode, args.tone_seconds, out)
             time.sleep(2)
         out("")
         out("Done. Note which numbers you heard a clean tone on (or noise, or a buzz in the grip).")
