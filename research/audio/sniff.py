@@ -19,6 +19,7 @@ Writes research/audio/data/sniff-STAMP.pcap (Wireshark: nordic_ble), .log
 (every decoded packet) and ltk.txt.
 
 Usage: .venv/bin/python research/audio/sniff.py [--ltk=HEX] [--address=AA:BB:..] [--port=/dev/ttyACM0]
+                                                 [--channel=37]
 """
 import sys
 import threading
@@ -217,7 +218,10 @@ def main():
     sniffer.subscribe("NEW_BLE_PACKET", on_packet)
     sniffer.subscribe("DEVICE_ADDED", on_device)
     sniffer.subscribe("DEVICE_UPDATED", on_device)
-    sniffer.setAdvHopSequence([37, 38, 39])
+    # Hopping 37/38/39 loses the controller once it's being followed (two
+    # misses out of three pairings); --channel=37 keeps one channel.
+    channel = opt("channel")
+    sniffer.setAdvHopSequence([int(channel)] if channel else [37, 38, 39])
     sniffer.setSupportedProtocolVersion(3)
     sniffer.start()
     sniffer.scan()
@@ -225,7 +229,7 @@ def main():
     if opt("ltk"):
         dec.send_ltk(bytes.fromhex(opt("ltk")))
         out(f"LTK {opt('ltk')} sent to the sniffer")
-    out(f"scanning on {port} (firmware {sniffer.swversion}); will follow {address} once it advertises. Ctrl+C to stop")
+    out(f"scanning on {port}, channel {channel or '37/38/39'} (firmware {sniffer.swversion}); will follow {address} once it advertises. Ctrl+C to stop")
     try:
         while True:
             time.sleep(1)
