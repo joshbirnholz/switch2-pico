@@ -65,6 +65,9 @@ VARIANTS = {
     "nothing": [],                                              # just the audio stream
     "1702-plain": [P1702],
     "1702-rumble": [R1702],
+    # 17/02 alone plays at -24 dBFS, the full sequence at -19: which adds 5 dB?
+    "1804-1702": [P1804, P1702],
+    "1803-1702": [P1803, P1702],
 }
 
 

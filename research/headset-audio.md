@@ -773,3 +773,18 @@ packets/s).
   mic works (these earbuds' mic is dead on the controller even over USB),
   and port to the dongle (an Opus encoder on the RP2350; 96 kbit/s out is
   ~100 writes/s).
+
+### Minimal command set (2026-10-20, `ablate.py`)
+
+- Run with the fewest commands first, on a controller that had been
+  asleep (`ablate-*` second run): **no commands → silent; `17/02 80 bb 00
+  00 02 f0 00` alone → plays**, on the plain command characteristic 0x0014
+  (as the dongle sends commands) or through the rumble report, at -24 dBFS
+  for a -30 dBFS tone. The console's full sequence plays at **-19 dBFS**,
+  so something in it adds 5 dB (`18/04 01` or `18/03 07`?).
+- Not needed for sound: encryption, the 5 ms interval, the 0x0016/0x0032
+  reports, input report 0x09 / `85 00`, `11/xx`, `01/0c`, mask 0x27, any
+  pairing beyond what reconnecting needs.
+- The first run (most commands first, quick reconnects) played in every
+  variant, even "bare": a variant can inherit the audio state of the one
+  before, so order and sleep matter in these tests.
