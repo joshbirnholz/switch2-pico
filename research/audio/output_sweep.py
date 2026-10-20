@@ -1,0 +1,109 @@
+#!/usr/bin/env python3
+"""Try packet layouts on the audio-out characteristic (…b06, handle 0x2c).
+
+The audio-in report carries a 0x34-byte audio block at offset 0x0D:
+[state][0x32][50 bytes], where state alternates 0x07/0x0F with a headset
+(bit 3 = a frame is in this report), 0x05/0x0D with headphones
+(ndeadly's bluetooth_interface.md). The frames are Opus CELT FB 20 ms
+mono, 50 bytes CBR. This writes the same kind of frame (a 1 kHz tone) in
+layouts built around that block, 3 s each, so you can say which one
+plays. Bare frames (thump, no sound) and [len][frame] (nothing) were
+tried before.
+
+Sends the same setup as audio_stream.py (no new commands) and writes only
+to audio-out. Run it yourself, headphones in the controller's jack, held
+near your ear:
+  research/audio/wifi-off.sh .venv/bin/python research/audio/output_sweep.py
+"""
+import sys
+import time
+
+from audio_stream import DATA, MicCapture, connect, init, tone
+from opus import Encoder
+from s2 import CHAR_AUDIO_IN, CHAR_AUDIO_OUT, CHAR_CMD, CHAR_CMD_RSP, Commander
+
+FRAME = 960   # 20 ms at 48 kHz
+
+
+def mirror_report(seq, frame):
+    """A 112-byte report shaped like audio-in: counter, 0x20, buttons and
+    sticks zero, state 0x0F, length, frame, then zeros."""
+    r = bytearray(112)
+    r[0] = seq & 0xFF
+    r[1] = 0x20
+    r[0x0D] = 0x0F
+    r[0x0E] = len(frame)
+    r[0x0F:0x0F + len(frame)] = frame
+    return bytes(r)
+
+
+LAYOUTS = [
+    ("[08][32][frame]", lambda seq, f: bytes([0x08, len(f)]) + f),
+    ("[0F][32][frame]", lambda seq, f: bytes([0x0F, len(f)]) + f),
+    ("[0D][32][frame]", lambda seq, f: bytes([0x0D, len(f)]) + f),
+    ("[07][32][frame]", lambda seq, f: bytes([0x07, len(f)]) + f),
+    ("[00][08][32][frame]", lambda seq, f: bytes([0x00, 0x08, len(f)]) + f),
+    ("[00][0F][32][frame]", lambda seq, f: bytes([0x00, 0x0F, len(f)]) + f),
+    ("[00][32][frame]", lambda seq, f: bytes([0x00, len(f)]) + f),
+    ("[00][frame]", lambda seq, f: bytes([0x00]) + f),
+    ("[seq][08][32][frame]", lambda seq, f: bytes([seq & 0xFF, 0x08, len(f)]) + f),
+    ("[0x50|seq][08][32][frame]", lambda seq, f: bytes([0x50 | (seq & 0x0F), 0x08, len(f)]) + f),
+    ("112-byte copy of an audio-in report", mirror_report),
+]
+
+
+def main():
+    address = sys.argv[1] if len(sys.argv) > 1 else "3C:A9:AB:69:58:AF"
+    DATA.mkdir(exist_ok=True)
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    log = open(DATA / f"sweep-{stamp}.log", "w")
+    raw = open(DATA / f"sweep-{stamp}.raw", "w")
+
+    def out(line=""):
+        print(line, flush=True)
+        log.write(line + "\n")
+        log.flush()
+
+    class A:
+        pass
+    args = A()
+    args.address = address
+    att, chars = connect(args, out)
+    try:
+        cmd = Commander(att, *chars[CHAR_CMD], chars[CHAR_CMD_RSP][0], lambda s: log.write(s + "\n"))
+        cmd.start()
+        init(cmd)
+        cmd.send(0x17, 0x02, bytes.fromhex("80bb000002f000"))
+        cmd.send(0x18, 0x01)
+        cmd.send(0x18, 0x03, b"\x07")
+        mic = MicCapture(raw, out)
+        att.subscribe(chars[CHAR_AUDIO_IN][0], mic)
+        time.sleep(1.5)
+
+        handle = chars[CHAR_AUDIO_OUT][0]
+        pcm = tone(3)
+        out("\n== Listen for a 1 kHz tone in the headphones. Note each number with a tone, a thump, or anything else.")
+        for k, (name, build) in enumerate(LAYOUTS, 1):
+            if att.closed.is_set():
+                break
+            enc = Encoder(bitrate=20000)
+            out(f">> {k:2}. {name}")
+            t0 = time.monotonic()
+            for i in range(len(pcm) // FRAME):
+                frame = enc.encode(pcm[i * FRAME:(i + 1) * FRAME])
+                att.write_cmd(handle, build(i, frame))
+                ahead = (i + 1) * 0.02 - (time.monotonic() - t0)
+                if ahead > 0.02:
+                    time.sleep(ahead - 0.02)
+            time.sleep(1.5)
+        out(f"\nstream: {mic.summary()}")
+    finally:
+        if att.closed.is_set():
+            out(f"link closed: {att.close_reason}")
+        att.close()
+        raw.close()
+        log.close()
+
+
+if __name__ == "__main__":
+    main()

@@ -436,9 +436,36 @@ off and always turns it back on). Run with KDE Connect closed:
   0x040000, 0x070000, 0x0B0000, 0x0D0000) finds no instruction set, so
   the main MCU firmware is encrypted everywhere. The command handlers
   can't be read statically.
-- Not checked yet: whether these earbuds work with the jack at all (CTIA
-  vs OMTP wiring). Over USB-C the controller is a USB audio device, so the
-  jack can be tested without Bluetooth.
+### USB-C check, and the output plan (2026-10-20)
+
+- Over USB-C the controller is `057e:2069` "Switch 2 Pro Controller", a
+  UAC device (ALSA card "Controller"). Playback: 'PCM Playback'
+  switch/volume (-39..+39 dB). Capture: 'Mic Capture' switch/volume, on
+  and at maximum, **2 channels** (FL, FR), not mono.
+- **Output works over USB** (Josh hears audio in the earbuds), so the jack
+  and earbuds are fine for output. Over Bluetooth it's still silent, so
+  output is a protocol problem.
+- **The mic is dead over USB too:** 15 s of taps recorded from
+  `hw:Controller` show only the noise floor (RMS 5.4, peak ~25), the same
+  as the Bluetooth mic stream decoded (RMS ~6). So the Bluetooth mic
+  stream was likely faithful all along. These earbuds' mic doesn't work
+  with this jack (CTIA/OMTP wiring?) or doesn't work at all. Retest the
+  mic with another headset.
+- From ndeadly's bluetooth_interface.md:
+  - Audio-in = "input report 0x09 with 0x34 bytes of headset audio
+    inserted at 0x0D": [state][0x32][50 bytes]. The state alternates
+    0x07/0x0F with a headset and 0x05/0x0D with headphones.
+  - `…b06` (0x2c) is "Output Report (Headset Audio)", with no format.
+  - `3dacbc7e-…-379` (0x16, Pro) is "HD rumble + command":
+    [00][16 B rumble L][16 B rumble R][8 B command header][data].
+  - `3dacbc7e-…-380` (0x32, firmware 2.0+) is "Unknown + Command",
+    probably the audio counterpart of 0x16.
+  - `4147423d` (0x18) is the chunked large-command/firmware-update report.
+    Don't use it.
+- Next: `output_sweep.py` writes the mic's own frame format (Opus CELT 20
+  ms mono, 50 B) to 0x2c in 11 layouts built around the input block
+  ([state][32][frame] with state 08/0F/0D/07, with a 00 or seq prefix,
+  [00][frame], and a 112-byte copy of an audio-in report).
 
 Keep scripts in `research/audio/`. Keep dumps and captures out of git
 (`research/audio/data/`, gitignored). The flash dump is Nintendo's
