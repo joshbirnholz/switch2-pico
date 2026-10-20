@@ -4,3 +4,7 @@ build-nrf/
 
 # Headset audio research: flash dumps and captures stay local
 research/audio/data/
+
+# Python venv for research scripts
+.venv/
+__pycache__/

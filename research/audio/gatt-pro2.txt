@@ -1,0 +1,87 @@
+service 00c5af5d-1964-4e30-8f51-1956f96bd280 handles 0x0001-0x0007
+  char 00c5af5d-1964-4e30-8f51-1956f96bd281 decl 0x0002 value 0x0003 [read]
+  char 00c5af5d-1964-4e30-8f51-1956f96bd282 decl 0x0004 value 0x0005 [write]
+  char 00c5af5d-1964-4e30-8f51-1956f96bd283 decl 0x0006 value 0x0007 [read]
+service ab7de9be-89fe-49ad-828f-118f09df7fd0 handles 0x0008-0x0032
+  char ab7de9be-89fe-49ad-828f-118f09df7fd2 decl 0x0009 value 0x000a [read, notify]
+  char 7492866c-ec3e-4619-8258-32755ffcc0f8 decl 0x000d value 0x000e [read, notify]
+  char cc483f51-9258-427d-a939-630c31f72b05 decl 0x0011 value 0x0012 [write-without-response]
+  char 649d4ac9-8eb7-4e6c-af44-1ea54fe5f005 decl 0x0013 value 0x0014 [write-without-response]
+  char 3dacbc7e-6955-40b5-8eaf-6f9809e8b379 decl 0x0015 value 0x0016 [write-without-response]
+  char 4147423d-fdae-4df7-a4f7-d23e5df59f8d decl 0x0017 value 0x0018 [write-without-response]
+  char c765a961-d9d8-4d36-a20a-5315b111836a decl 0x0019 value 0x001a [notify]
+  char 506d9f7d-4278-4e95-a549-326ba77657e0 decl 0x001d value 0x001e [notify]
+  char d3bd69d2-841c-4241-ab15-f86f406d2a80 decl 0x0021 value 0x0022 [notify]
+  char ab7de9be-89fe-49ad-828f-118f09df7fde decl 0x0025 value 0x0026 [read, notify]
+  char ab7de9be-89fe-49ad-828f-118f09df7fdf decl 0x0029 value 0x002a [write-without-response]
+  char cc483f51-9258-427d-a939-630c31f72b06 decl 0x002b value 0x002c [write-without-response]
+  char 7492866c-ec3e-4619-8258-32755ffcc0f9 decl 0x002d value 0x002e [read, notify]
+  char 3dacbc7e-6955-40b5-8eaf-6f9809e8b380 decl 0x0031 value 0x0032 [write-without-response]
+service 1800 handles 0x0033-0x0037
+  char 2a00 decl 0x0034 value 0x0035 [read]
+  char 2a01 decl 0x0036 value 0x0037 [read]
+service 1801 handles 0x0038-0x0038
+  attr 0x0001 00c5af5d-1964-4e30-8f51-1956f96bd280
+  attr 0x0002 00c5af5d-1964-4e30-8f51-1956f96bd281
+  attr 0x0003 00c5af5d-1964-4e30-8f51-1956f96bd281
+  attr 0x0004 00c5af5d-1964-4e30-8f51-1956f96bd282
+  attr 0x0005 00c5af5d-1964-4e30-8f51-1956f96bd282
+  attr 0x0006 00c5af5d-1964-4e30-8f51-1956f96bd283
+  attr 0x0007 00c5af5d-1964-4e30-8f51-1956f96bd283
+  attr 0x0008 ab7de9be-89fe-49ad-828f-118f09df7fd0
+  attr 0x0009 ab7de9be-89fe-49ad-828f-118f09df7fd2
+  attr 0x000a ab7de9be-89fe-49ad-828f-118f09df7fd2
+  attr 0x000b 2902
+  attr 0x000c 679d5510-5a24-4dee-9557-95df80486ecb
+  attr 0x000d 7492866c-ec3e-4619-8258-32755ffcc0f8
+  attr 0x000e 7492866c-ec3e-4619-8258-32755ffcc0f8
+  attr 0x000f 2902
+  attr 0x0010 679d5510-5a24-4dee-9557-95df80486ecb
+  attr 0x0011 cc483f51-9258-427d-a939-630c31f72b05
+  attr 0x0012 cc483f51-9258-427d-a939-630c31f72b05
+  attr 0x0013 649d4ac9-8eb7-4e6c-af44-1ea54fe5f005
+  attr 0x0014 649d4ac9-8eb7-4e6c-af44-1ea54fe5f005
+  attr 0x0015 3dacbc7e-6955-40b5-8eaf-6f9809e8b379
+  attr 0x0016 3dacbc7e-6955-40b5-8eaf-6f9809e8b379
+  attr 0x0017 4147423d-fdae-4df7-a4f7-d23e5df59f8d
+  attr 0x0018 4147423d-fdae-4df7-a4f7-d23e5df59f8d
+  attr 0x0019 c765a961-d9d8-4d36-a20a-5315b111836a
+  attr 0x001a c765a961-d9d8-4d36-a20a-5315b111836a
+  attr 0x001b 2902
+  attr 0x001c b746df8c-f358-495b-9cd2-e3bbeda4f979
+  attr 0x001d 506d9f7d-4278-4e95-a549-326ba77657e0
+  attr 0x001e 506d9f7d-4278-4e95-a549-326ba77657e0
+  attr 0x001f 2902
+  attr 0x0020 b746df8c-f358-495b-9cd2-e3bbeda4f979
+  attr 0x0021 d3bd69d2-841c-4241-ab15-f86f406d2a80
+  attr 0x0022 d3bd69d2-841c-4241-ab15-f86f406d2a80
+  attr 0x0023 2902
+  attr 0x0024 b746df8c-f358-495b-9cd2-e3bbeda4f979
+  attr 0x0025 ab7de9be-89fe-49ad-828f-118f09df7fde
+  attr 0x0026 ab7de9be-89fe-49ad-828f-118f09df7fde
+  attr 0x0027 2902
+  attr 0x0028 679d5510-5a24-4dee-9557-95df80486ecb
+  attr 0x0029 ab7de9be-89fe-49ad-828f-118f09df7fdf
+  attr 0x002a ab7de9be-89fe-49ad-828f-118f09df7fdf
+  attr 0x002b cc483f51-9258-427d-a939-630c31f72b06
+  attr 0x002c cc483f51-9258-427d-a939-630c31f72b06
+  attr 0x002d 7492866c-ec3e-4619-8258-32755ffcc0f9
+  attr 0x002e 7492866c-ec3e-4619-8258-32755ffcc0f9
+  attr 0x002f 2902
+  attr 0x0030 679d5510-5a24-4dee-9557-95df80486ecb
+  attr 0x0031 3dacbc7e-6955-40b5-8eaf-6f9809e8b380
+  attr 0x0032 3dacbc7e-6955-40b5-8eaf-6f9809e8b380
+  attr 0x0033 1800
+  attr 0x0034 2a00
+  attr 0x0035 2a00
+  attr 0x0036 2a01
+  attr 0x0037 2a01
+  attr 0x0038 1801
+  read 00c5af5d-1964-4e30-8f51-1956f96bd281 0x0003: ATT error 0x02 for request 0x0a at handle 0x0003
+  read 00c5af5d-1964-4e30-8f51-1956f96bd283 0x0007: ATT error 0x02 for request 0x0a at handle 0x0007
+  read ab7de9be-89fe-49ad-828f-118f09df7fd2 0x000a: ATT error 0x02 for request 0x0a at handle 0x000a
+  read 7492866c-ec3e-4619-8258-32755ffcc0f8 0x000e: ATT error 0x02 for request 0x0a at handle 0x000e
+  read ab7de9be-89fe-49ad-828f-118f09df7fde 0x0026: ATT error 0x02 for request 0x0a at handle 0x0026
+  read 7492866c-ec3e-4619-8258-32755ffcc0f9 0x002e: ATT error 0x02 for request 0x0a at handle 0x002e
+  read 2a00 0x0035: 4e 69 6e 74 65 6e 64 6f 20 53 77 69 74 63 68 20 32 20 50 72 6f 20 43 6f 6e 74 72 6f 6c 6c 65 72
+  read 2a01 0x0037: c4 03

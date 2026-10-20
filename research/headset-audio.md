@@ -55,7 +55,7 @@ Sources:
 | Purpose | UUID | Notes |
 |---|---|---|
 | Input report 0x05 (notify) | `ab7de9be-89fe-49ad-828f-118f09df7fd2` | what the dongle normally uses |
-| Command write | `649d4ac9-8eb7-4e6c-af44-1ea54fe5f005` | the controller ignores Write Commands where Write Request is allowed; use a write with response |
+| Command write | `649d4ac9-8eb7-4e6c-af44-1ea54fe5f005` | match the property, like the dongle: Write Request when it has "write", Write Command otherwise. On HEW70006172650 it is write-without-response only, and a Write Request gets error 0x03 |
 | Command response (notify) | `c765a961-d9d8-4d36-a20a-5315b111836a` | |
 | Rumble, Pro | `cc483f51-9258-427d-a939-630c31f72b05` | write without response |
 | **Audio out (host to jack)** | `cc483f51-9258-427d-a939-630c31f72b06` | write without response; format unknown |
@@ -155,6 +155,102 @@ again at 7.5 ms.
    `conn_max_interval` to 6 and 12 as root before connecting. Record which
    interval each capture used. Raw HCI traffic can be watched with
    `sudo btmon -w capture.btsnoop`.
+
+### Setup check results (2026-10-20, Fedora 44, kernel 7.1.3)
+
+- Dongle: not plugged in (no `2e8a:` device in `lsusb`).
+- Bluetooth: `hci0` is the internal BCM20703A2 on UART (`hci_uart_bcm`),
+  BlueZ 5.87. It's powered, with LE, central and peripheral roles, and
+  isn't rfkill-blocked. Two warnings at boot: `BCM: firmware Patch file
+  not found ('brcm/BCM.hcd')`, so it runs on its ROM firmware (build
+  0229), and `Failed to set baudrate`, so the UART stays at the default
+  speed. HCI version 8 means Bluetooth 4.2, so the LE data length
+  extension may work but there's no 2M PHY. `scan.py` saw 42 LE
+  advertisers in 15 s, so scanning works. Connecting to the controller,
+  and holding a 7.5 ms interval, are still untested. If either fails,
+  switch to a USB adapter.
+- Audio: the internal Cirrus codec works here (out-of-tree
+  `snd_hda_codec_cs8409`; analog out and a 2-channel capture device), but
+  it has no line in. The only other input is the AVerMedia webcam mic.
+  Phases 4 and 5 still need a USB sound card with a line or mic input.
+- Python 3.14.6; `.venv` has bleak 3.0.2, numpy 2.5.4, scipy 1.18.1,
+  sounddevice, soundfile. `.venv/` is gitignored.
+- First connection attempts (`phase1.py`, internal adapter, default
+  interval) failed. Each `Connected=True` took 15-20 s to arrive and
+  dropped 0.3 s later, before GATT discovery finished, so the GATT table
+  was never read. This happened three times in two runs. No disconnect
+  reason yet: that needs `btmon` (root).
+- `btmon` (`data/connect1.btsnoop`) showed HCI reason 0x3E (Connection
+  Failed to be Established): after CONNECT_IND the controller never
+  answered in the first 6 connection events. Two causes so far:
+  1. **KDE Connect** keeps a Classic (BR/EDR) inquiry running, and the
+     chip can't run it alongside an LE connection. Connections only came
+     up between inquiries. Quitting `kdeconnectd` stops it
+     (`Discovering: no`). Keep it closed during experiments, or turn off
+     its Bluetooth backend.
+  2. Even with no inquiry or scanning running, 7 of 8 attempts still
+     failed with 0x3E and one with 0x08 (supervision timeout, 420 ms),
+     although the signal was strong (-42 dBm). One attempt got as far as
+     MTU exchange and primary service discovery before it timed out.
+     Suspect: Wi-Fi is on 2.4 GHz channel 11 (`ETC Admin`). This Mac's
+     Wi-Fi and Bluetooth share an antenna, and the Bluetooth chip runs
+     without its firmware patch, so the two may not be sharing radio time
+     properly. Not yet tested.
+- Tools: `btmon` and `strings` are installed. `binwalk` isn't (needed in
+  Phase 2; `dnf install binwalk`). `/sys/kernel/debug/bluetooth` needs root.
+
+### Phase 1 results (2026-10-20)
+
+Scripts: `att.py` (raw L2CAP ATT client, no BlueZ GATT), `s2.py`
+(protocol helpers), `phase1.py`, `wifi-off.sh` (runs a command with Wi-Fi
+off and always turns it back on). Run with KDE Connect closed:
+`research/audio/wifi-off.sh .venv/bin/python research/audio/phase1.py 3C:A9:AB:69:58:AF 30`.
+
+- **Wi-Fi off fixes the link.** With Wi-Fi off it connected on the first
+  try (0.3 s over raw ATT) and stayed up for the whole run. Wi-Fi on
+  2.4 GHz is what broke it before. Wi-Fi is the laptop's only network, so
+  each experiment runs offline through `wifi-off.sh`.
+- **BlueZ's GATT client can't be used.** The controller never answers
+  Read By Group Type for secondary services (0x2801). BlueZ waits 30 s
+  and disconnects. Over raw ATT, primary services, characteristics and
+  Find Information were all answered.
+- Controller: serial `HEW70006172650`, PID `0x2069`, MTU 512 (it accepted
+  ours). Connection interval 48.75 ms (BlueZ default; no root to change
+  it). Input reports came at ~21/s, one per connection event.
+- All connect-sequence commands were ACKed, with no 0x15 pairing. User
+  stick calibration at `0x1FC040`/`0x1FC080` is all `ff` (none), and
+  factory calibration is present.
+- Full GATT table in `gatt-pro2.txt`. Beyond the cheat sheet:
+  - Service `00c5af5d-1964-4e30-8f51-1956f96bd280` (0x0001-0x0007) has
+    `…281` read, `…282` **write**, `…283` read. This is probably firmware
+    update or a vendor service. **Never write to it.**
+  - In the main service: `3dacbc7e-…-6f9809e8b379` (0x0016),
+    `4147423d-…-d23e5df59f8d` (0x0018), `ab7de9be-…fdf` (0x002a) and
+    `3dacbc7e-…-6f9809e8b380` (0x0032) are write-without-response.
+    `506d9f7d-…` (0x001e) and `d3bd69d2-…` (0x0022) notify, and
+    `ab7de9be-…fde` (0x0026) is read/notify.
+  - Every notify characteristic has its CCCD (0x2902) at value + 1, then
+    one more descriptor: `679d5510-…` ("report rate?") after the input,
+    0x09, `…fde` and audio-in characteristics, and
+    `b746df8c-f358-495b-9cd2-e3bbeda4f979` after command response,
+    `506d9f7d` and `d3bd69d2`.
+  - Reads of characteristic values all return 0x02 (Read Not Permitted),
+    even ones marked "read". GAP name: "Nintendo Switch 2 Pro Controller",
+    appearance `0x03c4` (gamepad).
+- **Without the 0x15 pairing, buttons and sticks read as idle.** In the
+  first full run Josh felt the click, saw LED 1, and then pressed buttons
+  and moved the sticks. Yet in all 617 reports (from the btmon capture),
+  bytes 4-7 never changed and the stick bytes moved by only 1-2 counts.
+  The IMU bytes 0x2A-0x3B changed constantly, so the reports were live.
+  The dongle always pairs a controller that's in pairing mode, so it has
+  never taken this path.
+- **With `--pair`, inputs work. Phase 1 is done.** All four 0x15 steps
+  were ACKed (the 0x15/0x01 reply echoes the controller's own address).
+  Then every button decoded correctly with the layout in `s2_proto.c`
+  (face buttons, L/R/ZL/ZR, +/-, Home, Capture, C, D-pad), and both sticks
+  moved through their range. 615 reports in 30 s, and the link stayed up.
+  The controller now has this laptop (`DC:A9:04:75:01:F6`) as a host.
+  Always use `--pair` from now on when the controller is in pairing mode.
 
 Keep scripts in `research/audio/`. Keep dumps and captures out of git
 (`research/audio/data/`, gitignored). The flash dump is Nintendo's
