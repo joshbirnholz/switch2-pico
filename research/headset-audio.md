@@ -493,6 +493,37 @@ off and always turns it back on). Run with KDE Connect closed:
   seconds counter (warm-up, then a stop?). B: 2 s bursts, each after
   resending 0x17/0x02 (do the gaps end the playing state?).
 
+### Measuring the jack (2026-10-20, at home, laptop on Ethernet)
+
+- The MacBook's own jack input records digital zeros under Linux (even
+  the internal mic; 'Capture Source' won't switch), so it can't be used.
+  A C-Media USB adapter ("Cable Creation", `0d8c:0014`, mono mic in) works.
+  Its Auto Gain Control must be off, with Mic Capture Volume ~30 (+18 dB);
+  with AGC on, line level clips hard. The controller's jack goes to its
+  input with a plain aux cable; the controller reports that as headphones
+  (state 0x0D).
+- `record.py` records with a wall-clock start time; `measure_tone.py` lines
+  it up with a timestamped test log and measures the tone per step
+  (verified exact on a synthetic -30 dBFS tone). The card's floor is about
+  -84 dBFS.
+- `--timing` at -30 dBFS (`timing1`): **nothing at the jack** in the
+  continuous 20 s stream or the four bursts. Josh heard two thumps from
+  the body and no tone. The only signals in the recording are thumps when
+  the controller woke and connected, and ~3 s after it disconnected, so
+  the jack's amplifier switches with the connection.
+- **`0x18/0x02` with no payload crashes the controller:** no response,
+  then a link supervision timeout 2 s later. It came back advertising for
+  the laptop by itself. Don't send it (or `0x18/0x04`) without a known
+  payload.
+- **`0x18/0x03` values 00-1D** (route2): every value echoed; `0x18/0x01`
+  unchanged (`00 00 40 f0 00 00 60 00`); **no tone at the jack for any of
+  them** (measured 00-18; the recording ended before 19-1D).
+- `jack_sweep.py` (jack1): [00][0F][32] around 20 ms mono, 5 ms stereo
+  (state 0F/0D/07) and 5 ms mono: nothing at the jack. But at the 15 ms
+  interval the 5 ms formats only went out at 75-110 packets/s, not 200,
+  so they weren't a fair test. They need the 7.5 ms interval (root:
+  `set_conn_params.py 6 6 0 200`; it doesn't survive a reboot).
+
 Keep scripts in `research/audio/`. Keep dumps and captures out of git
 (`research/audio/data/`, gitignored). The flash dump is Nintendo's
 firmware and must never be committed or uploaded anywhere.
