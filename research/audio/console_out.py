@@ -69,6 +69,16 @@ class ConsoleCommander:
             if r[0] == cmd and r[3] == sub:
                 return r
 
+    def send_plain(self, cmd, sub, data=b""):
+        """On the command characteristic (0x0014), as the dongle does."""
+        c = build_command(cmd, sub, data)
+        while not self.q.empty():
+            self.q.get_nowait()
+        self.att.write_cmd(0x0014, c)
+        r = self._wait(c[0], c[3])
+        self.out(f"   {c[0]:02x}/{c[3]:02x} {c[8:].hex(' ')} (plain) -> {r[8:].hex(' ') if r else 'no response'}")
+        return r
+
     def send(self, cmd, sub, data=b"", via="rumble"):
         c = build_command(cmd, sub, data)
         return self.send_raw(c, via)
