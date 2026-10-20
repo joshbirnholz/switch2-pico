@@ -140,6 +140,38 @@ def tone(seconds, freq=1000.0, level=0.1):
     return (np.sin(2 * np.pi * freq * t) * level * 32767).astype(np.int16)
 
 
+def stimulus(level=0.15):
+    """Quiet beeps and a sweep for the mic test: (samples, [(name, start s, end s)])."""
+    parts, marks, t = [], [], 0.0
+
+    def add(name, sig):
+        nonlocal t
+        if name:
+            marks.append((name, t, t + len(sig) / RATE))
+        parts.append(sig)
+        t += len(sig) / RATE
+
+    def beep(freq, dur=0.3):
+        n = int(dur * RATE)
+        env = np.minimum(1, np.minimum(np.arange(n), n - np.arange(n)) / (0.01 * RATE))
+        return np.sin(2 * np.pi * freq * np.arange(n) / RATE) * env * level
+
+    def quiet(dur):
+        return np.zeros(int(dur * RATE))
+
+    for f in (1000, 500):
+        for _ in range(3):
+            add(f"{f} Hz beep", beep(f))
+            add(None, quiet(0.3))
+        add(None, quiet(0.7))
+    n = int(2.0 * RATE)
+    tt = np.arange(n) / RATE
+    f0, f1 = 300.0, 3000.0
+    k = np.log(f1 / f0) / 2.0
+    add("sweep 300-3000 Hz", np.sin(2 * np.pi * f0 * (np.exp(k * tt) - 1) / k) * level)
+    return np.concatenate(parts).astype(np.float32), marks
+
+
 def output_variants(args):
     """(name, frame samples per channel, channels, function: pcm frame -> payload).
 
@@ -188,6 +220,8 @@ def main():
     p.add_argument("address", nargs="?", default="3C:A9:AB:69:58:AF")
     p.add_argument("--mic-seconds", type=float, default=15)
     p.add_argument("--tone-seconds", type=float, default=4)
+    p.add_argument("--no-stimulus", dest="stimulus", action="store_false",
+                   help="don't play beeps from the laptop during the mic test")
     p.add_argument("--setup", default="80bb000002f000",
                    help="0x17/0x02 payload (hex); the console's is 80 bb 00 00 02 f0 00")
     args = p.parse_args()
@@ -220,10 +254,23 @@ def main():
         out(f"stream: {mic.summary()}")
 
         out("")
-        out(f"== MIC: talk into the earbud mic for {args.mic_seconds:.0f} s, starting NOW "
-            "(count out loud, then a few seconds of silence)")
+        if args.stimulus:
+            out(f"== MIC: hold the earbud mic right next to the laptop's speaker. In 2 s the laptop will "
+                f"play quiet beeps for about 7 s; after that, whisper a count until the end ({args.mic_seconds:.0f} s in all).")
+        else:
+            out(f"== MIC: talk into the earbud mic for {args.mic_seconds:.0f} s, starting NOW "
+                "(count out loud, then a few seconds of silence)")
         mic.recording = True
-        for _ in range(int(args.mic_seconds)):
+        t_mic = time.monotonic()
+        out(f"   mic recording starts at t={t_mic:.3f}")
+        for sec in range(int(args.mic_seconds)):
+            if args.stimulus and sec == 2:
+                import sounddevice as sd
+                stim, marks = stimulus()
+                t_stim = time.monotonic()
+                sd.play(stim, RATE)
+                out(f"   stimulus starts at t={t_stim:.3f}: " +
+                    ", ".join(f"{name} +{start:.2f}-{end:.2f} s" for name, start, end in marks))
             time.sleep(1)
             if att.closed.is_set():
                 break
