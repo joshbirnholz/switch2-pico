@@ -788,3 +788,20 @@ packets/s).
 - The first run (most commands first, quick reconnects) played in every
   variant, even "bare": a variant can inherit the audio state of the one
   before, so order and sleep matter in these tests.
+- **`18/03` and `18/04` aren't volume controls** (`volume_sweep.py`,
+  one connection, 1 s of 440 Hz per step, -30 dBFS in):
+  - `18/03` 01-14 all -18.9 dBFS; `1f` -23.9 (about 5 dB down); `00`
+    silent, but it was the first step, and the first step is silent in
+    both sweeps (see below).
+  - **`18/04`: `00` mutes, any non-zero value (01-1f) plays at -18.9.**
+    After `18/04 00`, `18/03 07` doesn't bring the sound back; `18/04 01`
+    does.
+  - So there are no volume steps in either: scale the PCM before
+    encoding (the console presumably does the same).
+- **Start-up delay:** the jack comes up 0.4-0.5 s after the first frame
+  (seen in every recording), so the first ~0.5 s of a stream is lost.
+  That probably explains the odd single runs (`17/02` alone at -24,
+  `18/04 01` then `17/02` at -50, the first sweep step silent).
+- **For the dongle:** send `18/04 01`, `18/03 07`, `17/02 80 bb 00 00 02
+  f0 00` (the console's order) on the command characteristic, then 240 B
+  stereo Opus frames in two halves on 0x002c; `18/04 00` to mute.
