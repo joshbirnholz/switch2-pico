@@ -199,6 +199,8 @@ def main():
         b = p.blePacket
         if b is not None and b.type != Packet.PACKET_TYPE_ADVERTISING:
             stats["connection"] += 1
+        elif b is not None and list(getattr(b, "advAddress", None) or [])[:6] == want:
+            stats[f"controller adv type {b.advType} ch{p.channel}"] += 1
         pcap.write(Pcap.create_packet(bytes([p.boardId] + p.getList()), p.time))
         try:
             dec.packet(p)
@@ -224,7 +226,10 @@ def main():
     sniffer.setAdvHopSequence([int(channel)] if channel else [37, 38, 39])
     sniffer.setSupportedProtocolVersion(3)
     sniffer.start()
-    sniffer.scan()
+    # Follow auxiliary pointers: after Sync the controller's pairing-mode
+    # advertising seems to move to extended (BT 5) advertising; without this
+    # the sniffer saw it once and then nothing.
+    sniffer.scan(findScanRsp=True, findAux=True)
     time.sleep(0.5)
     if opt("ltk"):
         dec.send_ltk(bytes.fromhex(opt("ltk")))
