@@ -18,8 +18,10 @@ near your ear:
 First sweep: layout 6, [00][0F][32][frame], played the tone from the
 controller's body (actuators?), not the jack; the others did nothing.
 --states keeps that packet and tries every state byte 0x00-0x1F, 0x2F,
-0x4F and 0x8F, 2 s each.
+0x4F and 0x8F, 1.5 s each. The tone is at -40 dBFS unless --level=X
+(linear, 0.1 = -20 dBFS) says otherwise.
 """
+import math
 import sys
 import time
 
@@ -69,7 +71,10 @@ def main():
     args_in = [a for a in sys.argv[1:] if not a.startswith("--")]
     address = args_in[0] if args_in else "3C:A9:AB:69:58:AF"
     layouts = state_layouts() if "--states" in sys.argv else LAYOUTS
-    seconds = 2 if "--states" in sys.argv else 3
+    seconds = 1.5 if "--states" in sys.argv else 3
+    # Quiet by default: Josh works in an office, and the body of the
+    # controller plays audio out loud. --level=0.1 is the old -20 dBFS.
+    level = next((float(a.split("=", 1)[1]) for a in sys.argv if a.startswith("--level=")), 0.01)
     DATA.mkdir(exist_ok=True)
     stamp = time.strftime("%Y%m%d-%H%M%S")
     log = open(DATA / f"sweep-{stamp}.log", "w")
@@ -97,7 +102,8 @@ def main():
         time.sleep(1.5)
 
         handle = chars[CHAR_AUDIO_OUT][0]
-        pcm = tone(seconds)
+        pcm = tone(seconds, level=level)
+        out(f"tone: 1 kHz at {20 * math.log10(level):.0f} dBFS, {seconds} s per step")
         out("\n== Listen for a 1 kHz tone in the headphones. Note each number with a tone, a thump, or anything else.")
         for k, (name, build) in enumerate(layouts, 1):
             if att.closed.is_set():
@@ -111,7 +117,7 @@ def main():
                 ahead = (i + 1) * 0.02 - (time.monotonic() - t0)
                 if ahead > 0.02:
                     time.sleep(ahead - 0.02)
-            time.sleep(1.0 if "--states" in sys.argv else 1.5)
+            time.sleep(0.8 if "--states" in sys.argv else 1.5)
         out(f"\nstream: {mic.summary()}")
     finally:
         if att.closed.is_set():
