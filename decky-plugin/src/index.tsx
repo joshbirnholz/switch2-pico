@@ -11,7 +11,7 @@ import {
 } from "./api";
 import { InputIcon, OutputIcon, SlotIcon } from "./icons";
 import {
-  allButtons, CTRL_GC, CtrlType, Extra, extraButtons, isJoyCon, MF_INVERT_H, MF_INVERT_V, MF_UP_DOWN_ONLY, MODE_NAMES, mouseMode, PIDS,
+  allButtons, CTRL_GC, CtrlType, Extra, extraButtons, headsetAudio, isJoyCon, MF_INVERT_H, MF_INVERT_V, MF_UP_DOWN_ONLY, MODE_NAMES, mouseMode, PIDS,
   Profile, profileForm, quickRemap, Settings, slotLabel, Status, STATUS_MODES,
 } from "./model";
 import { AllButtonsModal, confirm, PairedModal, SOFT_CSS, SoftButton, UpdateModal } from "./modals";
@@ -408,12 +408,12 @@ function Content() {
         </PanelSection>
       )}
 
-      {S?.headset_audio && (
+      {S && P && ready.length > 0 && headsetAudio(S, t, mode) && (
         <PanelSection title="Headphones">
           <PanelSectionRow>
             <ToggleField
               label="Low Latency"
-              description="For headphones in a Switch 2 Pro Controller (SInput mode). Less delay than Stable, but the sound may cut out more often."
+              description="Less delay than Stable, but the sound may cut out more often."
               checked={S.audio_mode === 1}
               onChange={(v) => save(`audio_mode=${v ? 1 : 0}`)}
             />

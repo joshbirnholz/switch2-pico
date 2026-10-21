@@ -74,6 +74,10 @@ export const MODE_SHORT = ["Switch Pro", "DualSense Edge", "DualSense", "Xbox 36
 export const STATUS_MODES: Record<string, number> = {
   switch_pro: MODE_SWITCH, dualsense_edge: MODE_DS_EDGE, dualsense: MODE_DS, xbox360: MODE_X360, gc_adapter: MODE_GC, sinput: MODE_SINPUT,
 };
+// Headphone audio: a Pro Controller 2 in an SInput profile, on a board that
+// has it (Settings.headset_audio).
+export const headsetAudio = (S: Settings, t: number, mode: number) =>
+  !!S.headset_audio && t === CTRL_PRO && mode === MODE_SINPUT;
 // Mouse Mode: emulated Xbox 360 and SInput controllers only.
 export const mouseMode = (mode: number) => mode === MODE_X360 || mode === MODE_SINPUT;
 
