@@ -869,6 +869,7 @@ packets/s).
   length 0. So **Opus CELT FB 20 ms mono, CBR 100 B (40 kbit/s)**; bit 3 of
   byte 13 marks the first half. Decoding only the first halves (as
   `audio_stream.py` did) gives distorted audio; joined, the mic test
-  decodes properly (5483 frames, `data/console-mic-test.wav`).
+  decodes properly (5483 frames, `data/console-mic-test.wav`; Josh
+  listened: "perfectly clean").
   Earlier Stable-mode captures showed `07`/`0f` only; their second halves
   were never looked at.
