@@ -122,6 +122,7 @@ typedef struct link {
     uint8_t mic;                 // MIC_*: audio-in instead of the input report
     uint8_t mic_len;             // bytes of mic_frame collected
     uint8_t mic_frame[S2_MIC_FRAME_BYTES];
+    bool headset;                // the input report's headset bit
     bool audio_second_half;      // the next write is a frame's second half
     uint32_t audio_due;          // when it goes out (ms)
     uint32_t audio_busy, audio_late_max, audio_report;   // write stats, logged every 30 s
@@ -1288,6 +1289,14 @@ static void after_init(link_t *k) {
 // `has_imu`: false for audio-in packets, which only carry buttons and sticks.
 static void on_input(link_t *k, const s2_input_t *inp, bool has_imu) {
     s2_input_t in = *inp;
+    // The headset bit isn't a button: left in, a plugged-in headset would
+    // look like a button held down (and spoil taps such as the Decky Quick
+    // Access Menu's). Logged when it changes (a loose plug shows here).
+    bool headset = (in.buttons & S2_BTN_HEADSET) != 0;
+    if (headset != k->headset || !k->info.reports)
+        LOG("s2: link %u headset %s", k->idx, headset ? "plugged in" : "unplugged");
+    k->headset = headset;
+    in.buttons &= ~S2_BTN_HEADSET;
     k->input = in;
     k->input_seq++;
     k->info.reports++;
@@ -1359,6 +1368,7 @@ static void on_audio_in_notification(link_t *k, const uint8_t *value, uint16_t l
     s2_input_t in = k->input;
     in.counter = a.seq;
     in.buttons = (in.buttons & ~S2_AUDIO_IN_BUTTONS) | a.buttons;
+    if (a.jack & 0x07) in.buttons |= S2_BTN_HEADSET;   // 0x05 headphones, 0x07 with a mic
     memcpy(in.stick_l, a.stick_l, sizeof in.stick_l);
     memcpy(in.stick_r, a.stick_r, sizeof in.stick_r);
     memset(in.gyro, 0, sizeof in.gyro);
