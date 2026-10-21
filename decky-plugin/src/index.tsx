@@ -1,7 +1,7 @@
 // Switch2-Pico: quick controls for the dongle in the Quick Access menu.
 import { addEventListener, definePlugin, removeEventListener, toaster } from "@decky/api";
 import {
-  ButtonItem, DialogButton, DropdownItem, Field, Focusable, getGamepadNavigationTrees, Navigation, PanelSection, PanelSectionRow, showModal,
+  ButtonItem, DialogButton, Dropdown, Field, Focusable, getGamepadNavigationTrees, Navigation, PanelSection, PanelSectionRow, showModal,
   SideMenu, SliderField, staticClasses, TextField, ToggleField,
 } from "@decky/ui";
 import { CSSProperties, ReactNode, useEffect, useRef, useState } from "react";
@@ -409,14 +409,20 @@ function Content() {
       )}
 
       {S && P && ready.length > 0 && headsetAudio(S, t, mode) && (
-        <PanelSection title="Headphones">
+        <PanelSection title="Audio Mode">
           <PanelSectionRow>
-            <DropdownItem
-              label="Audio mode"
-              rgOptions={[{ data: 0, label: "Stable" }, { data: 1, label: "Low Latency" }]}
-              selectedOption={S.audio_mode === 1 ? 1 : 0}
-              onChange={(o) => save(`audio_mode=${o.data}`)}
-            />
+            <Block>
+              <Dropdown
+                rgOptions={[{ data: 0, label: "Stable" }, { data: 1, label: "Low Latency" }]}
+                selectedOption={S.audio_mode === 1 ? 1 : 0}
+                onChange={(o) => save(`audio_mode=${o.data}`)}
+              />
+              <div style={{ ...hint, marginTop: 8 }}>
+                The input/output mode can be changed for using headphones connected to a Switch 2 Pro Controller.
+                Selecting Low Latency will reduce audio lag compared to Stable. However, the sound may be more likely to
+                cut out.
+              </div>
+            </Block>
           </PanelSectionRow>
         </PanelSection>
       )}
