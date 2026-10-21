@@ -20,8 +20,10 @@ typedef enum {
     HEADSET_AUDIO_FRAME,     // `frame` filled
     HEADSET_AUDIO_NOT_YET,   // being encoded: ask again shortly
 } headset_audio_take_t;
-// The next encoded 20 ms frame.
-headset_audio_take_t headset_audio_take_frame(uint8_t frame[S2_AUDIO_FRAME_BYTES]);
+// The next encoded 20 ms frame. `next_due_ms` (platform_millis() time) is
+// when the one after it will be taken, so the board can encode that one
+// just in time, from the freshest audio.
+headset_audio_take_t headset_audio_take_frame(uint8_t frame[S2_AUDIO_FRAME_BYTES], uint32_t next_due_ms);
 
 #ifdef __cplusplus
 }

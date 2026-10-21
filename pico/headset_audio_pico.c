@@ -5,10 +5,11 @@
 // 0: about 8.3 ms per frame at 150 MHz with the encoder in RAM.
 //
 // The host sends 48 kHz by its clock and the frames leave by ours. Core 1
-// encodes a frame as soon as s2_link.c has taken the last one, so it reads
-// the ring at our pace; the ring's level then tells the drift, and core 1
-// stretches or squeezes a frame by one sample (resampling it) to keep the
-// level near TARGET.
+// encodes each frame just in time for s2_link.c to take it (ENCODE_LEAD_US
+// before it's due), so it reads the ring at our pace and from the freshest
+// audio; the ring's level then tells the drift, and core 1 stretches or
+// squeezes a frame by one sample (resampling it) to keep the level near
+// TARGET.
 
 #include "headset_audio_pico.h"
 
@@ -28,11 +29,17 @@
 // PCM ring, in stereo samples (L | R << 16): 85 ms.
 #define RING_LEN  4096u
 #define RING_MASK (RING_LEN - 1)
-// Ring level wanted when core 1 reads a frame: the frame plus 10 ms for the
-// host's and the main loop's jitter. Outside +-5 ms of it, a frame is made
-// from one sample more or less (up to 1000 ppm, far more than clocks drift).
-#define TARGET    (FRAME + 480)
-#define BAND      240
+// Ring level wanted when core 1 reads a frame: the frame plus 5 ms. The
+// packets arrive every 1 ms (taken at each start of frame) and core 1 reads
+// at a fixed time, so only the host's jitter needs room. Outside +-2.5 ms of
+// it, a frame is made from one sample more or less (up to 1000 ppm, far
+// more than clocks drift).
+#define TARGET    (FRAME + 240)
+#define BAND      120
+// Core 1 starts a frame this long before it's due: the encode (8.5 ms at
+// most) plus 2.5 ms. If it's still being encoded when due, s2_link.c waits
+// for it (HEADSET_AUDIO_NOT_YET).
+#define ENCODE_LEAD_US 11000
 // Keep the controller's stream going this long after the host closes its
 // stream: it takes about 0.5 s to come back.
 #define LINGER_MS 30000
@@ -54,6 +61,7 @@ typedef struct {
 
 static queue_t s_frames;   // one frame, encoded as soon as the last was taken
 static volatile bool s_encoding;   // core 1 is making the next one
+static volatile uint32_t s_encode_at;   // time_us_32() to start the next one
 static volatile int s_encoder_error;   // set by core 1, read (and logged) by core 0
 
 // PCM ring: written by core 0 (s_w), read by core 1 (s_r).
@@ -159,6 +167,10 @@ static void core1_main(void) {
     static frame_t f;
     for (;;) {
         while (!queue_is_empty(&s_frames)) tight_loop_contents();   // paced by s2_link.c
+        // Then just in time (when s2_link.c streams; otherwise this is past).
+        while ((int32_t)(time_us_32() - s_encode_at) < 0 && (int32_t)(s_encode_at - time_us_32()) < 25000) {
+            tight_loop_contents();
+        }
         s_encoding = true;
         fill_pcm(pcm);
         uint32_t t0 = time_us_32();
@@ -257,7 +269,8 @@ static void report(uint32_t now) {
     s_report_at = now;
 }
 
-headset_audio_take_t headset_audio_take_frame(uint8_t frame[S2_AUDIO_FRAME_BYTES]) {
+headset_audio_take_t headset_audio_take_frame(uint8_t frame[S2_AUDIO_FRAME_BYTES], uint32_t next_due_ms) {
+    s_encode_at = (uint32_t)((uint64_t)next_due_ms * 1000u) - ENCODE_LEAD_US;
     static bool logged;
     if (s_encoder_error && !logged) {
         logged = true;

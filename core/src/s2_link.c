@@ -403,8 +403,10 @@ static bool s_audio_on;
 static uint8_t s_audio_mode = S2_AUDIO_MODE_STABLE;
 static int8_t s_audio_link = -1;   // the one link that streams (frames can't be shared)
 
-__attribute__((weak)) headset_audio_take_t headset_audio_take_frame(uint8_t frame[S2_AUDIO_FRAME_BYTES]) {
+__attribute__((weak)) headset_audio_take_t headset_audio_take_frame(uint8_t frame[S2_AUDIO_FRAME_BYTES],
+                                                                    uint32_t next_due_ms) {
     (void)frame;
+    (void)next_due_ms;
     return HEADSET_AUDIO_NONE;
 }
 
@@ -482,7 +484,7 @@ static void audio_task(link_t *k, uint32_t now) {
     pkt[0] = 0x00;
     pkt[2] = S2_AUDIO_HALF_BYTES;
     if (!k->audio_second_half) {
-        headset_audio_take_t got = headset_audio_take_frame(k->audio_frame);
+        headset_audio_take_t got = headset_audio_take_frame(k->audio_frame, k->audio_due + 20);
         if (got == HEADSET_AUDIO_NOT_YET && late < 10) return;   // after a late pass: wait for it
         if (got != HEADSET_AUDIO_FRAME) {
             // The silence frame libopus makes at this rate.
