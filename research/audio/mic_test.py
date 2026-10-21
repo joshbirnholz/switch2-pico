@@ -50,12 +50,24 @@ def main():
     phase = {"name": None}
     states = {}
 
+    half = {"first": None}
+
     def on_audio_in(t, d):
+        # A mic frame is 100 B in two notifications 5 ms apart: byte 13 with
+        # bit 3 set (0x2f, 0x1f) carries the first 50 B (starting with the
+        # TOC), the next one with 50 B and bit 3 clear (0x17) the rest; then
+        # two empty ones (0x27). Seen in the console's mic test.
         d = bytes(d)
         raw.write(f"{t:.4f} {d.hex()}\n")
         states[d[13]] = states.get(d[13], 0) + 1
-        if d[13] & 0x08 and phase["name"]:
-            frames.append((t, phase["name"], d[15:15 + d[14]]))
+        if d[14] != 50:
+            return
+        if d[13] & 0x08:
+            half["first"] = d[15:65]
+        elif half["first"] is not None:
+            if phase["name"]:
+                frames.append((t, phase["name"], half["first"] + d[15:65]))
+            half["first"] = None
 
     stop = threading.Event()
 

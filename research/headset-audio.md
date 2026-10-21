@@ -863,3 +863,12 @@ packets/s).
   35-41 s**, which was the mic test's recording.
 - Theory: **the mic is live only in Low Latency mode (`18/03 02`)**. Next:
   test 02 vs 07 from the laptop.
+- **Mic frames are 100 B, split in two like the output:** every 20 ms,
+  four notifications 5 ms apart: byte 13 `2f` (or `1f`) with 50 B starting
+  with the TOC 0xF8, then `17` with the other 50 B, then two `27` with
+  length 0. So **Opus CELT FB 20 ms mono, CBR 100 B (40 kbit/s)**; bit 3 of
+  byte 13 marks the first half. Decoding only the first halves (as
+  `audio_stream.py` did) gives distorted audio; joined, the mic test
+  decodes properly (5483 frames, `data/console-mic-test.wav`).
+  Earlier Stable-mode captures showed `07`/`0f` only; their second halves
+  were never looked at.
