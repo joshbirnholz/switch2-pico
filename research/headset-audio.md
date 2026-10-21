@@ -900,3 +900,17 @@ packets/s).
   `18/04 01`, `18/03 07|02`, `17/02`; to record, write `00 00` to 0x000f
   (if input report 0x09 was on) and `01 00` to 0x002f; join the 100 B frame
   halves. Use a 7.5 ms interval while the mic is on.
+
+### Output latency and mono frames (2026-10-20, `latency_mono.py`)
+
+- From the laptop, 60 ms 1 kHz bursts on a running stream, first frame
+  written → sound at the jack (USB card on the same clock; includes the
+  laptop's Bluetooth queue, 7.5 ms interval):
+  - **Stable (`18/03 07`): 155 ms**, all 10 bursts identical;
+  - **Low Latency (`18/03 02`): 68 ms**, all 10 identical.
+  `18/03` switches mode mid-stream. Low Latency is the one to use for
+  games (matches the queue depth seen on the mic: up to 8 vs 0-3).
+- **Mono frames don't work:** 440 Hz sent as mono CELT (TOC 0xF8, 240 B
+  CBR, same two-half packets) came out as 473 + 483 Hz at -22 dBFS, with
+  more energy outside the tone than in it. The output decoder expects
+  stereo; send stereo (identical channels are cheap to code).
