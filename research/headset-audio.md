@@ -914,3 +914,29 @@ packets/s).
   CBR, same two-half packets) came out as 473 + 483 Hz at -22 dBFS, with
   more energy outside the tone than in it. The output decoder expects
   stereo; send stereo (identical channels are cheap to code).
+
+### Opus on the RP2350 (2026-10-20, `opus_bench/`)
+
+libopus 1.5.2, fixed point (`FIXED_POINT DISABLE_FLOAT_API`, CELT through
+`OPUS_APPLICATION_RESTRICTED_LOWDELAY`), -O2, no ARM-specific
+optimisation, Pico 2 W, per 20 ms frame (100 frames of a tones + noise test
+signal):
+
+| | 150 MHz | 200 MHz |
+|---|---|---|
+| encode stereo 240 B CBR, complexity 0 | 9.44 ms (worst 10.38) | 7.07 ms (7.27) |
+| complexity 2 | 11.56 ms | 8.67 ms |
+| complexity 5 | 15.19 ms | 11.41 ms |
+| complexity 10 | 18.32 ms (worst 25.74) | 13.00 ms (18.85) |
+| decode mono 100 B (mic) | 2.95 ms (worst 3.21) | 2.21 ms |
+
+Encoder state 29 KB (stereo), decoder 18 KB (mono), pseudostack 120 KB.
+**Complexity 0 + the mic decode is about 12.4 ms per 20 ms at stock
+150 MHz: about 62 % of one core.** The dongle firmware doesn't use core 1
+yet (no multicore code, stock clock), so the codec can run there.
+Possible speedups if needed: the M33's DSP instructions (OPUS_ARM_INLINE_EDSP),
+a float build using the M33's FPU, or 200 MHz.
+
+Building on Fedora: `cmake ninja-build arm-none-eabi-gcc-cs
+arm-none-eabi-gcc-cs-c++ arm-none-eabi-newlib gcc-c++` (the last for the
+SDK's host tools), Pico SDK 2.2.0 in `~/pico-sdk`, libopus in `~/src/opus`.

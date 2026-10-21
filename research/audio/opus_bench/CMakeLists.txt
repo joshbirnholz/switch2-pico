@@ -33,7 +33,7 @@ opus_mk_list(opus_sources.mk OPUS_SOURCES OPUS_SRC)
 add_library(opus STATIC ${CELT_SRC} ${SILK_SRC} ${SILK_FIXED_SRC} ${OPUS_SRC})
 target_include_directories(opus PUBLIC ${OPUS_DIR}/include
     PRIVATE ${OPUS_DIR}/celt ${OPUS_DIR}/silk ${OPUS_DIR}/silk/fixed ${OPUS_DIR}/src ${OPUS_DIR})
-target_compile_definitions(opus PRIVATE OPUS_BUILD FIXED_POINT HAVE_LRINT HAVE_LRINTF
+target_compile_definitions(opus PRIVATE OPUS_BUILD FIXED_POINT DISABLE_FLOAT_API HAVE_LRINT HAVE_LRINTF
     NONTHREADSAFE_PSEUDOSTACK GLOBAL_STACK_SIZE=120000 ${OPUS_EXTRA_DEFS})
 target_compile_options(opus PRIVATE -O2 -w)
 
