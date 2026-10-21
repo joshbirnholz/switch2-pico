@@ -1080,3 +1080,52 @@ Also overnight (not tested on hardware): frames encoded just in time
   every packet (delta-compressed IMU samples?). Decoding it needs every
   packet in a row; not done. Note Plasma's volume page keeps every input
   open while it's showing.
+
+## Motion while the mic is on (2026-10-21, evening, `motion_capture.py`)
+
+The motion block in audio-in (from byte 65) is the same compact block as
+input report 0x09's (from byte 14), the report the console reads. Decoded
+against report 0x05's plain accel/gyro: the controller sends only one of
+the reports at a time (the later subscription wins), so `motion_capture.py`
+switches between them every half second while you roll, pitch, yaw and
+shake the controller (`data/motion-20261021-192212.raw` with 0x09,
+`motion-20261021-193005.raw` with audio-in and a silent stream).
+
+- **Pairing:** a controller in pairing mode accepts the laptop without the
+  0x15 steps and sends motion, but **turned itself off when the audio
+  stream started**; with `--pair` it streams. Pair it with the dongle again
+  afterwards (hold sync with the dongle plugged in).
+- **Layout** (byte 0 = length, 40; then a little-endian bit stream):
+  - bits 0-11: tick in ms (wraps); bits 12-15 its low bits again (?)
+  - bits 16-36: header. Bits 25-27 = 7 and 32-33 = 3 in every block here;
+    bits 34-35 = a frame index (below).
+  - bits 37-99: **orientation quaternion** x, y, z, 21 bits each, offset
+    binary (2^20 = 1.0); w = +sqrt(1 - x² - y² - z²). Checked: gravity from
+    the accelerometer, rotated by it, stays within 1.3° (median) of one
+    world direction over all still moments in both captures.
+  - bits 100-141: **accelerometer** x, y, z, 14-bit signed, the same units
+    as report 0x05's (r = 0.99+, scale 1.0).
+  - bits 142-319: not decoded (13- and 14-bit fields, perhaps more samples).
+- **Gyro:** the rotation between consecutive blocks (conj(q1)·q2 over the
+  tick difference) gives report 0x05's gyro axes directly (r = 0.99, 0.94,
+  0.94), about 14.3 LSB/dps on this controller, which matches the dongle's
+  second gyro range. Still on the table it gives (-1, 0, -2) against the raw
+  gyro's (-3, 0, -2): the orientation is integrated from the raw gyro, bias
+  and all, so the dongle's gyro calibration still applies. It stays right
+  across gaps (the half-second switches), unlike a sampled gyro.
+- **Frame index:** near a half turn from the reference (w near 0) the
+  controller switches the quaternion to frame 1 or 2 (2% of blocks). Frame
+  1 stores (y, z, x) of frame 0 (seen at a switch: the same values,
+  rotated). Frame 2 looked like (-z, y, -x); not confirmed. The dongle
+  takes no gyro across a switch and maps the gyro back per frame.
+- **The console's layout differs:** at its 5 ms interval, 98% of the blocks
+  were 30 bytes with header bits 25-27 = 6 (and 32-33 = 0); its rare
+  40-byte blocks also had 6. Those look like the same idea at other widths
+  (three slow 25-bit fields from bit 41, 6 bits apart, then noisier ones)
+  but aren't decoded. Both laptop captures (15 ms interval) had only the
+  layout above. Which one the dongle gets at 7.5 ms is the next check: the
+  mic build logs "mic motion, 30 s: N blocks decoded, M other" every 30 s.
+- **Firmware:** `s2_parse_motion()` / `s2_motion_gyro()` (core/src/s2_proto.c,
+  tested on captured blocks) and `on_audio_in_notification()`: accel from
+  the block, gyro from the rotation; the gyro holds its last value for up
+  to 250 ms across blocks in another layout, then reads still.

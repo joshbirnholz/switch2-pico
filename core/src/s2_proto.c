@@ -1,5 +1,6 @@
 #include "s2_proto.h"
 
+#include <math.h>
 #include <string.h>
 
 const uint8_t S2_UUID_HID_SERVICE[16] = {
@@ -158,6 +159,70 @@ bool s2_parse_audio_in(const uint8_t *d, size_t len, s2_audio_in_t *out) {
     out->mic_len = d[14];
     out->mic = d + 15;
     if ((size_t)out->mic_len > len - 15) out->mic_len = 0;
+    return true;
+}
+
+// `n` bits (up to 32) at bit `pos` of the little-endian stream `b`.
+static uint32_t bits_at(const uint8_t *b, unsigned pos, unsigned n) {
+    uint64_t v = 0;
+    unsigned first = pos / 8, last = (pos + n - 1) / 8;
+    for (unsigned i = last + 1; i-- > first;) v = v << 8 | b[i];
+    v >>= pos % 8;
+    return (uint32_t)(v & ((1ull << n) - 1));
+}
+
+bool s2_parse_motion(const uint8_t *block, size_t len, s2_motion_t *out) {
+    if (len < 1 + S2_MOTION_LEN || block[0] != S2_MOTION_LEN) return false;
+    const uint8_t *b = block + 1;
+    if (bits_at(b, 25, 3) != 7 || bits_at(b, 32, 2) != 3) return false;
+    out->tick = (uint16_t)bits_at(b, 0, 12);
+    out->frame = (uint8_t)bits_at(b, 34, 2);
+    float n = 0.0f;
+    for (int i = 0; i < 3; i++) {
+        float v = (float)((int32_t)bits_at(b, 37 + 21 * i, 21) - (1 << 20)) / (float)(1 << 20);
+        out->q[1 + i] = v;
+        n += v * v;
+    }
+    out->q[0] = n < 1.0f ? sqrtf(1.0f - n) : 0.0f;
+    for (int i = 0; i < 3; i++) {
+        uint32_t v = bits_at(b, 100 + 14 * i, 14);
+        out->accel[i] = (int16_t)(v & 0x2000 ? (int32_t)v - 0x4000 : (int32_t)v);
+    }
+    return true;
+}
+
+bool s2_motion_gyro(const s2_motion_t *prev, const s2_motion_t *cur, float lsb_per_dps, int16_t gyro[3]) {
+    unsigned dt = (unsigned)(cur->tick - prev->tick) & 0xFFFu;
+    if (dt == 0 || dt > 1000 || cur->frame != prev->frame || cur->frame > 2) return false;
+    // d = conj(prev) * cur: the rotation since `prev`, in the controller's axes.
+    const float *a = prev->q, *c = cur->q;
+    float dw = a[0] * c[0] + a[1] * c[1] + a[2] * c[2] + a[3] * c[3];
+    float d[3] = {
+        a[0] * c[1] - a[1] * c[0] - a[2] * c[3] + a[3] * c[2],
+        a[0] * c[2] + a[1] * c[3] - a[2] * c[0] - a[3] * c[1],
+        a[0] * c[3] - a[1] * c[2] + a[2] * c[1] - a[3] * c[0],
+    };
+    if (dw < 0.0f) {
+        dw = -dw;
+        for (int i = 0; i < 3; i++) d[i] = -d[i];
+    }
+    float s = sqrtf(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+    // angle / |axis| / dt, in degrees per second
+    float k = s > 1e-9f ? 2.0f * atan2f(s, dw) / s : 2.0f;
+    k *= 57.29578f * 1000.0f / (float)dt * lsb_per_dps;
+    float g[3] = {d[0] * k, d[1] * k, d[2] * k};
+    // Frame 1 stores (y, z, x); frame 2 looked like (-z, y, -x) in the few
+    // blocks captured (unconfirmed).
+    float out[3];
+    if (cur->frame == 1) {
+        out[0] = g[2], out[1] = g[0], out[2] = g[1];
+    } else if (cur->frame == 2) {
+        out[0] = -g[2], out[1] = g[1], out[2] = -g[0];
+    } else {
+        out[0] = g[0], out[1] = g[1], out[2] = g[2];
+    }
+    for (int i = 0; i < 3; i++)
+        gyro[i] = (int16_t)(out[i] > 32767.0f ? 32767 : out[i] < -32768.0f ? -32768 : (int32_t)lrintf(out[i]));
     return true;
 }
 

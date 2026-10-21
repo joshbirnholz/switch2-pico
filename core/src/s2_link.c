@@ -122,6 +122,11 @@ typedef struct link {
     uint8_t mic;                 // MIC_*: audio-in instead of the input report
     uint8_t mic_len;             // bytes of mic_frame collected
     uint8_t mic_frame[S2_MIC_FRAME_BYTES];
+    s2_motion_t motion;          // the last motion block from audio-in
+    bool motion_valid;
+    uint32_t motion_ms;          // when it came
+    uint32_t motion_blocks, motion_other;   // decoded / other layouts, logged every 30 s
+    uint8_t motion_other_len, motion_other_hdr;   // the last other layout seen
     bool headset;                // the input report's headset bit
     bool audio_second_half;      // the next write is a frame's second half
     uint32_t audio_due;          // when it goes out (ms)
@@ -507,6 +512,11 @@ static void audio_task(link_t *k, uint32_t now) {
         LOG("s2: link %u audio writes, 30 s: %lu busy, latest %lu ms late, %lu frames dropped late", k->idx,
             (unsigned long)k->audio_busy, (unsigned long)k->audio_late_max, (unsigned long)k->audio_dropped);
         k->audio_busy = k->audio_late_max = k->audio_dropped = 0;
+        if (k->mic == MIC_ON)
+            LOG("s2: link %u mic motion, 30 s: %lu blocks decoded, %lu other (last: length %u, header byte %02x)",
+                k->idx, (unsigned long)k->motion_blocks, (unsigned long)k->motion_other, k->motion_other_len,
+                k->motion_other_hdr);
+        k->motion_blocks = k->motion_other = 0;
         k->audio_report = now;
     }
     // Fell behind (a weak link held the writes up): skip the frames the
@@ -1360,8 +1370,13 @@ static void on_input_notification(link_t *k, const uint8_t *value, uint16_t len)
     if (s2_parse_input_report(value, len, &in)) on_input(k, &in, true);
 }
 
-// While the mic is on: buttons and sticks from audio-in (the rest as last
-// reported, the gyro still), and the mic frames joined from their halves.
+// While the mic is on: buttons, sticks and motion from audio-in (the rest as
+// last reported), and the mic frames joined from their halves. The gyro is
+// the rotation since the last motion block; it holds its last value across a
+// block that doesn't give one, for MOTION_HOLD_MS across blocks in a layout
+// that isn't decoded, and is still after that.
+#define MOTION_HOLD_MS 250
+
 static void on_audio_in_notification(link_t *k, const uint8_t *value, uint16_t len) {
     s2_audio_in_t a;
     if (!s2_parse_audio_in(value, len, &a)) return;
@@ -1371,7 +1386,26 @@ static void on_audio_in_notification(link_t *k, const uint8_t *value, uint16_t l
     if (a.jack & 0x07) in.buttons |= S2_BTN_HEADSET;   // 0x05 headphones, 0x07 with a mic
     memcpy(in.stick_l, a.stick_l, sizeof in.stick_l);
     memcpy(in.stick_r, a.stick_r, sizeof in.stick_r);
-    memset(in.gyro, 0, sizeof in.gyro);
+    s2_motion_t m;
+    if (len > S2_AUDIO_IN_MOTION &&
+        s2_parse_motion(value + S2_AUDIO_IN_MOTION, len - S2_AUDIO_IN_MOTION, &m)) {
+        k->motion_blocks++;
+        memcpy(in.accel, m.accel, sizeof in.accel);
+        if (k->motion_valid)
+            s2_motion_gyro(&k->motion, &m, k->gyro_lsb_per_dps, in.gyro);   // or holds
+        else
+            memset(in.gyro, 0, sizeof in.gyro);
+        k->motion = m;
+        k->motion_valid = true;
+        k->motion_ms = platform_millis();
+    } else {
+        if (len > S2_AUDIO_IN_MOTION + 4 && value[S2_AUDIO_IN_MOTION]) {
+            k->motion_other++;
+            k->motion_other_len = value[S2_AUDIO_IN_MOTION];
+            k->motion_other_hdr = value[S2_AUDIO_IN_MOTION + 4];
+        }
+        if (!k->motion_valid || platform_millis() - k->motion_ms > MOTION_HOLD_MS) memset(in.gyro, 0, sizeof in.gyro);
+    }
     on_input(k, &in, false);
     if (a.mic_len != S2_MIC_HALF_BYTES) return;
     if (a.jack & S2_AUDIO_IN_FIRST_HALF) {
@@ -1700,7 +1734,8 @@ void s2c_on_audio_in_enabled(uint8_t link, bool on, bool ok) {
         return;
     }
     k->mic = on ? MIC_ON : MIC_OFF;
-    LOG("s2: link %u headset mic %s", k->idx, on ? "on (input from audio-in, no motion)" : "off");
+    k->motion_valid = false;
+    LOG("s2: link %u headset mic %s", k->idx, on ? "on (input from audio-in)" : "off");
 }
 
 void s2c_on_input_enabled(uint8_t link, bool ok) {

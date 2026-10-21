@@ -211,9 +211,10 @@ bool s2_parse_input_report(const uint8_t *data, size_t len, s2_input_t *out);
 // empty ones); the first half has bit 3 of the jack byte set.
 // The three button bytes have their own layout (the controller's USB
 // report's, mapped on hardware 2026-10-21); s2_parse_audio_in() turns them
-// into S2_BTN_* bits. There's no motion: the gyro and accelerometer are
-// packed in bytes 65+, not decoded yet.
+// into S2_BTN_* bits. Motion is the compact block from byte 65
+// (s2_parse_motion()).
 #define S2_AUDIO_IN_MIN_LEN 15
+#define S2_AUDIO_IN_MOTION  65
 #define S2_MIC_FRAME_BYTES  100
 #define S2_MIC_HALF_BYTES   50
 #define S2_MIC_FRAME_SAMPLES 960
@@ -234,6 +235,37 @@ typedef struct {
 } s2_audio_in_t;
 
 bool s2_parse_audio_in(const uint8_t *data, size_t len, s2_audio_in_t *out);
+
+// ---- compact motion block (audio-in from byte 65, input report 0x09 from 14) ----
+// Decoded from captures with both formats (2026-10-21, research/headset-audio.md).
+// Byte 0 is the length; the rest is a little-endian bit stream:
+//   bits 0-11   tick, milliseconds (wraps)
+//   bits 16-36  header; 25-27 = 7 and 32-33 = 3 in the layout decoded here,
+//               34-35 = frame (below)
+//   bits 37-99  orientation quaternion x, y, z: 21 bits each, offset
+//               binary, 2^20 = 1.0; w = +sqrt(1 - x² - y² - z²)
+//   bits 100-141 accelerometer x, y, z: 14-bit signed, the units of report
+//               0x05's (4096 = 1 g)
+// The rest (more samples?) isn't decoded. The orientation is integrated from
+// the raw gyro (bias included), so the rotation between two blocks gives the
+// gyro in report 0x05's axes. Near a half turn from the reference the
+// controller switches to another frame (1 or 2, under 2% of blocks); frame 1
+// stores (y, z, x). The 40-byte layout came at the laptop's 15 ms interval;
+// the console's 5 ms stream mostly had a 30-byte one (header bits 25-27 = 6),
+// not decoded yet: s2_parse_motion() rejects it.
+#define S2_MOTION_LEN 40
+
+typedef struct {
+    uint16_t tick;              // ms, 12 bits
+    uint8_t frame;
+    float q[4];                 // w, x, y, z as stored (in `frame`)
+    int16_t accel[3];
+} s2_motion_t;
+
+bool s2_parse_motion(const uint8_t *block, size_t len, s2_motion_t *out);
+// The gyro (raw units at `lsb_per_dps`) from the rotation between two blocks;
+// false if they don't give one (same tick, too far apart, different frames).
+bool s2_motion_gyro(const s2_motion_t *prev, const s2_motion_t *cur, float lsb_per_dps, int16_t gyro[3]);
 
 // ---- stick calibration ----
 typedef struct {

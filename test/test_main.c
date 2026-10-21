@@ -240,6 +240,54 @@ static void test_audio_in(void) {
     CHECK(!s2_parse_audio_in(d, 10, &a));
 }
 
+static void from_hex(const char *hex, uint8_t *out, size_t n) {
+    for (size_t i = 0; i < n && hex[2 * i]; i++) {
+        unsigned v;
+        sscanf(hex + 2 * i, "%2x", &v);
+        out[i] = (uint8_t)v;
+    }
+}
+
+// Motion blocks as captured with input report 0x09 (motion-20261021-192212.raw):
+// a roll at about -170 dps (report 0x05 read about -1550 LSB 60 ms later), and
+// two blocks in frame 1. Expected values from the Python analysis.
+static void test_motion(void) {
+    uint8_t a[41], b[41];
+    s2_motion_t ma, mb;
+    int16_t g[3];
+    from_hex("2870fb000e83d28e66533fac12f8f98f1f508ff28efe13c0f9770fe7437fbbfe2840e84f79543f8600", a, 41);
+    from_hex("287ddb000e83698582453f7c1298fabb1df60f145fff10a0fb8f8e00f48da3ff1880f1bf7214408500", b, 41);
+    CHECK(s2_parse_motion(a, sizeof a, &ma) && s2_parse_motion(b, sizeof b, &mb));
+    CHECK(mb.tick == 2941 && mb.frame == 0);
+    CHECK_NEAR(mb.q[0], 0.965346, 1e-5);
+    CHECK_NEAR(mb.q[1], 0.260571, 1e-5);
+    CHECK_NEAR(mb.q[2], -0.011383, 1e-5);
+    CHECK_NEAR(mb.q[3], 0.009026, 1e-5);
+    CHECK(mb.accel[0] == -87 && mb.accel[1] == 1902 && mb.accel[2] == 4086);
+    CHECK(s2_motion_gyro(&ma, &mb, 14.3f, g));
+    CHECK_NEAR(g[0], -2407, 2);
+    CHECK_NEAR(g[1], -78, 2);
+    CHECK_NEAR(g[2], 37, 2);
+    CHECK(!s2_motion_gyro(&mb, &mb, 14.3f, g));   // no time between them
+
+    from_hex("2864f7000ea7ae0e6ac6c052f79ff16b3dee7e542802c89ff1a79ecf4f2b2c028d3fc6eff40cfe8700", a, 41);
+    from_hex("2871d7000e67b20feec540f4df9ff13b3dbd3f5d2802cabff19b9ef92f2f200298bfc68ff400008700", b, 41);
+    CHECK(s2_parse_motion(a, sizeof a, &ma) && s2_parse_motion(b, sizeof b, &mb));
+    CHECK(mb.frame == 1);
+    CHECK(s2_motion_gyro(&ma, &mb, 14.3f, g));   // stored (y, z, x)
+    CHECK_NEAR(g[0], -11002, 3);
+    CHECK_NEAR(g[1], -278, 2);
+    CHECK_NEAR(g[2], -423, 2);
+    s2_motion_t other = ma;
+    other.frame = 0;
+    CHECK(!s2_motion_gyro(&other, &mb, 14.3f, g));   // a frame change
+
+    // The console's 30-byte layout isn't decoded: rejected.
+    from_hex("1e7243000c00400e000253d0ff806ef77fd79b2b00ece89cfde095f10f54fe", a, 31);
+    CHECK(!s2_parse_motion(a, 31, &ma));
+    CHECK(!s2_parse_motion(b, 20, &ma));
+}
+
 // ---------------------------------------------------------------------------
 // The Pro Controller's active profile map (test_defaults: Switch Pro profile).
 #define PRO_MAP(st) settings_active_map(&(st), CTRL_PRO)
@@ -1241,6 +1289,7 @@ int main(void) {
     test_commands();
     test_input_report();
     test_audio_in();
+    test_motion();
     test_mapping();
     test_quick_remap();
     test_macro();
