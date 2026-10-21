@@ -1046,3 +1046,37 @@ the session's scratchpad):
 Also overnight (not tested on hardware): frames encoded just in time
 (about 14 ms less delay), and a first version of the headset mic behind
 `-DS2_HEADSET_MIC=ON` (USB microphone, audio-in switching, decoder).
+
+## Tested on hardware (2026-10-21, morning)
+
+- **The crash fix holds:** the current code (c504278) ran the stress test
+  (10 minutes of audio and over 31,000 config requests) without a reset;
+  the old firmware reset within about a minute. No lost USB packets any
+  more (the SOF diagnostics line printed once, at a mid-stream mode
+  change), 1500 of 1500 frames every 30 s, encode avg 7.4 ms (max 8.8),
+  core 1 stack use 4 KB of 16 KB. The device shows as "Nintendo Switch 2
+  Pro Controller". The audio mode setting works from the config page,
+  including mid-stream.
+- **The mic works** (`-DS2_HEADSET_MIC=ON`): 1500 frames per 30 s,
+  decoded on core 1 without disturbing the encoder. Fixes from testing:
+  - **Audio-in's buttons have their own layout** (the controller's USB
+    report's), mapped by pressing every button: byte 2 = B A Y X R ZR +
+    RS, byte 3 = Down Right Left Up L ZL − LS, byte 4 = Home Capture GR
+    GL C (bits 0 up). The old code took them as input-report bits, so
+    buttons came out wrong while the mic was on. Checked with evdev: the
+    same buttons with the mic on and off.
+  - **Level:** speech at a normal distance came in at about -35 to -45
+    dBFS RMS (peaks about -20) on Josh's headset; now +12 dB, clipped.
+    Earbuds with an inline mic arrive tomorrow to compare.
+  - **Start-up pop:** the controller's first ~350 ms of mic audio is a
+    full-scale pop and junk; the first 400 ms are dropped.
+  - The ring level jumps by 960 samples every 20 ms; the packet size (47-49
+    samples) now follows its average (about 128 ms) instead of the raw
+    level, which flipped it about 8,000 times per 30 s.
+  - The controller delivers about 50.07 frames/s by the dongle's clock, so
+    the mic sends a 49-sample packet about 1,700 times per 30 s.
+- **No motion while the mic is open.** Audio-in bytes 65+ do carry motion:
+  a length (30 or 40), a 12-bit tick, then bit-packed data that changes
+  every packet (delta-compressed IMU samples?). Decoding it needs every
+  packet in a row; not done. Note Plasma's volume page keeps every input
+  open while it's showing.

@@ -138,10 +138,20 @@ bool s2_parse_input_report(const uint8_t *d, size_t len, s2_input_t *out) {
     return true;
 }
 
+// Audio-in's button bits, bytes 2-4 bit by bit (0: none).
+static const uint32_t k_audio_in_buttons[24] = {
+    S2_BTN_B,    S2_BTN_A,     S2_BTN_Y,    S2_BTN_X,  S2_BTN_R,  S2_BTN_ZR, S2_BTN_PLUS,  S2_BTN_RSTICK,
+    S2_BTN_DOWN, S2_BTN_RIGHT, S2_BTN_LEFT, S2_BTN_UP, S2_BTN_L,  S2_BTN_ZL, S2_BTN_MINUS, S2_BTN_LSTICK,
+    S2_BTN_HOME, S2_BTN_CAPTURE, S2_BTN_GR, S2_BTN_GL, S2_BTN_C, 0,         0,            0,
+};
+
 bool s2_parse_audio_in(const uint8_t *d, size_t len, s2_audio_in_t *out) {
     if (len < S2_AUDIO_IN_MIN_LEN) return false;
     out->seq = d[0];
-    out->buttons = (uint32_t)d[2] | (uint32_t)d[3] << 8 | (uint32_t)d[4] << 16;
+    uint32_t raw = (uint32_t)d[2] | (uint32_t)d[3] << 8 | (uint32_t)d[4] << 16;
+    out->buttons = 0;
+    for (int i = 0; i < 24; i++)
+        if (raw & (1u << i)) out->buttons |= k_audio_in_buttons[i];
     s2_unpack12(d + 5, &out->stick_l[0], &out->stick_l[1]);
     s2_unpack12(d + 8, &out->stick_r[0], &out->stick_r[1]);
     out->jack = d[13];

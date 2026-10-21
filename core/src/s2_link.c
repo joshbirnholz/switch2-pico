@@ -1348,7 +1348,7 @@ static void on_audio_in_notification(link_t *k, const uint8_t *value, uint16_t l
     if (!s2_parse_audio_in(value, len, &a)) return;
     s2_input_t in = k->input;
     in.counter = a.seq;
-    in.buttons = (in.buttons & ~0x00ffffffu) | a.buttons;
+    in.buttons = (in.buttons & ~S2_AUDIO_IN_BUTTONS) | a.buttons;
     memcpy(in.stick_l, a.stick_l, sizeof in.stick_l);
     memcpy(in.stick_r, a.stick_r, sizeof in.stick_r);
     memset(in.gyro, 0, sizeof in.gyro);

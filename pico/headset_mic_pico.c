@@ -22,6 +22,15 @@
 // Frames come 960 samples at a time every 20 ms: keep a frame plus 10 ms.
 #define MIC_TARGET    (S2_MIC_FRAME_SAMPLES + 480)
 #define MIC_BAND      240
+// The controller's mic is quiet (speech at about -40 dBFS, peaks about -20,
+// measured 2026-10-21); the Switch must add gain too. +12 dB, clipped.
+#define MIC_GAIN      4
+// The controller's mic starts with a full-scale pop that settles in about
+// 350 ms (measured 2026-10-21); drop its first 400 ms.
+#define MIC_SKIP_FRAMES 20
+// The level jumps by a frame every 20 ms; steer by its average over about
+// 128 ms (the filter's shift), in 1/256 samples.
+#define MIC_AVG_SHIFT 7
 
 typedef struct {
     uint8_t b[S2_MIC_FRAME_BYTES];
@@ -67,14 +76,23 @@ bool headset_mic_decode_one(void) {
         s_bad++;
         return true;
     }
+    static int skip;
     uint32_t w = s_w;
     if (s_flush) {   // only core 1 moves s_w; the reader waits for this
         s_flush = false;
         w = s_r;
+        skip = MIC_SKIP_FRAMES;
+    }
+    if (skip > 0) {
+        skip--;
+        s_w = w;
+        s_frames++;
+        return true;
     }
     for (int i = 0; i < n; i++) {
         if (w - s_r >= MIC_RING_LEN) break;   // full: the host isn't reading
-        s_ring[w & MIC_RING_MASK] = pcm[i];
+        int32_t v = pcm[i] * MIC_GAIN;
+        s_ring[w & MIC_RING_MASK] = (int16_t)(v > INT16_MAX ? INT16_MAX : v < INT16_MIN ? INT16_MIN : v);
         w++;
     }
     __dmb();   // the samples before the level
@@ -85,11 +103,15 @@ bool headset_mic_decode_one(void) {
 
 uint32_t __not_in_flash_func(headset_mic_read)(int16_t *out, uint32_t max) {
     static bool playing;   // false: waiting for the ring to reach MIC_TARGET
+    static int32_t avg;    // the level's average, in 1/256 samples
     uint32_t n = 48;
     uint32_t r = s_r, level = s_w - r;
     __dmb();
     if (s_flush) level = 0;
-    if (!playing && level >= MIC_TARGET) playing = true;
+    if (!playing && level >= MIC_TARGET) {
+        playing = true;
+        avg = (int32_t)level << 8;
+    }
     if (playing && level < 49) {
         playing = false;
         s_underruns++;
@@ -98,10 +120,11 @@ uint32_t __not_in_flash_func(headset_mic_read)(int16_t *out, uint32_t max) {
         memset(out, 0, n * sizeof out[0]);
         return n;
     }
-    if (level > MIC_TARGET + MIC_BAND) {
+    avg += (((int32_t)level << 8) - avg) >> MIC_AVG_SHIFT;
+    if (avg > (MIC_TARGET + MIC_BAND) << 8) {
         n = 49;
         s_long++;
-    } else if (level < MIC_TARGET - MIC_BAND) {
+    } else if (avg < (MIC_TARGET - MIC_BAND) << 8) {
         n = 47;
         s_short++;
     }

@@ -230,6 +230,11 @@ static void test_audio_in(void) {
     CHECK(a.stick_r[0] == 0x846 && a.stick_r[1] == 0x836);
     CHECK((a.jack & 0x07) == 0x07 && (a.jack & S2_AUDIO_IN_FIRST_HALF));
     CHECK(a.mic_len == S2_MIC_HALF_BYTES && a.mic[0] == 0xf8);
+    d[2] = 0x02;   // A
+    d[3] = 0x28;   // Up, ZL
+    d[4] = 0x14;   // GR, C
+    CHECK(s2_parse_audio_in(d, sizeof d, &a));
+    CHECK(a.buttons == (S2_BTN_A | S2_BTN_UP | S2_BTN_ZL | S2_BTN_GR | S2_BTN_C));
     d[14] = 200;   // a length past the end: no mic data
     CHECK(s2_parse_audio_in(d, sizeof d, &a) && a.mic_len == 0);
     CHECK(!s2_parse_audio_in(d, 10, &a));
