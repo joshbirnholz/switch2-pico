@@ -805,3 +805,22 @@ packets/s).
 - **For the dongle:** send `18/04 01`, `18/03 07`, `17/02 80 bb 00 00 02
   f0 00` (the console's order) on the command characteristic, then 240 B
   stereo Opus frames in two halves on 0x002c; `18/04 00` to mute.
+
+### Console settings that matter (reported by Josh, 2026-10-20)
+
+- **System Settings → Audio Output → "Switch 2 Pro Controller Audio
+  Mode": Stable / Low Latency.** "Selecting Low Latency will reduce audio
+  lag compared to Stable. However, the sound may be more likely to cut
+  out." Every capture so far was in **Stable**. That may explain 20 ms
+  frames despite `17/02` asking for 240 samples (5 ms), and the halves sent
+  twice (redundancy). Next: capture Low Latency (frame length, `17/02`
+  payload, duplicates).
+- **The console's microphone test** lists the Pro Controller mic as an
+  input when the earbuds-with-mic are plugged in (not with the aux cable,
+  which it treats as headphones), **but records nothing**: the console
+  can't get sound from this mic either. So the dead mic in our tests isn't
+  a protocol problem. Josh says the same earbuds record fine on a MacBook
+  Air (whether plugged straight in or through the controller: to
+  confirm). Next: sniff the mic test (the mic-enable commands, audio-in
+  subscription) even if the signal stays silent, and try another headset
+  or the TRRS splitter.
