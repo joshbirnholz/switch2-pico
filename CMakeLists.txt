@@ -96,7 +96,7 @@ add_executable(switch2_pico
         ${WEB_UI_GEN}
 )
 if (S2_HEADSET_AUDIO)
-    target_sources(switch2_pico PRIVATE ${PICO_SRC}/headset_audio_pico.c)
+    target_sources(switch2_pico PRIVATE ${PICO_SRC}/headset_audio_pico.c ${PICO_SRC}/usb_audio.c)
     target_link_libraries(switch2_pico opus pico_multicore)
     opus_ram_linker_script(switch2_pico)
     target_compile_definitions(switch2_pico PRIVATE S2_HEADSET_AUDIO=1

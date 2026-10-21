@@ -5,7 +5,8 @@
 // page and the device advertises USB 2.1 + a BOS descriptor (WebUSB landing
 // page, Microsoft OS 2.0 descriptors for automatic WinUSB on Windows). With
 // WebUSB disabled the descriptors match a genuine controller. A profile that
-// uses the Joy-Con 2 mouse adds a boot mouse interface last.
+// uses the Joy-Con 2 mouse adds boot mouse interfaces after those. With the
+// headphone audio (Pico 2 W, SInput mode) a USB speaker comes last.
 
 #include <assert.h>
 #include <string.h>
@@ -17,6 +18,17 @@
 #include "usb_hid.h"
 #include "usb_mode.h"
 #include "webusb.h"
+#if S2_HEADSET_AUDIO
+#include "usb_audio.h"
+#endif
+
+static bool has_audio(void) {
+#if S2_HEADSET_AUDIO
+    return usb_audio_present();
+#else
+    return false;
+#endif
+}
 
 static tusb_desc_device_t s_device = {
     .bLength = sizeof(tusb_desc_device_t),
@@ -41,6 +53,12 @@ uint8_t const *tud_descriptor_device_cb(void) {
     s_device.idProduct = id->pid;
     uint8_t cls = usb_mode_config_only() ? 0x00 : id->device_class;
     s_device.bDeviceClass = s_device.bDeviceSubClass = s_device.bDeviceProtocol = cls;
+    if (has_audio()) {
+        // The audio function is two interfaces under an interface association.
+        s_device.bDeviceClass = TUSB_CLASS_MISC;
+        s_device.bDeviceSubClass = MISC_SUBCLASS_COMMON;
+        s_device.bDeviceProtocol = MISC_PROTOCOL_IAD;
+    }
     // A distinct bcdDevice keeps Windows from reusing a cached "no MS OS
     // descriptor" answer from a genuine controller.
     s_device.bcdUSB = g_settings.webusb_enabled || usb_mode_config_only() ? 0x0210 : 0x0200;
@@ -60,7 +78,12 @@ uint8_t const *tud_descriptor_bos_cb(void) {
 #define EP_VENDOR_IN  0x82
 #define EP_VENDOR_OUT 0x02
 #define EP_MOUSE_IN   0x83   // .. 0x84 (one per Joy-Con 2)
-#define CONFIG_MAX (TUD_CONFIG_DESC_LEN + 64 + TUD_VENDOR_DESC_LEN + USB_MOUSE_COUNT * USB_MOUSE_ITF_DESC_LEN)
+#define EP_AUDIO_OUT  0x05
+#ifndef USB_AUDIO_DESC_LEN
+#define USB_AUDIO_DESC_LEN 0
+#endif
+#define CONFIG_MAX (TUD_CONFIG_DESC_LEN + 64 + TUD_VENDOR_DESC_LEN + USB_MOUSE_COUNT * USB_MOUSE_ITF_DESC_LEN + \
+                    USB_AUDIO_DESC_LEN)
 
 static uint8_t s_config[CONFIG_MAX];
 
@@ -89,6 +112,12 @@ uint8_t const *tud_descriptor_configuration_cb(uint8_t index) {
             itfs++;
         }
     }
+#if S2_HEADSET_AUDIO
+    if (has_audio()) {
+        n += usb_audio_desc(s_config + n, (uint16_t)(sizeof s_config - n), itfs, EP_AUDIO_OUT, 5);
+        itfs += USB_AUDIO_ITF_COUNT;
+    }
+#endif
     // Configuration: bus powered, remote wakeup, 500 mA
     const uint8_t head[] = {9, TUSB_DESC_CONFIGURATION, U16_TO_U8S_LE(n), itfs, 1, 0, 0xA0, 0xFA};
     static_assert(sizeof head == TUD_CONFIG_DESC_LEN, "config header length");
@@ -105,6 +134,7 @@ static const char *string_for(uint8_t index) {
     case 2: return usb_mode_identity()->product;
     case 3: return usb_mode_serial();
     case 4: return "Switch2-Pico Config";
+    case 5: return "Pro Controller headphones";
     default: return NULL;
     }
 }

@@ -5,6 +5,9 @@
 #include "tusb.h"
 #include "class/hid/hid.h"
 #include "device/usbd_pvt.h"
+#if S2_HEADSET_AUDIO
+#include "usb_audio.h"   // pico/: the headphone jack's USB speaker
+#endif
 
 typedef struct {
     uint8_t itf_num;
@@ -383,6 +386,14 @@ static usbd_class_driver_t const s_drivers[] = {
 };
 
 usbd_class_driver_t const *usbd_app_driver_get_cb(uint8_t *driver_count) {
+#if S2_HEADSET_AUDIO
+    static usbd_class_driver_t all[sizeof s_drivers / sizeof s_drivers[0] + 1];
+    memcpy(all, s_drivers, sizeof s_drivers);
+    all[sizeof s_drivers / sizeof s_drivers[0]] = usb_audio_driver;
+    *driver_count = sizeof all / sizeof all[0];
+    return all;
+#else
     *driver_count = sizeof s_drivers / sizeof s_drivers[0];
     return s_drivers;
+#endif
 }

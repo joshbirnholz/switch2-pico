@@ -37,6 +37,7 @@ Switch 2 Pro Controller  ──BLE──▶  dongle    ──USB──▶  PC / 
 | USB modes | **Switch Pro Controller** (default; Switch consoles and PCs), **DualSense Edge** (GL, GR and C become its back paddles and Fn button, so Steam Input can map them), **DualSense**, **Xbox 360 controller**, **GameCube adapter**, or **SInput** (GL, GR, C and Capture as buttons of their own in Steam Input, with the Switch 2 Pro Controller's symbols, plus gyro and rumble). Each mode has its own button map. |
 | Nintendo GameCube Controller | Basic support: buttons, sticks, analog triggers acting as L/R past a threshold, and rumble on its motor (strength by switching it on and off every 12 ms, as SDL does). |
 | Joy-Con 2 | A **Joy-Con 2 (L)** and a **Joy-Con 2 (R)** connected together are one controller, **Joy-Con 2 (L/R)**. A single one is held sideways (SL / SR are its shoulders). Each of the three has its own profiles. **Untested on hardware** (see [Joy-Con 2](#joy-con-2)). |
+| Headphone jack | Pico 2 W, SInput mode: the dongle is also a USB speaker, and what the PC plays comes out of a Pro Controller 2's headphone jack (see [Headphones](#headphones-pro-controller-2)). No microphone yet. |
 | Mouse | Mouse Mode: a Joy-Con 2's optical sensor as a USB mouse next to the controller (a profile option, Xbox 360 and SInput modes). |
 | Configuration page | Over **WebUSB** in Chrome/Edge with the dongle plugged in, or (Pico 2 W only) over the dongle's own Wi-Fi from any phone or computer. |
 
@@ -309,6 +310,24 @@ mode too. On Linux, Steam needs to read the device through hidraw: the
 current `tools/70-switch2-pico.rules` allows it (the Decky plugin installs
 such a rule on SteamOS). It needs an SDL / Steam recent enough to know
 SInput.
+
+#### Headphones (Pro Controller 2)
+
+On a Pico 2 W in SInput mode, the dongle is also a USB sound card with a
+headphone output ("Switch2-Pico SInput"). Choose it as the PC's output
+and the sound will play from headphones plugged into a Switch 2 Pro
+Controller 2's jack. The dongle encodes it the way the Switch 2 does
+(Opus, 48 kHz stereo) in its second processor core.
+
+* The sound comes about 0.2 s late, as on the console in its default
+  "Stable" audio mode.
+* Use the PC's volume control: the controller has none of its own. (On
+  Linux the volume may start at 40 %.)
+* The controller starts playing about half a second after the PC starts
+  a sound. It keeps the audio link open for 30 s after the PC stops, so
+  quick sounds in a row aren't cut.
+* The headphone microphone doesn't work yet, and the other USB modes don't
+  have the sound card yet.
 
 **GameCube adapter mode** presents the dongle as Nintendo's Wii U / Switch
 GameCube controller adapter (WUP-028) with the controller in port 1 (ports
@@ -615,6 +634,8 @@ where it stopped. Please include it in bug reports.
   provides one per BLE report, so the latest sample is repeated.
 * The connection interval requested is 7.5 ms (the Bluetooth minimum). The
   console itself uses 5 ms, which standard controllers don't allow.
+* Headphone audio: Pico 2 W and SInput mode only, output only (no
+  microphone), one controller.
 
 ## Building
 
@@ -632,7 +653,9 @@ make -C test                 # host unit tests
 ```
 
 Requires `arm-none-eabi-gcc` and CMake ≥ 3.13. The SDK fetches and builds
-`picotool` automatically. Debug output goes to UART0 (GP0 TX, 115200 baud),
+`picotool` automatically, and the build fetches libopus 1.5.2 for the
+headphone audio (or pass a checkout with `-DOPUS_DIR=...`; `-DS2_HEADSET_AUDIO=OFF`
+leaves the audio out). Debug output goes to UART0 (GP0 TX, 115200 baud),
 and the same log is available on the configuration page.
 
 ### nRF52840
@@ -671,6 +694,7 @@ sketch.
 | `core/src/app_core.c`, `settings.c` | Glue, USB suspend / wakeup, settings |
 | `core/src/platform.h` | Board services (time, storage, reboot, firmware update) |
 | `pico/fw_update_pico.c`, `nrf52/switch2_nrf/fw_update_nrf.cpp` | Firmware update without the UF2 drive: staging, check, install at boot |
+| `pico/usb_audio.c`, `pico/headset_audio_pico.c` | Headphone audio: the USB speaker, and the Opus encoder on core 1 (`core/src/s2_link.c` sends the frames; see `research/headset-audio.md`) |
 | `pico/` | Pico: BTstack transport, USB descriptors, Wi-Fi page server, LED, BOOTSEL |
 | `nrf52/switch2_nrf/` | nRF52840: Bluefruit transport, USB setup, LittleFS storage, LED |
 | `web/index.html` | The configuration page (WebUSB or HTTP) |
@@ -685,6 +709,10 @@ Protocol knowledge comes from these projects. No code was copied from them.
 * [TommyWabg/Switch2Connect](https://github.com/TommyWabg/switch2-controllers-windows10-gyro): IMU scale measurements, rumble captures
 * [safijari/openpuck](https://github.com/safijari/openpuck) and [SundayMoments/DS5_Bridge](https://github.com/SundayMoments/DS5_Bridge): the dongle concept and Switch Pro output mode
 * [dekuNukem/Nintendo_Switch_Reverse_Engineering](https://github.com/dekuNukem/Nintendo_Switch_Reverse_Engineering), CTCaer's jc_toolkit, [mart1nro/joycontrol](https://github.com/mart1nro/joycontrol) (Poohl's fork): Switch 1 protocol, HD rumble
+
+The Pico 2 W firmware includes [libopus](https://opus-codec.org/) (BSD
+licence) for the headphone audio. The headphone protocol comes from our own
+captures (`research/headset-audio.md`).
 
 ## License
 

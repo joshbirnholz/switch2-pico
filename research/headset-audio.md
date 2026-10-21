@@ -958,3 +958,44 @@ until the USB audio interface feeds it.
 - The BLE writes kept up: 0 busy writes at the default connection interval.
 - The dongle's log (`research/audio/dongle_log.py --follow`) reports frames
   sent, missing, and the encoder time every 5 s.
+
+### Milestone 2: the dongle as a USB speaker (2026-10-20)
+
+SInput mode on the Pico 2 W adds a USB Audio Class 1.0 speaker (48 kHz,
+16-bit stereo, adaptive isochronous OUT, no feature unit) after the other
+interfaces, under an interface association (`pico/usb_audio.c`). Played
+from PipeWire (`pw-play` of a 440 Hz, -20 dBFS file) and recorded at the
+jack: **439.97 Hz, -8.4 dBFS (the same as the built-in tone), THD -72 dB,
+other -37 dB, no dropouts in 67 s, no missing frames**. Gamepad reports
+kept coming at 123/s while it played (125 without).
+
+What it took:
+
+- **Isochronous packets in our own interrupt handler.** TinyUSB queues
+  the next receive from `tud_task()`, and the main loop is often busy for
+  more than the 1 ms between packets: packets that found no buffer were
+  lost (ring underruns every few frames, choppy sound). A USBCTRL_IRQ
+  handler added after TinyUSB's at the same order priority runs first (the
+  SDK makes it the chain head), takes the endpoint's packets from the USB
+  RAM, re-arms the buffer, and clears the endpoint's BUFF_STATUS bit, so
+  TinyUSB never sees that endpoint.
+- Two TinyUSB/RP2 traps before that: queuing a receive while one is still
+  armed panics (`ep 05 was already available`, the watchdog then resets
+  the dongle; Linux sets alternate 1 and 0 a few times while probing), and
+  activating an armed isochronous endpoint again clears its interrupt.
+- **The log blocks.** `LOG()` goes to the UART at 115200 baud, about 9 ms
+  per line, so stats every 5 s made the main loop late and a frame missing
+  every 5 s. Now one line every 30 s, and when a frame is still being
+  encoded at send time, `s2_link.c` waits a few ms for it
+  (`HEADSET_AUDIO_NOT_YET`) rather than sending silence.
+- **Clock drift.** Core 1 encodes a frame as soon as the last one was
+  taken, so it reads the PCM ring at the dongle's pace. The ring's level
+  then shows the drift (this PC: about 19 ppm faster than the dongle).
+  Outside +-5 ms of the target (30 ms) a frame is resampled from 961 or
+  959 samples. Dropping single samples, and starting above the target,
+  gave a 50 Hz buzz (THD -59 dB). Starting exactly at the target, with
+  resampling, gives about one correction per 30 s.
+- PipeWire starts the new sink at 40 % (-23.9 dB): no hardware volume.
+
+Latency: about 30 ms in the ring + 20 ms in the frame queue + 155 ms in the
+controller (Stable) + the PC's own buffer.

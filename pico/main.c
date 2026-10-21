@@ -123,8 +123,6 @@ int main(void) {
     app_core_init();
 #if S2_HEADSET_AUDIO
     headset_audio_init();
-    // Streams only in test-tone builds until the USB audio interface feeds it.
-    s2_link_set_headset_audio(S2_AUDIO_TEST_TONE, S2_AUDIO_MODE_STABLE);
 #endif
     wifi_ap_init();
     if (g_settings.wifi_autostart && !g_settings.bonded) wifi_ap_start();
@@ -136,6 +134,9 @@ int main(void) {
         tud_task();
         cyw43_arch_poll();
         app_core_task();
+#if S2_HEADSET_AUDIO
+        headset_audio_task();
+#endif
         hotkey_task();
         bootsel_task();
         wifi_ap_task();
