@@ -320,7 +320,17 @@ Controller 2's jack. The dongle encodes it the way the Switch 2 does
 (Opus, 48 kHz stereo) in its second processor core.
 
 * The sound comes about 0.2 s late, as on the console in its default
-  "Stable" audio mode.
+  "Stable" audio mode. **Low Latency** (on the configuration page, or
+  Headphones Audio Mode in the Decky plugin) cuts the controller's part
+  from about 155 ms to about 70 ms, but the sound may cut out more often,
+  as on the console. The setting will take effect at once, even during
+  playback.
+* The sound needs a much stronger Bluetooth link than the buttons do (the
+  Pico 2 W's radio can't use the faster 2M mode the console uses). If it
+  cuts out, give the dongle a clear line of sight to the controller: a
+  short USB extension cable that brings it out from behind the PC helps
+  most. Your body between the two (even a leg) can be enough to break it
+  up.
 * Use the PC's volume control: the controller has none of its own. (On
   Linux the volume may start at 40 %.)
 * The controller starts playing about half a second after the PC starts

@@ -409,7 +409,7 @@ function Content() {
       )}
 
       {S && P && ready.length > 0 && headsetAudio(S, t, mode) && (
-        <PanelSection title="Audio Mode">
+        <PanelSection title="Headphones Audio Mode">
           <PanelSectionRow>
             <Block>
               <Dropdown
@@ -417,11 +417,6 @@ function Content() {
                 selectedOption={S.audio_mode === 1 ? 1 : 0}
                 onChange={(o) => save(`audio_mode=${o.data}`)}
               />
-              <div style={{ ...hint, marginTop: 8 }}>
-                The input/output mode can be changed for using headphones connected to a Switch 2 Pro Controller.
-                Selecting Low Latency will reduce audio lag compared to Stable. However, the sound may be more likely to
-                cut out.
-              </div>
             </Block>
           </PanelSectionRow>
         </PanelSection>
