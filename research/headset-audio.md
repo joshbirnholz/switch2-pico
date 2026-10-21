@@ -940,3 +940,21 @@ a float build using the M33's FPU, or 200 MHz.
 Building on Fedora: `cmake ninja-build arm-none-eabi-gcc-cs
 arm-none-eabi-gcc-cs-c++ arm-none-eabi-newlib gcc-c++` (the last for the
 SDK's host tools), Pico SDK 2.2.0 in `~/pico-sdk`, libopus in `~/src/opus`.
+
+### Milestone 1: a test tone from the dongle (2026-10-20)
+
+Firmware built with `-DS2_AUDIO_TEST_TONE=ON`: core 1 encodes a 440 Hz,
+-20 dBFS stereo tone (`pico/headset_audio_pico.c`), and `s2_link.c` sends
+18/04 01, 18/03 07 (Stable), 17/02, then each frame in two halves 5 ms apart
+to 0x002c. Measured at the jack through the USB sound card: 439.99 Hz,
+THD -73 dB, no dropouts in 7 s. Without the test tone the stream stays off
+until the USB audio interface feeds it.
+
+- **The encoder has to run from RAM.** From flash it took 25.5 ms per frame
+  in the firmware (9.4 ms in the benchmark): core 0's code keeps evicting
+  it from the shared XIP cache. 29 % of the frames were missing and the
+  tone was choppy. `pico/opus.cmake` now links the CELT encode path into
+  RAM (`opus_ram_linker_script`): **8.3 ms per frame, 0 missing**.
+- The BLE writes kept up: 0 busy writes at the default connection interval.
+- The dongle's log (`research/audio/dongle_log.py --follow`) reports frames
+  sent, missing, and the encoder time every 5 s.

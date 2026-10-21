@@ -43,6 +43,19 @@ add_custom_command(
         VERBATIM
 )
 
+# Pro Controller 2 headphone jack audio (Opus encoder on core 1).
+# Needs the RP2350 (Pico 2 W): about half a core at 150 MHz.
+if (PICO_PLATFORM MATCHES "rp2350")
+    option(S2_HEADSET_AUDIO "Pro Controller 2 headphone audio" ON)
+else()
+    option(S2_HEADSET_AUDIO "Pro Controller 2 headphone audio" OFF)
+endif()
+# Development: play a 440 Hz tone to the headphones instead of silence.
+option(S2_AUDIO_TEST_TONE "Headphone audio test tone" OFF)
+if (S2_HEADSET_AUDIO)
+    include(${CMAKE_CURRENT_LIST_DIR}/pico/opus.cmake)
+endif()
+
 set(CORE ${CMAKE_CURRENT_LIST_DIR}/core/src)
 set(PICO_SRC ${CMAKE_CURRENT_LIST_DIR}/pico)
 add_executable(switch2_pico
@@ -82,6 +95,13 @@ add_executable(switch2_pico
         ${PICO_SRC}/web/http_server.c
         ${WEB_UI_GEN}
 )
+if (S2_HEADSET_AUDIO)
+    target_sources(switch2_pico PRIVATE ${PICO_SRC}/headset_audio_pico.c)
+    target_link_libraries(switch2_pico opus pico_multicore)
+    opus_ram_linker_script(switch2_pico)
+    target_compile_definitions(switch2_pico PRIVATE S2_HEADSET_AUDIO=1
+            S2_AUDIO_TEST_TONE=$<BOOL:${S2_AUDIO_TEST_TONE}>)
+endif()
 
 target_compile_definitions(switch2_pico PRIVATE
         S2P_VERSION="${S2P_VERSION}"
@@ -110,6 +130,7 @@ target_link_libraries(switch2_pico
         pico_cyw43_arch_lwip_poll
         pico_btstack_ble
         pico_btstack_cyw43
+        pico_multicore
 )
 
 # stdio over the debug UART (GP0/GP1) only; USB is owned by the controller emulation.

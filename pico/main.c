@@ -20,6 +20,9 @@
 #include "platform.h"
 #include "version.h"
 #include "bootsel.h"
+#if S2_HEADSET_AUDIO
+#include "headset_audio_pico.h"
+#endif
 #include "log.h"
 #include "mapping.h"
 #include "procon.h"
@@ -118,6 +121,11 @@ int main(void) {
         for (;;) tud_task();
     }
     app_core_init();
+#if S2_HEADSET_AUDIO
+    headset_audio_init();
+    // Streams only in test-tone builds until the USB audio interface feeds it.
+    s2_link_set_headset_audio(S2_AUDIO_TEST_TONE, S2_AUDIO_MODE_STABLE);
+#endif
     wifi_ap_init();
     if (g_settings.wifi_autostart && !g_settings.bonded) wifi_ap_start();
 

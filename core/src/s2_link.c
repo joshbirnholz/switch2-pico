@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "headset_audio.h"
 #include "log.h"
 #include "platform.h"
 #include "s2_transport.h"
@@ -114,6 +115,13 @@ typedef struct link {
     uint32_t gc_last_send;
     uint32_t hap_last_send;
     bool hap_done;
+
+    // Headphone jack audio (Pro Controller 2)
+    uint8_t audio;               // AUDIO_*
+    bool audio_second_half;      // the next write is a frame's second half
+    uint32_t audio_due;          // when it goes out (ms)
+    uint32_t audio_busy, audio_late_max, audio_report;   // write stats, logged every 5 s
+    uint8_t audio_frame[S2_AUDIO_FRAME_BYTES];
 
     // Controller's own battery level
     bool power_off, power_busy, power_check;
@@ -383,6 +391,94 @@ static void cmd_on_response(link_t *k, const uint8_t *data, uint16_t len) {
         return;
     }
     cmd_finish(k, true, &rsp);
+}
+
+// ---------------------------------------------------------------------------
+// Headphone jack audio (Pro Controller 2; see research/headset-audio.md)
+// ---------------------------------------------------------------------------
+enum { AUDIO_OFF, AUDIO_SETUP, AUDIO_STREAM, AUDIO_FAILED };
+
+static bool s_audio_on;
+static uint8_t s_audio_mode = S2_AUDIO_MODE_STABLE;
+
+__attribute__((weak)) bool headset_audio_take_frame(uint8_t frame[S2_AUDIO_FRAME_BYTES]) {
+    (void)frame;
+    return false;
+}
+
+void s2_link_set_headset_audio(bool on, uint8_t mode) {
+    s_audio_on = on;
+    s_audio_mode = mode;
+}
+
+// 0x18/0x04 01 (unmute), 0x18/0x03 <mode>, then 0x17/0x02 starts the stream.
+static void audio_setup_cb(link_t *k, bool ok, const s2_response_t *rsp, uint32_t last) {
+    (void)rsp;
+    if (k->audio != AUDIO_SETUP) return;
+    if (!ok) {
+        LOG("s2: link %u headphone audio setup failed", k->idx);
+        k->audio = AUDIO_FAILED;
+        return;
+    }
+    if (!last) return;
+    k->audio = AUDIO_STREAM;
+    k->audio_second_half = false;
+    k->audio_due = now_ms();
+    LOG("s2: link %u headphone audio on (%s)", k->idx,
+        s_audio_mode == S2_AUDIO_MODE_LOW_LATENCY ? "low latency" : "stable");
+}
+
+static void audio_task(link_t *k, uint32_t now) {
+    if (!s_audio_on || k->pid != S2_PID_PRO2 || !s2t_has_char(k->idx, S2T_CHAR_AUDIO_OUT)) return;
+    if (k->audio == AUDIO_OFF) {
+        uint8_t unmute = 0x01, mode = s_audio_mode;
+        if (cmd_submit(k, S2_CMD_AUDIO_CTRL, S2_SUB_AUDIO_UNMUTE, &unmute, 1, audio_setup_cb, 0) &&
+            cmd_submit(k, S2_CMD_AUDIO_CTRL, S2_SUB_AUDIO_MODE, &mode, 1, audio_setup_cb, 0) &&
+            cmd_submit(k, S2_CMD_AUDIO, S2_SUB_AUDIO_SETUP, S2_AUDIO_SETUP, sizeof S2_AUDIO_SETUP, audio_setup_cb, 1)) {
+            k->audio = AUDIO_SETUP;
+        }
+        return;
+    }
+    if (k->audio != AUDIO_STREAM || (int32_t)(now - k->audio_due) < 0) return;
+    uint32_t late = now - k->audio_due;
+    if (late > k->audio_late_max) k->audio_late_max = late;
+    if ((int32_t)(now - k->audio_report) >= 5000) {
+        LOG("s2: link %u audio writes: %lu busy, latest %lu ms late", k->idx, (unsigned long)k->audio_busy,
+            (unsigned long)k->audio_late_max);
+        k->audio_busy = k->audio_late_max = 0;
+        k->audio_report = now;
+    }
+    if (late > 200) k->audio_due = now;   // fell far behind: carry on from now
+    // Every 20 ms a frame goes out in two halves, the second 5 ms after the first.
+    uint8_t pkt[3 + S2_AUDIO_HALF_BYTES];
+    pkt[0] = 0x00;
+    pkt[2] = S2_AUDIO_HALF_BYTES;
+    if (!k->audio_second_half) {
+        if (!headset_audio_take_frame(k->audio_frame)) {
+            // The silence frame libopus makes at this rate.
+            memset(k->audio_frame, 0, sizeof k->audio_frame);
+            k->audio_frame[0] = 0xfc;
+            k->audio_frame[1] = 0xff;
+            k->audio_frame[2] = 0xfe;
+        }
+        pkt[1] = 0x04;
+        memcpy(pkt + 3, k->audio_frame, S2_AUDIO_HALF_BYTES);
+    } else {
+        pkt[1] = 0x02;
+        memcpy(pkt + 3, k->audio_frame + S2_AUDIO_HALF_BYTES, S2_AUDIO_HALF_BYTES);
+    }
+    s2t_write_result_t st = s2t_write(k->idx, S2T_CHAR_AUDIO_OUT, pkt, sizeof pkt);
+    if (st == S2T_WRITE_BUSY) {   // no TX buffer: next pass
+        k->audio_busy++;
+        return;
+    }
+    if (st == S2T_WRITE_ERROR) {
+        LOG("s2: link %u headphone audio write failed (ATT MTU %u)", k->idx, s2t_mtu(k->idx));
+        k->audio = AUDIO_FAILED;
+        return;
+    }
+    k->audio_due += k->audio_second_half ? 15 : 5;
+    k->audio_second_half = !k->audio_second_half;
 }
 
 // ---------------------------------------------------------------------------
@@ -1779,6 +1875,7 @@ void s2_link_task(void) {
             led_task(k);
             features_task(k);
             rumble_task(k, now);
+            audio_task(k, now);
             power_task(k);
         } else {
             k->gc_running = false;

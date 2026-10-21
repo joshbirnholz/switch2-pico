@@ -23,6 +23,8 @@ extern "C" {
 typedef enum {
     S2T_CHAR_COMMAND = 0,   // 649d4ac9-... (write without response)
     S2T_CHAR_VIBRATION,     // controller specific rumble output (optional)
+    S2T_CHAR_AUDIO_OUT,     // Pro Controller 2 headphone output (optional; write without response)
+    S2T_CHAR_AUDIO_IN,      // Pro Controller 2 mic + input report (optional; notify)
 } s2t_char_t;
 
 typedef enum {

@@ -42,6 +42,9 @@ extern const uint8_t S2_UUID_INPUT_JOYCON_L[16];   // cc1bbbb5-... (report 0x07)
 extern const uint8_t S2_UUID_INPUT_JOYCON_R[16];   // d5a9e01e-... (report 0x08)
 extern const uint8_t S2_UUID_VIB_JOYCON_L[16];
 extern const uint8_t S2_UUID_VIB_JOYCON_R[16];
+// Pro Controller 2 headphone jack (firmware 2.0+, see research/headset-audio.md).
+extern const uint8_t S2_UUID_AUDIO_OUT[16];        // cc483f51-...-b06 headphones (write without response)
+extern const uint8_t S2_UUID_AUDIO_IN[16];         // 7492866c-...-0f9 mic + inputs (notify)
 extern const uint8_t S2_UUID_REPORT_RATE_DESC[16]; // 679d5510-... "set report rate?" descriptor
 extern const uint8_t S2_UUID_UNKNOWN_SVC_WRITE[16];// 00c5af5d-...-bd282 (console writes 01 00 here first)
 
@@ -68,6 +71,24 @@ extern const uint8_t S2_UUID_UNKNOWN_SVC_WRITE[16];// 00c5af5d-...-bd282 (consol
 #define S2_SUB_PAIR_CONFIRM_LTK   0x02
 #define S2_SUB_PAIR_FINALIZE      0x03
 #define S2_SUB_PAIR_EXCHANGE_KEY  0x04
+
+// Headphone jack audio (Pro Controller 2). 0x17/0x02 with S2_AUDIO_SETUP
+// starts the stream; 0x18/0x04 01 unmutes (00 mutes); 0x18/0x03 picks the
+// Pro Controller audio mode, as in the console's settings.
+#define S2_CMD_AUDIO              0x17
+#define S2_SUB_AUDIO_SETUP        0x02
+#define S2_CMD_AUDIO_CTRL         0x18
+#define S2_SUB_AUDIO_MODE         0x03
+#define S2_SUB_AUDIO_UNMUTE       0x04
+#define S2_AUDIO_MODE_STABLE      0x07   // the console's default; about 155 ms
+#define S2_AUDIO_MODE_LOW_LATENCY 0x02   // about 68 ms, may cut out more
+// Output: each 20 ms frame is Opus CELT, 48 kHz stereo, CBR 240 bytes
+// (96 kbit/s), written to S2_UUID_AUDIO_OUT in two halves 5 ms apart:
+// 00 04 78 + bytes 0-119, then 00 02 78 + bytes 120-239.
+#define S2_AUDIO_FRAME_BYTES      240
+#define S2_AUDIO_HALF_BYTES       120
+#define S2_AUDIO_FRAME_SAMPLES    960
+extern const uint8_t S2_AUDIO_SETUP[7];             // 80 bb 00 00 02 f0 00
 
 #define S2_FEATURE_BUTTONS  0x01
 #define S2_FEATURE_STICKS   0x02

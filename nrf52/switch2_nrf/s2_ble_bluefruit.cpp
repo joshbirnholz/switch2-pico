@@ -590,6 +590,7 @@ void s2t_disconnect(uint8_t l) {
 bool s2t_has_char(uint8_t l, s2t_char_t ch) {
     if (l >= S2T_LINKS) return false;
     if (ch == S2T_CHAR_COMMAND) return s_l[l].ch_cmd && s_l[l].ch_cmd->discovered();
+    if (ch != S2T_CHAR_VIBRATION) return false;   // no headphone audio on this board
     return s_l[l].ch_vib != nullptr;
 }
 

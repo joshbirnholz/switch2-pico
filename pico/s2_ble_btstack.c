@@ -38,6 +38,9 @@ typedef struct {
     bool have_service;
     gatt_client_characteristic_t ch_input, ch_cmd, ch_cmd_rsp, ch_vib;
     bool have_input, have_cmd, have_cmd_rsp, have_vib;
+    // Pro Controller 2 headphone jack (firmware 2.0+)
+    gatt_client_characteristic_t ch_audio_out, ch_audio_in;
+    bool have_audio_out, have_audio_in;
     gatt_client_notification_t notif_input, notif_cmd;
     // Controller-specific input report, read now and then for its Power Info byte.
     gatt_client_characteristic_t ch_power;
@@ -83,6 +86,7 @@ static void reset_gatt(uint8_t l) {
     b->req_pending = false;
     b->input_cccd_wanted = false;
     b->have_service = b->have_input = b->have_cmd = b->have_cmd_rsp = b->have_vib = b->have_power = false;
+    b->have_audio_out = b->have_audio_in = false;
 }
 
 // Enable notifications by writing the CCCD with a Write Request at
@@ -163,6 +167,8 @@ static void gatt_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet,
             b->ch_power = c;
             b->have_power = true;
         }
+        else if (uuid_eq(c.uuid128, S2_UUID_AUDIO_OUT)) { b->ch_audio_out = c; b->have_audio_out = true; }
+        else if (uuid_eq(c.uuid128, S2_UUID_AUDIO_IN)) { b->ch_audio_in = c; b->have_audio_in = true; }
         break;
     }
     case GATT_EVENT_QUERY_COMPLETE: {
@@ -200,6 +206,10 @@ static void gatt_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet,
                 b->have_vib ? b->ch_vib.value_handle : 0, b->have_power ? b->ch_power.value_handle : 0,
                 b->ch_cmd.properties, b->ch_cmd_rsp.properties, b->have_vib ? b->ch_vib.properties : 0);
             LOG("s2: link %u commands use %s", l, b->cmd_use_req ? "write requests" : "write commands");
+            if (b->have_audio_out) {
+                LOG("s2: link %u headphone audio out=%04x in=%04x", l, b->ch_audio_out.value_handle,
+                    b->have_audio_in ? b->ch_audio_in.value_handle : 0);
+            }
             b->phase = GP_CMD_CCCD;
             gatt_client_listen_for_characteristic_value_updates(&b->notif_cmd, gatt_handler, b->con, &b->ch_cmd_rsp);
             if (write_cccd(b, &b->ch_cmd_rsp) != ERROR_CODE_SUCCESS) gatt_fail(l, "could not enable command responses");
@@ -400,14 +410,22 @@ void s2t_disconnect(uint8_t l) {
 
 bool s2t_has_char(uint8_t l, s2t_char_t ch) {
     if (l >= S2T_LINKS) return false;
-    return ch == S2T_CHAR_COMMAND ? s_links[l].have_cmd : s_links[l].have_vib;
+    switch (ch) {
+    case S2T_CHAR_COMMAND: return s_links[l].have_cmd;
+    case S2T_CHAR_VIBRATION: return s_links[l].have_vib;
+    case S2T_CHAR_AUDIO_OUT: return s_links[l].have_audio_out;
+    case S2T_CHAR_AUDIO_IN: return s_links[l].have_audio_in;
+    }
+    return false;
 }
 
 s2t_write_result_t s2t_write(uint8_t l, s2t_char_t ch, const uint8_t *data, uint16_t len) {
     if (l >= S2T_LINKS) return S2T_WRITE_ERROR;
     blink_t *b = &s_links[l];
-    if (b->con == HCI_CON_HANDLE_INVALID || !s2t_has_char(l, ch)) return S2T_WRITE_ERROR;
-    uint16_t handle = ch == S2T_CHAR_COMMAND ? b->ch_cmd.value_handle : b->ch_vib.value_handle;
+    if (b->con == HCI_CON_HANDLE_INVALID || !s2t_has_char(l, ch) || ch == S2T_CHAR_AUDIO_IN) return S2T_WRITE_ERROR;
+    uint16_t handle = ch == S2T_CHAR_COMMAND     ? b->ch_cmd.value_handle
+                      : ch == S2T_CHAR_AUDIO_OUT ? b->ch_audio_out.value_handle
+                                                 : b->ch_vib.value_handle;
     if (ch == S2T_CHAR_COMMAND && b->cmd_use_req) {
         if (b->req_pending || b->phase != GP_IDLE) return S2T_WRITE_BUSY;
         if (len > sizeof b->req_buf) return S2T_WRITE_ERROR;

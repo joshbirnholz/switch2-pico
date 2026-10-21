@@ -120,6 +120,10 @@ void s2_link_set_paused(bool paused);
 
 void s2_link_start_gyro_calibration(void);
 
+// Headphone jack audio on a Pro Controller 2: stream the board's frames
+// (headset_audio.h) to it, in S2_AUDIO_MODE_STABLE or _LOW_LATENCY.
+void s2_link_set_headset_audio(bool on, uint8_t mode);
+
 // Lower the scan duty cycle (used while the Wi-Fi access point is on).
 void s2_link_set_low_duty_scan(bool low);
 
