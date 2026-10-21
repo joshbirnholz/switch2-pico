@@ -1,7 +1,7 @@
 // Switch2-Pico: quick controls for the dongle in the Quick Access menu.
 import { addEventListener, definePlugin, removeEventListener, toaster } from "@decky/api";
 import {
-  ButtonItem, DialogButton, Field, Focusable, getGamepadNavigationTrees, Navigation, PanelSection, PanelSectionRow, showModal,
+  ButtonItem, DialogButton, DropdownItem, Field, Focusable, getGamepadNavigationTrees, Navigation, PanelSection, PanelSectionRow, showModal,
   SideMenu, SliderField, staticClasses, TextField, ToggleField,
 } from "@decky/ui";
 import { CSSProperties, ReactNode, useEffect, useRef, useState } from "react";
@@ -411,11 +411,11 @@ function Content() {
       {S && P && ready.length > 0 && headsetAudio(S, t, mode) && (
         <PanelSection title="Headphones">
           <PanelSectionRow>
-            <ToggleField
-              label="Low Latency"
-              description="Less delay than Stable, but the sound may cut out more often."
-              checked={S.audio_mode === 1}
-              onChange={(v) => save(`audio_mode=${v ? 1 : 0}`)}
+            <DropdownItem
+              label="Audio mode"
+              rgOptions={[{ data: 0, label: "Stable" }, { data: 1, label: "Low Latency" }]}
+              selectedOption={S.audio_mode === 1 ? 1 : 0}
+              onChange={(o) => save(`audio_mode=${o.data}`)}
             />
           </PanelSectionRow>
         </PanelSection>
