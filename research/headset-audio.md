@@ -828,3 +828,19 @@ packets/s).
   is faulty. A different headset tells which. Next: sniff the mic test (the mic-enable commands, audio-in
   subscription) even if the signal stays silent, and try another headset
   or the TRRS splitter.
+
+### Low Latency mode capture (2026-10-20, `sniff-20261020-202539-ttyACM1`)
+
+- A fresh pairing was caught by board B. sniff.py derived the LTK
+  (`a7a32c7e6824021fec170368deab91ce`) from 15/04 and loaded it before
+  ENC_REQ, so this session was decrypted live.
+- Same sequence as in Stable, except **`18/03 02` instead of `18/03 07`**
+  (via 0x0032). **`18/03` is the Pro Controller audio mode: 07 = Stable,
+  02 = Low Latency**, which is why its values didn't change the level.
+  `17/02 80 bb 00 00 02 f0 00` is unchanged.
+- Audio-out is the same format: 20 ms stereo CELT frames of 240 B in
+  `04`/`02` halves, TOC 0xFC. The latency difference is probably the
+  controller's buffering, set by 18/03.
+- Not done yet: measure the latency in each mode from the laptop (18/03 02
+  vs 07); sniff the console's mic test; the mono-frame test; Opus on the
+  RP2350.
