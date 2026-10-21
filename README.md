@@ -209,9 +209,9 @@ in Settings → Controller.
 the controller asks the PC to wake up. The PC has to allow it:
 
 * **Linux / SteamOS:** Linux only lets keyboards wake the PC by default.
-  Install the rule from `tools/99-switch2-pico.rules` once (in SteamOS Desktop
+  Install the rule from `tools/70-switch2-pico.rules` once (in SteamOS Desktop
   Mode, from Konsole) and replug the dongle:
-  `sudo cp tools/99-switch2-pico.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules`.
+  `sudo cp tools/70-switch2-pico.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules`.
   `cat /sys/bus/usb/devices/*/power/wakeup` should then list one more `enabled`.
 * **Windows:** Device Manager → the dongle → Power Management → *Allow this
   device to wake the computer* (Windows may only offer this for keyboards and
@@ -306,7 +306,7 @@ buttons count, not mappings stored for buttons it doesn't have. Defaults:
 above its SL.) There are no Steam shortcut outputs in this mode (Quick
 Access Menu (Decky) and Capture do those jobs). Mouse Mode works in this
 mode too. On Linux, Steam needs to read the device through hidraw: the
-current `tools/99-switch2-pico.rules` allows it (the Decky plugin installs
+current `tools/70-switch2-pico.rules` allows it (the Decky plugin installs
 such a rule on SteamOS). It needs an SDL / Steam recent enough to know
 SInput.
 
@@ -405,7 +405,7 @@ effects, and the controller's built-in vibration samples.
 
 A change of mode restarts the dongle, which then has that controller's USB
 IDs; the configuration page still finds it (Linux: install the current
-`tools/99-switch2-pico.rules`, which covers every mode's IDs). The default
+`tools/70-switch2-pico.rules`, which covers every mode's IDs). The default
 mappings go by position (Nintendo A = Circle / Xbox B, B = Cross / Xbox A, and
 so on). The C + GL/GR + button shortcut changes the profile in use and works
 in every mode except DualSense Edge and SInput.
@@ -472,7 +472,7 @@ published by the `pages` job in `.github/workflows/build.yml`. On a fork,
 enable it once under **Settings → Pages → Source: GitHub Actions**.
 
 * **Linux:** allow your user to open the device first:
-  `sudo cp tools/99-switch2-pico.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules`,
+  `sudo cp tools/70-switch2-pico.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules`,
   then replug the dongle.
 * **Windows:** no driver needed; the dongle tells Windows to use WinUSB for
   the configuration interface.

@@ -6,7 +6,7 @@ Used to put a spare nRF52840 board into UF2 mode for the BLE sniffer
 firmware without bridging RST to GND.
 
 Needs write access to the USB device: run with sudo unless the project's
-udev rule (tools/99-switch2-pico.rules) is installed.
+udev rule (tools/70-switch2-pico.rules) is installed.
   sudo .venv/bin/python -I research/audio/dongle_bootloader.py
 """
 import fcntl

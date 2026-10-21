@@ -80,7 +80,7 @@ void s2_link_hook_controller_seen(void) {
     if (!g_settings.usb_remote_wakeup || !tud_suspended() || !platform_time_reached(next)) return;
     next = platform_deadline_ms(1000);
     // Only works if the host armed remote wakeup (on Linux see
-    // tools/99-switch2-pico.rules); TinyUSB ignores the request otherwise.
+    // tools/70-switch2-pico.rules); TinyUSB ignores the request otherwise.
     LOG("usb: controller active, requesting host remote wakeup");
     tud_remote_wakeup();
 }
