@@ -9,7 +9,11 @@ runs on a new connection: one group of the console's commands, then
 18/04 01, 18/03 02, 17/02 and the audio-in subscription, then 3 s of
 quiet. Least first: a later variant may inherit what an earlier one set.
 
-Usage: .venv/bin/python research/audio/mic_ablate.py [VARIANT ...]
+Usage: .venv/bin/python research/audio/mic_ablate.py [--reset-pair] [VARIANT ...]
+
+First run (no reset): every variant clean, even "none", because the clean
+state carried over from an earlier --full run (it survives disconnects and
+sleep). --reset-pair runs the 0x15 pairing steps first in each variant.
 """
 import sys
 import threading
@@ -76,6 +80,14 @@ def run(name, steps, out):
         att.write(0x0023, b"\x01\x00")
         cmd.send_plain(0x07, 0x01)
         cmd.send_plain(0x16, 0x01)
+        if "--reset-pair" in sys.argv:
+            # The working mic state survives disconnects and sleep; the 0x15
+            # pairing steps seem to reset it (noise right after --pair).
+            from phase1 import pair_steps
+
+            class C:
+                send = staticmethod(lambda c, s, d=b"": cmd.send_plain(c, s, d))
+            pair_steps(C, att, out)
         subscribed09 = False
         for st in steps:
             if st[0] == "cmd":
@@ -117,6 +129,7 @@ def run(name, steps, out):
 
 def main():
     names = [a for a in sys.argv[1:] if not a.startswith("--")] or list(GROUPS)
+    # names may repeat (none full none)
     stamp = time.strftime("%Y%m%d-%H%M%S")
     log = open(DATA / f"mic-ablate-{stamp}.log", "w")
 

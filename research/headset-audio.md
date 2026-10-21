@@ -873,3 +873,30 @@ packets/s).
   listened: "perfectly clean").
   Earlier Stable-mode captures showed `07`/`0f` only; their second halves
   were never looked at.
+
+### The mic from the laptop (2026-10-20, `mic_test.py`, `mic_ablate.py`)
+
+- **The mic works from the laptop.** `mic_test.py --full` (the console's
+  setup sequence, then `18/04 01`, `18/03`, `17/02`, input report 0x09 off,
+  audio-in on) recorded Josh's voice cleanly: floor -71 dBFS, voice -31 to
+  -40 dBFS, **in both Low Latency (02) and Stable (07)**. So the mode
+  isn't what enables the mic. (The console's Stable-mode mic test that
+  "recorded nothing" earlier is unexplained; maybe the same state as below.)
+- 50 frames/s need **one notification per 5 ms slot** (frame halves plus
+  two empties); the controller sends one per connection event. At 15 ms
+  (64/s) only 32 frames/s arrive; at 7.5 ms (149/s) all 50 do.
+- Byte 13 bits 4-7 look like the controller's mic queue depth: 0-3 in Low
+  Latency, up to 8 in Stable.
+- **Two runs straight after the console's mic-test session gave flat noise
+  at about -45 dBFS** (all frames, no voice; mic_test.py without --full).
+  The first `--full` run was clean, and since then **every variant is
+  clean, even with no extra commands**, across disconnects, sleep and a
+  re-pairing. So the noise was a controller state the console left behind
+  (it turned the mic stream off after its test). Something in its setup
+  sequence clears it, and the clean state then persists. Which command
+  wasn't found (that would need the noisy state again).
+- **For the dongle:** send the console's whole setup sequence on every
+  connection (it works on the plain command characteristic), then
+  `18/04 01`, `18/03 07|02`, `17/02`; to record, write `00 00` to 0x000f
+  (if input report 0x09 was on) and `01 00` to 0x002f; join the 100 B frame
+  halves. Use a 7.5 ms interval while the mic is on.
