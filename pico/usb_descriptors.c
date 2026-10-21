@@ -134,9 +134,11 @@ uint8_t const *tud_descriptor_configuration_cb(uint8_t index) {
 static const char *string_for(uint8_t index) {
     switch (index) {
     case 1: return usb_mode_identity()->manufacturer;
-    // With the headphones, the name hosts give the sound card (the product
-    // name on Linux, through PipeWire).
-    case 2: return has_audio() ? USB_AUDIO_PRODUCT : usb_mode_identity()->product;
+    // The product name stays the mode's even with the headphones: Steam
+    // keys a controller's settings by it (with the name changed, Steam saw
+    // a new controller and lost the user's button mapping). Linux names
+    // the sound card after it too.
+    case 2: return usb_mode_identity()->product;
     case 3: return usb_mode_serial();
     case 4: return "Switch2-Pico Config";
     case 5: return USB_AUDIO_PRODUCT;

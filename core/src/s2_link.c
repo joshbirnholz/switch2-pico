@@ -124,7 +124,8 @@ typedef struct link {
     uint8_t mic_frame[S2_MIC_FRAME_BYTES];
     bool audio_second_half;      // the next write is a frame's second half
     uint32_t audio_due;          // when it goes out (ms)
-    uint32_t audio_busy, audio_late_max, audio_report;   // write stats, logged every 5 s
+    uint32_t audio_busy, audio_late_max, audio_report;   // write stats, logged every 30 s
+    uint32_t audio_dropped;      // frames skipped for being too late, same
     uint8_t audio_frame[S2_AUDIO_FRAME_BYTES];
 
     // Controller's own battery level
@@ -502,12 +503,21 @@ static void audio_task(link_t *k, uint32_t now) {
     if (late > k->audio_late_max) k->audio_late_max = late;
     if ((int32_t)(now - k->audio_report) >= 30000) {
         // (The log goes out on the UART and holds the main loop up, so rarely.)
-        LOG("s2: link %u audio writes, 30 s: %lu busy, latest %lu ms late", k->idx,
-            (unsigned long)k->audio_busy, (unsigned long)k->audio_late_max);
-        k->audio_busy = k->audio_late_max = 0;
+        LOG("s2: link %u audio writes, 30 s: %lu busy, latest %lu ms late, %lu frames dropped late", k->idx,
+            (unsigned long)k->audio_busy, (unsigned long)k->audio_late_max, (unsigned long)k->audio_dropped);
+        k->audio_busy = k->audio_late_max = k->audio_dropped = 0;
         k->audio_report = now;
     }
-    if (late > 200) k->audio_due = now;   // fell far behind: carry on from now
+    // Fell behind (a weak link held the writes up): skip the frames the
+    // controller would get too late to play, rather than send them in a
+    // burst that loads the struggling link more. Its buffer holds about
+    // 155 ms in Stable and 68 ms in Low Latency.
+    uint32_t max_late = k->audio_mode == S2_AUDIO_MODE_LOW_LATENCY ? 40 : 120;
+    if (!k->audio_second_half && late > max_late) {
+        k->audio_dropped += late / 20;
+        k->audio_due = now;
+        late = 0;
+    }
     // Every 20 ms a frame goes out in two halves, the second 5 ms after the first.
     uint8_t pkt[3 + S2_AUDIO_HALF_BYTES];
     pkt[0] = 0x00;

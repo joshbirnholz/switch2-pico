@@ -324,6 +324,11 @@ static void hci_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, 
         if (hci_event_le_meta_get_subevent_code(packet) == HCI_SUBEVENT_LE_CONNECTION_UPDATE_COMPLETE) {
             int l = link_of(hci_subevent_le_connection_update_complete_get_connection_handle(packet));
             if (l >= 0) s2c_on_conn_interval((uint8_t)l, hci_subevent_le_connection_update_complete_get_conn_interval(packet));
+        } else if (hci_event_le_meta_get_subevent_code(packet) == HCI_SUBEVENT_LE_DATA_LENGTH_CHANGE) {
+            int l = link_of(hci_subevent_le_data_length_change_get_connection_handle(packet));
+            if (l >= 0)
+                LOG("s2: link %d data length %u/%u bytes", l, hci_subevent_le_data_length_change_get_max_tx_octets(packet),
+                    hci_subevent_le_data_length_change_get_max_rx_octets(packet));
         }
         break;
     case GAP_EVENT_RSSI_MEASUREMENT: {
