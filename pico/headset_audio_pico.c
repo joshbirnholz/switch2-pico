@@ -24,6 +24,14 @@
 #include "s2_link.h"
 #include "settings.h"
 #include "usb_audio.h"
+#if S2_HEADSET_MIC
+#include "headset_mic_pico.h"
+// Core 1 decodes mic frames while it waits, if one fits before the next
+// encode (decode about 3 ms).
+#define MIC_POLL(room_us) ((room_us) > 4000 && headset_mic_decode_one())
+#else
+#define MIC_POLL(room_us) false
+#endif
 
 #define FRAME S2_AUDIO_FRAME_SAMPLES   // 960 samples per channel
 // PCM ring, in stereo samples (L | R << 16): 85 ms.
@@ -62,6 +70,7 @@ typedef struct {
 static queue_t s_frames;   // one frame, encoded as soon as the last was taken
 static volatile bool s_encoding;   // core 1 is making the next one
 static volatile uint32_t s_encode_at;   // time_us_32() to start the next one
+static volatile uint32_t s_core1_alive;   // counts up while core 1 runs its loop
 static volatile int s_encoder_error;   // set by core 1, read (and logged) by core 0
 
 // PCM ring: written by core 0 (s_w), read by core 1 (s_r).
@@ -166,10 +175,17 @@ static void core1_main(void) {
     static int16_t pcm[FRAME * 2];
     static frame_t f;
     for (;;) {
-        while (!queue_is_empty(&s_frames)) tight_loop_contents();   // paced by s2_link.c
+        // Paced by s2_link.c taking frames (the next encode is then at least
+        // 9 ms away: room to decode a mic frame).
+        while (!queue_is_empty(&s_frames)) {
+            s_core1_alive++;
+            if (!MIC_POLL(9000)) tight_loop_contents();
+        }
         // Then just in time (when s2_link.c streams; otherwise this is past).
-        while ((int32_t)(time_us_32() - s_encode_at) < 0 && (int32_t)(s_encode_at - time_us_32()) < 25000) {
-            tight_loop_contents();
+        for (;;) {
+            int32_t room = (int32_t)(s_encode_at - time_us_32());
+            if (room <= 0 || room >= 25000) break;
+            if (!MIC_POLL(room)) tight_loop_contents();
         }
         s_encoding = true;
         fill_pcm(pcm);
@@ -190,6 +206,9 @@ static void core1_main(void) {
 }
 
 void headset_audio_init(void) {
+#if S2_HEADSET_MIC
+    headset_mic_init();
+#endif
     queue_init(&s_frames, sizeof(frame_t), 1);
     for (size_t i = 0; i < CORE1_STACK_BYTES / 4; i++) s_core1_stack[i] = STACK_PAINT;
     multicore_launch_core1_with_stack(core1_main, s_core1_stack, sizeof s_core1_stack);
@@ -233,8 +252,12 @@ void headset_audio_usb_stream(bool on) {
 
 void headset_audio_task(void) {
     uint32_t now = to_ms_since_boot(get_absolute_time());
+    // The mic needs the stream to the controller on too.
     bool on = S2_AUDIO_TEST_TONE || usb_audio_streaming() ||
               (s_usb_stream_end && now - s_usb_stream_end < LINGER_MS);
+#if S2_HEADSET_MIC
+    on = on || headset_mic_open();
+#endif
     if (!on) s_usb_stream_end = 0;
     if ((int32_t)(now - s_report_at) >= 30000) report(now);
     s2_link_set_headset_audio(on, g_settings.headset_low_latency ? S2_AUDIO_MODE_LOW_LATENCY : S2_AUDIO_MODE_STABLE);
@@ -243,6 +266,10 @@ void headset_audio_task(void) {
 static void report(uint32_t now) {
     // One line every 30 s: the log holds the main loop up (UART).
     static bool stack_logged;
+    static uint32_t alive_seen;
+    uint32_t alive = s_core1_alive;
+    if (alive == alive_seen) LOG("audio: core 1 has stopped (no progress in 30 s)");
+    alive_seen = alive;
     uint32_t used = core1_stack_used();
     if (used > CORE1_STACK_BYTES - 1024 && !stack_logged) {
         stack_logged = true;
@@ -267,6 +294,9 @@ static void report(uint32_t now) {
     s_enc_frames = s_enc_us_sum = s_enc_us_max = 0;
     s_squeezed = s_stretched = s_underruns = s_skipped = s_overflow = s_usb_in = 0;
     s_report_at = now;
+#if S2_HEADSET_MIC
+    headset_mic_report();
+#endif
 }
 
 headset_audio_take_t headset_audio_take_frame(uint8_t frame[S2_AUDIO_FRAME_BYTES], uint32_t next_due_ms) {
