@@ -203,6 +203,31 @@ typedef struct {
 
 bool s2_parse_input_report(const uint8_t *data, size_t len, s2_input_t *out);
 
+// ---- audio-in notification (Pro Controller 2, S2T_CHAR_AUDIO_IN) ----
+// While subscribed (instead of the input report), 112-byte notifications,
+// one per connection event, carry the buttons, sticks and the headset mic
+// (research/headset-audio.md). Mic frames are Opus CELT FB 20 ms mono, CBR
+// 100 bytes, in two 50-byte halves in consecutive notifications (then two
+// empty ones); the first half has bit 3 of the jack byte set.
+// Not verified yet: that the three button bytes are bytes 4-6 of the input
+// report (GL, GR and C, in its fourth byte, may not be there at all).
+#define S2_AUDIO_IN_MIN_LEN 15
+#define S2_MIC_FRAME_BYTES  100
+#define S2_MIC_HALF_BYTES   50
+#define S2_MIC_FRAME_SAMPLES 960
+#define S2_AUDIO_IN_FIRST_HALF 0x08   // in `jack`
+
+typedef struct {
+    uint8_t seq;
+    uint32_t buttons;           // as s2_input_t, low 24 bits only
+    uint16_t stick_l[2], stick_r[2];
+    uint8_t jack;               // 0x05 headphones, 0x07 headset with mic, | first half, | queue depth << 4
+    uint8_t mic_len;            // bytes of mic frame here (0, or S2_MIC_HALF_BYTES)
+    const uint8_t *mic;         // into the notification
+} s2_audio_in_t;
+
+bool s2_parse_audio_in(const uint8_t *data, size_t len, s2_audio_in_t *out);
+
 // ---- stick calibration ----
 typedef struct {
     uint16_t center[2];

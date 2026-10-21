@@ -59,6 +59,12 @@ void s2t_enable_input(uint8_t link);
 // first one, unsubscribe. Completes with s2c_on_power_info(). False when that
 // report doesn't exist or the GATT channel is busy (try again later).
 bool s2t_poll_power(uint8_t link);
+// Pro Controller 2 headset mic: switch the link's notifications from the
+// input report to audio-in (on), or back (off). Completes with
+// s2c_on_audio_in_enabled(); audio-in packets then arrive through
+// s2c_on_audio_in(). False when the link has no audio-in or the GATT
+// channel is busy (try again later).
+bool s2t_set_audio_in(uint8_t link, bool on);
 void s2t_local_address(uint8_t out[6]);     // big-endian
 uint16_t s2t_mtu(uint8_t link);
 // Read the link's signal strength; completes with s2c_on_rssi() (possibly
@@ -76,6 +82,8 @@ void s2c_on_gatt_ready(uint8_t link, bool ok, const char *error);
 void s2c_on_command_response(uint8_t link, const uint8_t *data, uint16_t len);
 void s2c_on_input_report(uint8_t link, const uint8_t *data, uint16_t len);
 void s2c_on_input_enabled(uint8_t link, bool ok);
+void s2c_on_audio_in(uint8_t link, const uint8_t *data, uint16_t len);
+void s2c_on_audio_in_enabled(uint8_t link, bool on, bool ok);
 void s2c_on_power_info(uint8_t link, bool ok, uint8_t info);
 void s2c_on_conn_interval(uint8_t link, uint16_t conn_interval);
 void s2c_on_disconnected(uint8_t link, uint8_t reason);

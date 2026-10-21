@@ -119,6 +119,9 @@ typedef struct link {
     // Headphone jack audio (Pro Controller 2)
     uint8_t audio;               // AUDIO_*
     uint8_t audio_mode;          // the mode the controller was given
+    uint8_t mic;                 // MIC_*: audio-in instead of the input report
+    uint8_t mic_len;             // bytes of mic_frame collected
+    uint8_t mic_frame[S2_MIC_FRAME_BYTES];
     bool audio_second_half;      // the next write is a frame's second half
     uint32_t audio_due;          // when it goes out (ms)
     uint32_t audio_busy, audio_late_max, audio_report;   // write stats, logged every 5 s
@@ -398,10 +401,12 @@ static void cmd_on_response(link_t *k, const uint8_t *data, uint16_t len) {
 // Headphone jack audio (Pro Controller 2; see research/headset-audio.md)
 // ---------------------------------------------------------------------------
 enum { AUDIO_OFF, AUDIO_SETUP, AUDIO_STREAM, AUDIO_FAILED };
+enum { MIC_OFF, MIC_SWITCHING, MIC_ON };
 
 static bool s_audio_on;
 static uint8_t s_audio_mode = S2_AUDIO_MODE_STABLE;
 static int8_t s_audio_link = -1;   // the one link that streams (frames can't be shared)
+static bool s_mic_on;
 
 __attribute__((weak)) headset_audio_take_t headset_audio_take_frame(uint8_t frame[S2_AUDIO_FRAME_BYTES],
                                                                     uint32_t next_due_ms) {
@@ -410,9 +415,30 @@ __attribute__((weak)) headset_audio_take_t headset_audio_take_frame(uint8_t fram
     return HEADSET_AUDIO_NONE;
 }
 
+__attribute__((weak)) void headset_audio_mic_frame(const uint8_t *opus, size_t len) {
+    (void)opus;
+    (void)len;
+}
+
 void s2_link_set_headset_audio(bool on, uint8_t mode) {
     s_audio_on = on;
     s_audio_mode = mode;
+}
+
+void s2_link_set_headset_mic(bool on) {
+    s_mic_on = on;
+}
+
+// The mic: audio-in instead of the input report while the host records
+// (and the stream to the controller is on, which the mic needs).
+static void mic_task(link_t *k) {
+    if (k->mic == MIC_SWITCHING) return;
+    bool want = s_mic_on && k->audio == AUDIO_STREAM;
+    if (want == (k->mic == MIC_ON)) return;
+    if (s2t_set_audio_in(k->idx, want)) {
+        k->mic = MIC_SWITCHING;
+        k->mic_len = 0;
+    }
 }
 
 // 0x18/0x04 01 (unmute), 0x18/0x03 <mode>, then 0x17/0x02 starts the stream.
@@ -436,9 +462,12 @@ static void audio_setup_cb(link_t *k, bool ok, const s2_response_t *rsp, uint32_
 static void audio_task(link_t *k, uint32_t now) {
     if (k->pid != S2_PID_PRO2 || !s2t_has_char(k->idx, S2T_CHAR_AUDIO_OUT)) return;
     if (s_audio_link >= 0 && s_audio_link != k->idx) return;
+    mic_task(k);
     if (!s_audio_on) {
-        // Stop between frames; 18/04 00 mutes the jack (otherwise the
-        // controller may keep looping its last frame).
+        // Stop between frames, and after the mic is back to the input
+        // report; 18/04 00 mutes the jack (otherwise the controller may keep
+        // looping its last frame).
+        if (k->mic != MIC_OFF) return;
         if (k->audio == AUDIO_OFF || (k->audio == AUDIO_STREAM && k->audio_second_half)) return;
         uint8_t mute = 0x00;
         if (k->audio == AUDIO_STREAM && !cmd_submit(k, S2_CMD_AUDIO_CTRL, S2_SUB_AUDIO_UNMUTE, &mute, 1, NULL, 0)) {
@@ -1246,9 +1275,9 @@ static void after_init(link_t *k) {
     s2t_enable_input(k->idx);
 }
 
-static void on_input_notification(link_t *k, const uint8_t *value, uint16_t len) {
-    s2_input_t in;
-    if (!s2_parse_input_report(value, len, &in)) return;
+// `has_imu`: false for audio-in packets, which only carry buttons and sticks.
+static void on_input(link_t *k, const s2_input_t *inp, bool has_imu) {
+    s2_input_t in = *inp;
     k->input = in;
     k->input_seq++;
     k->info.reports++;
@@ -1259,7 +1288,7 @@ static void on_input_notification(link_t *k, const uint8_t *value, uint16_t len)
     // Gyro range auto detection: if the IMU timestamp advances in real
     // microseconds the gyro is +-2000 dps over int16; otherwise use the
     // alternative scale SDL found on such controllers.
-    if (!k->imu_detected && in.imu_timestamp) {
+    if (has_imu && !k->imu_detected && in.imu_timestamp) {
         if (k->imu_samples == 0) {
             k->imu_first_ts = in.imu_timestamp;
             k->imu_first_time = platform_millis();
@@ -1301,9 +1330,37 @@ static void on_input_notification(link_t *k, const uint8_t *value, uint16_t len)
         k->mouse_dy += dy;
     }
 
-    if (s_cal_active && k == imu_link()) {
+    if (has_imu && s_cal_active && k == imu_link()) {
         for (int i = 0; i < 3; i++) s_cal_sum[i] += in.gyro[i];
         s_cal_n++;
+    }
+}
+
+static void on_input_notification(link_t *k, const uint8_t *value, uint16_t len) {
+    s2_input_t in;
+    if (s2_parse_input_report(value, len, &in)) on_input(k, &in, true);
+}
+
+// While the mic is on: buttons and sticks from audio-in (the rest as last
+// reported, the gyro still), and the mic frames joined from their halves.
+static void on_audio_in_notification(link_t *k, const uint8_t *value, uint16_t len) {
+    s2_audio_in_t a;
+    if (!s2_parse_audio_in(value, len, &a)) return;
+    s2_input_t in = k->input;
+    in.counter = a.seq;
+    in.buttons = (in.buttons & ~0x00ffffffu) | a.buttons;
+    memcpy(in.stick_l, a.stick_l, sizeof in.stick_l);
+    memcpy(in.stick_r, a.stick_r, sizeof in.stick_r);
+    memset(in.gyro, 0, sizeof in.gyro);
+    on_input(k, &in, false);
+    if (a.mic_len != S2_MIC_HALF_BYTES) return;
+    if (a.jack & S2_AUDIO_IN_FIRST_HALF) {
+        memcpy(k->mic_frame, a.mic, S2_MIC_HALF_BYTES);
+        k->mic_len = S2_MIC_HALF_BYTES;
+    } else if (k->mic_len == S2_MIC_HALF_BYTES) {
+        memcpy(k->mic_frame + S2_MIC_HALF_BYTES, a.mic, S2_MIC_HALF_BYTES);
+        k->mic_len = 0;
+        headset_audio_mic_frame(k->mic_frame, S2_MIC_FRAME_BYTES);
     }
 }
 
@@ -1607,6 +1664,23 @@ void s2c_on_command_response(uint8_t link, const uint8_t *data, uint16_t len) {
 void s2c_on_input_report(uint8_t link, const uint8_t *data, uint16_t len) {
     link_t *k = link_at(link);
     if (k && (k->phase == PH_READY || k->phase == PH_INPUT_ENABLE)) on_input_notification(k, data, len);
+}
+
+void s2c_on_audio_in(uint8_t link, const uint8_t *data, uint16_t len) {
+    link_t *k = link_at(link);
+    if (k && k->phase == PH_READY && k->mic != MIC_OFF) on_audio_in_notification(k, data, len);
+}
+
+void s2c_on_audio_in_enabled(uint8_t link, bool on, bool ok) {
+    link_t *k = link_at(link);
+    if (!k || k->mic != MIC_SWITCHING) return;
+    if (!ok) {
+        // Half switched, the controller may send no input at all: start over.
+        drop_connection(k, on ? "could not turn the mic on" : "could not turn the mic off");
+        return;
+    }
+    k->mic = on ? MIC_ON : MIC_OFF;
+    LOG("s2: link %u headset mic %s", k->idx, on ? "on (input from audio-in, no motion)" : "off");
 }
 
 void s2c_on_input_enabled(uint8_t link, bool ok) {

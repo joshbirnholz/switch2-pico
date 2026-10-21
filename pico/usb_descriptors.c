@@ -81,6 +81,7 @@ uint8_t const *tud_descriptor_bos_cb(void) {
 #define EP_VENDOR_OUT 0x02
 #define EP_MOUSE_IN   0x83   // .. 0x84 (one per Joy-Con 2)
 #define EP_AUDIO_OUT  0x05
+#define EP_AUDIO_IN   0x86   // the headset mic (S2_HEADSET_MIC)
 #ifndef USB_AUDIO_DESC_LEN
 #define USB_AUDIO_DESC_LEN 0
 #endif
@@ -116,7 +117,7 @@ uint8_t const *tud_descriptor_configuration_cb(uint8_t index) {
     }
 #if S2_HEADSET_AUDIO
     if (has_audio()) {
-        n += usb_audio_desc(s_config + n, (uint16_t)(sizeof s_config - n), itfs, EP_AUDIO_OUT, 5);
+        n += usb_audio_desc(s_config + n, (uint16_t)(sizeof s_config - n), itfs, EP_AUDIO_OUT, EP_AUDIO_IN, 5);
         itfs += USB_AUDIO_ITF_COUNT;
     }
 #endif

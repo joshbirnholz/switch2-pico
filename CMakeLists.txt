@@ -52,6 +52,8 @@ else()
 endif()
 # Development: play a 440 Hz tone to the headphones instead of silence.
 option(S2_AUDIO_TEST_TONE "Headphone audio test tone" OFF)
+# In development: the headset mic as a USB microphone (not tested yet).
+option(S2_HEADSET_MIC "Pro Controller 2 headset mic (in development)" OFF)
 if (S2_HEADSET_AUDIO)
     include(${CMAKE_CURRENT_LIST_DIR}/pico/opus.cmake)
 endif()
@@ -98,9 +100,15 @@ add_executable(switch2_pico
 if (S2_HEADSET_AUDIO)
     target_sources(switch2_pico PRIVATE ${PICO_SRC}/headset_audio_pico.c ${PICO_SRC}/usb_audio.c)
     target_link_libraries(switch2_pico opus pico_multicore)
-    opus_ram_linker_script(switch2_pico)
     target_compile_definitions(switch2_pico PRIVATE S2_HEADSET_AUDIO=1
             S2_AUDIO_TEST_TONE=$<BOOL:${S2_AUDIO_TEST_TONE}>)
+    if (S2_HEADSET_MIC)
+        target_sources(switch2_pico PRIVATE ${PICO_SRC}/headset_mic_pico.c)
+        target_compile_definitions(switch2_pico PRIVATE S2_HEADSET_MIC=1)
+        opus_ram_linker_script(switch2_pico celt/celt_decoder src/opus_decoder)
+    else()
+        opus_ram_linker_script(switch2_pico)
+    endif()
 endif()
 
 target_compile_definitions(switch2_pico PRIVATE

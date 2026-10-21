@@ -44,6 +44,7 @@ target_link_libraries(opus PRIVATE pico_stdlib)
 # evicting it from the shared XIP cache. The SDK's linker script leaves files
 # excluded from the flash .text in .data (RAM); add the CELT encode path.
 # (SILK, linked but unused with RESTRICTED_LOWDELAY, stays in flash.)
+# Extra files (as celt/celt_decoder) after `target` go to RAM too.
 function(opus_ram_linker_script target)
     string(REGEX REPLACE "-.*" "" chip ${PICO_PLATFORM})   # rp2350-arm-s -> rp2350
     set(sdk_ld ${PICO_SDK_PATH}/src/rp2_common/pico_crt0/${chip}/memmap_default.ld)
@@ -51,7 +52,7 @@ function(opus_ram_linker_script target)
     set(objs "")
     foreach (f celt/bands celt/celt celt/celt_encoder celt/celt_lpc celt/cwrs celt/entcode celt/entenc
             celt/kiss_fft celt/laplace celt/mathops celt/mdct celt/modes celt/pitch celt/quant_bands
-            celt/rate celt/vq src/opus src/opus_encoder)
+            celt/rate celt/vq src/opus src/opus_encoder ${ARGN})
         get_filename_component(name ${f} NAME)
         string(APPEND objs " *libopus.a:${name}.c.o")
     endforeach()

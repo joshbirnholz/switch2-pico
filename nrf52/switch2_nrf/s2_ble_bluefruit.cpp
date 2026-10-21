@@ -648,6 +648,13 @@ void s2t_enable_input(uint8_t l) {
     ada_callback(NULL, 0, enable_input_worker, l);
 }
 
+// The headset mic needs the Pico 2 W's Opus decoder: not on this board.
+bool s2t_set_audio_in(uint8_t l, bool on) {
+    (void)l;
+    (void)on;
+    return false;
+}
+
 bool s2t_poll_power(uint8_t l) {
     if (l >= S2T_LINKS) return false;
     blink_t &b = s_l[l];

@@ -211,6 +211,30 @@ static void test_input_report(void) {
     CHECK(!s2_parse_input_report(d, 10, &in));
 }
 
+// An audio-in notification as captured (mic-20261020-224105.raw), first
+// half of a mic frame; the sticks at rest.
+static void test_audio_in(void) {
+    static const char hex[] = "0020000000d8d78446688330000f32f8789a46c05d5169a7186eb980f3d2b0adf44dbaa5ba"
+                              "6436e06228760c4c7607488e828e8a62cf20705e9067faf80d0a844c";
+    uint8_t d[112];
+    memset(d, 0, sizeof d);
+    for (size_t i = 0; i + 1 < sizeof hex; i += 2) {
+        unsigned v;
+        sscanf(hex + i, "%2x", &v);
+        d[i / 2] = (uint8_t)v;
+    }
+    s2_audio_in_t a;
+    CHECK(s2_parse_audio_in(d, sizeof d, &a));
+    CHECK(a.seq == 0 && a.buttons == 0);
+    CHECK(a.stick_l[0] == 0x7d8 && a.stick_l[1] == 0x84d);
+    CHECK(a.stick_r[0] == 0x846 && a.stick_r[1] == 0x836);
+    CHECK((a.jack & 0x07) == 0x07 && (a.jack & S2_AUDIO_IN_FIRST_HALF));
+    CHECK(a.mic_len == S2_MIC_HALF_BYTES && a.mic[0] == 0xf8);
+    d[14] = 200;   // a length past the end: no mic data
+    CHECK(s2_parse_audio_in(d, sizeof d, &a) && a.mic_len == 0);
+    CHECK(!s2_parse_audio_in(d, 10, &a));
+}
+
 // ---------------------------------------------------------------------------
 // The Pro Controller's active profile map (test_defaults: Switch Pro profile).
 #define PRO_MAP(st) settings_active_map(&(st), CTRL_PRO)
@@ -1211,6 +1235,7 @@ int main(void) {
     test_adv();
     test_commands();
     test_input_report();
+    test_audio_in();
     test_mapping();
     test_quick_remap();
     test_macro();

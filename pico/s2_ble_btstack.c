@@ -25,6 +25,8 @@ typedef enum {
     GP_POWER_ON,      // subscribing to the controller-specific report
     GP_POWER_WAIT,    // ... waiting for one
     GP_POWER_OFF,     // ... unsubscribing
+    GP_AUDIO_IN_1,    // switching to / from audio-in: the first CCCD write
+    GP_AUDIO_IN_2,    // ... the second
 } gatt_phase_t;
 
 static btstack_packet_callback_registration_t s_hci_cb;
@@ -41,7 +43,8 @@ typedef struct {
     // Pro Controller 2 headphone jack (firmware 2.0+)
     gatt_client_characteristic_t ch_audio_out, ch_audio_in;
     bool have_audio_out, have_audio_in;
-    gatt_client_notification_t notif_input, notif_cmd;
+    bool audio_in_on;   // the switch running (or done) is to audio-in
+    gatt_client_notification_t notif_input, notif_cmd, notif_audio_in;
     // Controller-specific input report, read now and then for its Power Info byte.
     gatt_client_characteristic_t ch_power;
     bool have_power, power_got;
@@ -80,8 +83,10 @@ static void reset_gatt(uint8_t l) {
         gatt_client_stop_listening_for_characteristic_value_updates(&b->notif_input);
         gatt_client_stop_listening_for_characteristic_value_updates(&b->notif_cmd);
         gatt_client_stop_listening_for_characteristic_value_updates(&b->notif_power);
+        gatt_client_stop_listening_for_characteristic_value_updates(&b->notif_audio_in);
     }
     b->con = HCI_CON_HANDLE_INVALID;
+    b->audio_in_on = false;
     b->phase = GP_NONE;
     b->req_pending = false;
     b->input_cccd_wanted = false;
@@ -100,6 +105,12 @@ static uint8_t s_cccd_off[2] = {0x00, 0x00};
 static uint8_t write_cccd(blink_t *b, gatt_client_characteristic_t *c) {
     return gatt_client_write_value_of_characteristic(gatt_handler, b->con, (uint16_t)(c->value_handle + 1),
                                                      sizeof s_cccd_value, s_cccd_value);
+}
+
+static uint8_t write_cccd_on_off(blink_t *b, gatt_client_characteristic_t *c, bool on) {
+    if (on) return write_cccd(b, c);
+    return gatt_client_write_value_of_characteristic(gatt_handler, b->con, (uint16_t)(c->value_handle + 1),
+                                                     sizeof s_cccd_off, s_cccd_off);
 }
 
 static void power_unsubscribe(uint8_t l) {
@@ -132,6 +143,7 @@ static void gatt_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet,
         const uint8_t *v = gatt_event_notification_get_value(packet);
         uint16_t len = gatt_event_notification_get_value_length(packet);
         if (b->have_input && h == b->ch_input.value_handle) s2c_on_input_report((uint8_t)l, v, len);
+        else if (b->have_audio_in && h == b->ch_audio_in.value_handle) s2c_on_audio_in((uint8_t)l, v, len);
         else if (b->have_power && h == b->ch_power.value_handle) {
             if (b->phase == GP_POWER_WAIT && len >= 2 && !b->power_got) {
                 b->power_got = true;
@@ -240,6 +252,21 @@ static void gatt_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet,
             b->phase = GP_IDLE;
             gatt_client_stop_listening_for_characteristic_value_updates(&b->notif_power);
             s2c_on_power_info(l, b->power_got, b->power_info);
+            break;
+        case GP_AUDIO_IN_1:
+            // On: input report off, then audio-in on (as the console does);
+            // off: audio-in off, then the input report on.
+            b->phase = GP_AUDIO_IN_2;
+            if (status != ATT_ERROR_SUCCESS ||
+                write_cccd_on_off(b, b->audio_in_on ? &b->ch_audio_in : &b->ch_input, true) != ERROR_CODE_SUCCESS) {
+                b->phase = GP_IDLE;
+                s2c_on_audio_in_enabled(l, b->audio_in_on, false);
+            }
+            break;
+        case GP_AUDIO_IN_2:
+            b->phase = GP_IDLE;
+            if (!b->audio_in_on) gatt_client_stop_listening_for_characteristic_value_updates(&b->notif_audio_in);
+            s2c_on_audio_in_enabled(l, b->audio_in_on, status == ATT_ERROR_SUCCESS);
             break;
         default:
             break;
@@ -469,6 +496,21 @@ uint16_t s2t_mtu(uint8_t l) {
 bool s2t_read_rssi(uint8_t l) {
     if (l >= S2T_LINKS || s_links[l].con == HCI_CON_HANDLE_INVALID) return false;
     return gap_read_rssi(s_links[l].con) == ERROR_CODE_SUCCESS;
+}
+
+bool s2t_set_audio_in(uint8_t l, bool on) {
+    if (l >= S2T_LINKS) return false;
+    blink_t *b = &s_links[l];
+    if (b->con == HCI_CON_HANDLE_INVALID || !b->have_audio_in) return false;
+    if (b->req_pending || b->phase != GP_IDLE) return false;   // one GATT request at a time
+    b->audio_in_on = on;
+    if (on) gatt_client_listen_for_characteristic_value_updates(&b->notif_audio_in, gatt_handler, b->con, &b->ch_audio_in);
+    if (write_cccd_on_off(b, on ? &b->ch_input : &b->ch_audio_in, false) != ERROR_CODE_SUCCESS) {
+        if (on) gatt_client_stop_listening_for_characteristic_value_updates(&b->notif_audio_in);
+        return false;
+    }
+    b->phase = GP_AUDIO_IN_1;
+    return true;
 }
 
 void s2t_enable_input(uint8_t l) {

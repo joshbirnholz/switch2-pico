@@ -138,6 +138,19 @@ bool s2_parse_input_report(const uint8_t *d, size_t len, s2_input_t *out) {
     return true;
 }
 
+bool s2_parse_audio_in(const uint8_t *d, size_t len, s2_audio_in_t *out) {
+    if (len < S2_AUDIO_IN_MIN_LEN) return false;
+    out->seq = d[0];
+    out->buttons = (uint32_t)d[2] | (uint32_t)d[3] << 8 | (uint32_t)d[4] << 16;
+    s2_unpack12(d + 5, &out->stick_l[0], &out->stick_l[1]);
+    s2_unpack12(d + 8, &out->stick_r[0], &out->stick_r[1]);
+    out->jack = d[13];
+    out->mic_len = d[14];
+    out->mic = d + 15;
+    if ((size_t)out->mic_len > len - 15) out->mic_len = 0;
+    return true;
+}
+
 void s2_parse_stick_cal(const uint8_t data[9], s2_stick_cal_t *out) {
     s2_unpack12(data + 0, &out->center[0], &out->center[1]);
     s2_unpack12(data + 3, &out->max[0], &out->max[1]);

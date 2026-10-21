@@ -6,6 +6,7 @@
 // them (Opus CELT, 48 kHz stereo, 20 ms, CBR S2_AUDIO_FRAME_BYTES).
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include "s2_proto.h"
@@ -24,6 +25,9 @@ typedef enum {
 // when the one after it will be taken, so the board can encode that one
 // just in time, from the freshest audio.
 headset_audio_take_t headset_audio_take_frame(uint8_t frame[S2_AUDIO_FRAME_BYTES], uint32_t next_due_ms);
+// A mic frame from the controller (Opus CELT FB 20 ms mono, `len` bytes:
+// S2_MIC_FRAME_BYTES), from the main loop.
+void headset_audio_mic_frame(const uint8_t *opus, size_t len);
 
 #ifdef __cplusplus
 }
