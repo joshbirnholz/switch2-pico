@@ -12,7 +12,12 @@ Decodes the mic frames and reports the level per window.
 The controller must be paired with this laptop (--pair runs the 0x15
 steps; it then needs pairing with the console again afterwards).
 
-Usage: .venv/bin/python research/audio/mic_test.py [--pair] [--seconds=6]
+Usage: .venv/bin/python research/audio/mic_test.py [--pair] [--seconds=6] [--full]
+
+Without --full (18/04 01, 18/03, 17/02 only), the mic delivered all 50
+frames/s at 7.5 ms but only flat noise at about -45 dBFS, not the voice
+(the console's session: -71 dBFS floor, voice up to -19). --full copies
+the console's whole sequence first.
 """
 import sys
 import threading
@@ -93,9 +98,26 @@ def main():
             class C:
                 send = staticmethod(lambda c, s, d=b"": cmd.send_plain(c, s, d))
             pair_steps(C, att, out)
-        cmd.send_plain(0x18, 0x04, b"\x01")
-        cmd.send_plain(0x18, 0x03, bytes([PHASES[0][1]]))
-        cmd.send_plain(0x17, 0x02, bytes.fromhex("80bb000002f000"))
+        if "--full" in sys.argv:
+            # The console's whole sequence (ablate.py CONSOLE_MID), with input
+            # report 0x09 subscribed, then switched to audio-in as the console
+            # does when the mic starts.
+            from ablate import CONSOLE_MID
+            for st in CONSOLE_MID:
+                if st[0] == "cmd":
+                    cmd.send(st[1], st[2], st[3], via=st[4])
+                elif st[0] == "write":
+                    att.write(st[1], st[2])
+                    if st[1] == 0x000F:
+                        att.on_notify(0x000E, lambda t, d: None)
+            cmd.send(0x18, 0x04, b"\x01")
+            cmd.send(0x18, 0x03, bytes([PHASES[0][1]]), via="audio")
+            cmd.send(0x17, 0x02, bytes.fromhex("80bb000002f000"), via="audio")
+            att.write(0x000F, b"\x00\x00")
+        else:
+            cmd.send_plain(0x18, 0x04, b"\x01")
+            cmd.send_plain(0x18, 0x03, bytes([PHASES[0][1]]))
+            cmd.send_plain(0x17, 0x02, bytes.fromhex("80bb000002f000"))
         att.subscribe(chars[CHAR_AUDIO_IN][0], on_audio_in)
         threading.Thread(target=silence_out, daemon=True).start()
         time.sleep(1.0)
