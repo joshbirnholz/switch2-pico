@@ -819,8 +819,12 @@ packets/s).
   input when the earbuds-with-mic are plugged in (not with the aux cable,
   which it treats as headphones), **but records nothing**: the console
   can't get sound from this mic either. So the dead mic in our tests isn't
-  a protocol problem. Josh says the same earbuds record fine on a MacBook
-  Air (whether plugged straight in or through the controller: to
-  confirm). Next: sniff the mic test (the mic-enable commands, audio-in
+  a protocol problem. The same earbuds record fine plugged **straight into** a
+  MacBook Air's headphone jack (Audacity, "External Microphone"). So the
+  earbuds' mic works, and the failure sits between them and the
+  controller's jack: no signal over Bluetooth, over USB, or in the console's
+  own mic test. Either this headset doesn't suit the controller's jack (mic
+  bias, as with Apple EarPods on some devices) or the controller's mic input
+  is faulty. A different headset tells which. Next: sniff the mic test (the mic-enable commands, audio-in
   subscription) even if the signal stays silent, and try another headset
   or the TRRS splitter.
