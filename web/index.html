@@ -373,6 +373,11 @@ body.offline #usb-help{display:flex}
       <label class="check"><input type="checkbox" data-k="led_follow_host">Player lights follow the host</label>
       <label class="check"><input type="checkbox" data-k="usb_wakeup">Wake a sleeping PC from the controller</label>
     </section>
+    <section class="card stack audio-only" aria-label="Headphones" hidden>
+      <h2>Headphones</h2>
+      <label class="kvrow">Audio mode<select data-k="audio_mode"><option value="0">Stable</option><option value="1">Low Latency</option></select></label>
+      <p class="note">For headphones plugged into a Switch 2 Pro Controller, in SInput mode. Low Latency will reduce the delay (about 70 ms in the controller instead of 155 ms), but the sound may cut out more often, as on the Switch 2. It will take effect as soon as it's saved, even during playback.</p>
+    </section>
     <section class="card stack" aria-label="Decky plugin" data-live>
       <h2>Decky plugin</h2>
       <div class="row" style="gap:6px">
@@ -999,6 +1004,7 @@ function render(){
     el.oninput=()=>{const l=$('v-'+k);if(l)l.textContent=el.value};
   });
   $('bias').textContent='bias: '+S.gyro_bias.join(', ');
+  document.querySelectorAll('.audio-only').forEach(e=>e.hidden=S.headset_audio!==true);
   // Pairing window: boards with a Sync button only (the Pico's BOOTSEL).
   const pb=document.querySelector('[data-k="pair_button"]');
   pb.disabled=!S.sync_button;

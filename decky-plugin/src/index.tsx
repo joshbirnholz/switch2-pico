@@ -408,6 +408,19 @@ function Content() {
         </PanelSection>
       )}
 
+      {S?.headset_audio && (
+        <PanelSection title="Headphones">
+          <PanelSectionRow>
+            <ToggleField
+              label="Low Latency"
+              description="For headphones in a Switch 2 Pro Controller (SInput mode). Less delay than Stable, but the sound may cut out more often."
+              checked={S.audio_mode === 1}
+              onChange={(v) => save(`audio_mode=${v ? 1 : 0}`)}
+            />
+          </PanelSectionRow>
+        </PanelSection>
+      )}
+
       {prefs && <DsuSection prefs={prefs} setPrefs={setPrefs} runMode={runMode} />}
 
       <PanelSection title="Dongle">

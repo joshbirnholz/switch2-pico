@@ -283,10 +283,12 @@ static void api_settings_get(http_response_t *r) {
     jb_str(&j, s->wifi_ssid);
     jb_printf(&j, ",\"wifi_has_pass\":%s,\"ble_tx_power\":%u,\"idle_disconnect\":%u,\"idle_minutes\":%u,"
                   "\"pair_button\":%u,\"joycon_single\":%u,\"sync_button\":%s,"
-                  "\"decky_options\":%u,\"decky_outputs\":{\"switch\":[%d],\"gp\":[%d]}}",
+                  "\"decky_options\":%u,\"decky_outputs\":{\"switch\":[%d],\"gp\":[%d]},"
+                  "\"headset_audio\":%s,\"audio_mode\":%u}",
               s->wifi_pass[0] ? "true" : "false", s->ble_tx_power, !s->idle_disconnect_off, s->idle_minutes,
               s->pair_button, s->joycon_single, platform_has_sync_button() ? "true" : "false",
-              s->decky_options, OUT_DECKY_QAM, GP_DECKY_QAM);
+              s->decky_options, OUT_DECKY_QAM, GP_DECKY_QAM, platform_has_headset_audio() ? "true" : "false",
+              s->headset_low_latency);
     respond_json(r, &j);
 }
 
@@ -441,6 +443,7 @@ static bool apply_kv(settings_t *s, const char *k, const char *v, bool *usb_reco
         {"pair_button", &s->pair_button, 1, false},
         {"joycon_single", &s->joycon_single, 1, false},
         {"decky_options", &s->decky_options, 1, false},
+        {"audio_mode", &s->headset_low_latency, 1, false},   // 0 Stable, 1 Low Latency
         {"wifi_autostart", &s->wifi_autostart, 1, false},
         {"wifi_channel", &s->wifi_channel, 1, false},
     };

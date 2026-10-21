@@ -21,6 +21,8 @@ void platform_unique_id(uint8_t out[PLATFORM_UNIQUE_ID_LEN]);
 const char *platform_name(void);
 // True if this board has the Wi-Fi configuration access point.
 bool platform_has_wifi(void);
+// Pro Controller 2 headphone audio (a USB speaker in SInput mode).
+bool platform_has_headset_audio(void);
 // A button on the board that can act as a Sync button (Pico: BOOTSEL).
 bool platform_has_sync_button(void);
 

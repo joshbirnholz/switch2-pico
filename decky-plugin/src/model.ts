@@ -50,6 +50,9 @@ export interface Settings {
   inputs: string[];
   quick_remap: number;
   decky_options?: number;
+  // Pro Controller 2 headphones (firmware 0.17.0+, Pico 2 W): 0 Stable, 1 Low Latency.
+  headset_audio?: boolean;
+  audio_mode?: number;
 }
 
 // Controller types (ctrl_type_t).

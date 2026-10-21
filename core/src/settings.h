@@ -275,7 +275,8 @@ typedef struct {
     // saves): it is its half of the Joy-Con 2 (L/R).
     uint8_t joycon_single;
     uint8_t decky_options;              // the page shows the outputs that need the Decky plugin
-    uint8_t reserved_end[2];
+    uint8_t headset_low_latency;        // Pro Controller 2 headphones: Low Latency mode (0: Stable)
+    uint8_t reserved_end[1];
 
     uint32_t crc;
 } settings_t;

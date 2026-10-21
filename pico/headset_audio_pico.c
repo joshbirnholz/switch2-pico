@@ -21,6 +21,7 @@
 #include "pico/multicore.h"
 #include "pico/util/queue.h"
 #include "s2_link.h"
+#include "settings.h"
 #include "usb_audio.h"
 
 #define FRAME S2_AUDIO_FRAME_SAMPLES   // 960 samples per channel
@@ -204,7 +205,7 @@ void headset_audio_task(void) {
     bool on = S2_AUDIO_TEST_TONE || usb_audio_streaming() ||
               (s_usb_stream_end && now - s_usb_stream_end < LINGER_MS);
     if (!on) s_usb_stream_end = 0;
-    s2_link_set_headset_audio(on, S2_AUDIO_MODE_STABLE);
+    s2_link_set_headset_audio(on, g_settings.headset_low_latency ? S2_AUDIO_MODE_LOW_LATENCY : S2_AUDIO_MODE_STABLE);
 }
 
 static void report(uint32_t now) {

@@ -33,6 +33,9 @@ __attribute__((weak)) int platform_usb_power(void) {
 
 // Boards without a saved log.
 __attribute__((weak)) void platform_log_flush(void) {}
+__attribute__((weak)) bool platform_has_headset_audio(void) {
+    return false;
+}
 __attribute__((weak)) void platform_usb_rebuild(void) {}
 __attribute__((weak)) bool platform_usb_config_only_supported(void) {
     return true;

@@ -40,6 +40,14 @@ const char *platform_name(void) {
 #endif
 }
 
+bool platform_has_headset_audio(void) {
+#if S2_HEADSET_AUDIO
+    return true;
+#else
+    return false;
+#endif
+}
+
 bool platform_has_wifi(void) {
     return true;
 }
