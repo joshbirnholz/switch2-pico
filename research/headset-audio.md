@@ -999,3 +999,50 @@ What it took:
 
 Latency: about 30 ms in the ring + 20 ms in the frame queue + 155 ms in the
 controller (Stable) + the PC's own buffer.
+
+### The crash in a game, and the fixes (2026-10-21, overnight, no controller)
+
+Josh played a game on SteamOS with the milestone 2 firmware: after a few
+minutes the character kept running one way, the controller dropped and
+came back, but nothing worked; Steam stopped taking input from any
+controller and the PC had to be reset. No log survived.
+
+Tested without a controller, using a test build that is the SInput device
+from boot (`platform_usb_config_only_supported()` false), streaming to the
+speaker while polling `/api/events` as fast as possible (`stress.sh` in
+the session's scratchpad):
+
+- **The milestone 2 firmware reset itself after 67 s**
+  ("boot: last reset: watchdog (main loop stuck)"). That fits the stuck
+  stick: the main loop stops, USB reports stop, the host keeps the last
+  one, and 8 s later the watchdog resets the dongle.
+- Likely cause: the speaker's packets were taken in a buffer interrupt
+  handler ahead of TinyUSB's. A packet completing between the two
+  handlers' reads of BUFF_STATUS reaches TinyUSB, which panics ("Can't
+  continue xfer on inactive ep") for an endpoint with no transfer of its
+  own. Fixed: the endpoint has no buffer interrupt now (BUFF_STATUS bits
+  are only set for endpoints with one, per the register description), is
+  double buffered, and is emptied and re-armed in the class driver's SOF
+  callback. **That build ran 5 minutes and about 300,000 requests without
+  a reset**, but received 432 samples fewer per 30 s than it should (9
+  lost 1 ms packets, the same every 30 s); counters for late, out-of-step
+  and missing SOFs were added to find out why.
+- The build with those counters **never came up properly**: it reset
+  every 8-9 s, once while the PC was configuring it and otherwise before
+  the PC had even given it an address, and kept doing so, so it couldn't
+  be told to enter the bootloader. Not explained. The dongle needs BOOTSEL
+  to recover.
+- Core 1 ran the encoder on the SDK's default 2 KB stack (the whole call
+  chain needs about 3.9 KB: `quant_all_bands` alone 1.8 KB). Now 16 KB,
+  painted, with the most used in the 30 s log. On second look the old
+  overflow probably only reached the unused lower half of SCRATCH_X, so it
+  likely wasn't the crash (the commit message overstates it).
+- **A stuck core 1 stopped the main loop**: reading BOOTSEL every 50 ms
+  parked core 1 with `multicore_lockout_start_blocking()`, which waits
+  forever. If core 1 faults or hangs, the main loop stops there (stuck
+  input, watchdog reset, and a reset loop if it happens early). Now with a
+  2 ms timeout, and the log says when core 1 stops making progress.
+
+Also overnight (not tested on hardware): frames encoded just in time
+(about 14 ms less delay), and a first version of the headset mic behind
+`-DS2_HEADSET_MIC=ON` (USB microphone, audio-in switching, decoder).
