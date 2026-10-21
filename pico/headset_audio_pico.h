@@ -15,8 +15,8 @@ void headset_audio_task(void);
 int headset_audio_encoder_error(void);
 
 // From the USB stack (core 0): the host opened or closed its stream, and
-// (in its interrupt) `samples` 48 kHz stereo samples it sent, one word each
-// (L in the low half, R in the high half).
+// (in the USB interrupt) `samples` 48 kHz stereo samples it sent, one word
+// each (L in the low half, R in the high half).
 void headset_audio_usb_stream(bool on);
 void headset_audio_pcm(const volatile uint32_t *lr, uint32_t samples);
 

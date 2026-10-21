@@ -22,6 +22,8 @@
 #include "usb_audio.h"
 #endif
 
+#define USB_AUDIO_PRODUCT "Nintendo Switch 2 Pro Controller"
+
 static bool has_audio(void) {
 #if S2_HEADSET_AUDIO
     return usb_audio_present();
@@ -131,10 +133,12 @@ uint8_t const *tud_descriptor_configuration_cb(uint8_t index) {
 static const char *string_for(uint8_t index) {
     switch (index) {
     case 1: return usb_mode_identity()->manufacturer;
-    case 2: return usb_mode_identity()->product;
+    // With the headphones, the name hosts give the sound card (the product
+    // name on Linux, through PipeWire).
+    case 2: return has_audio() ? USB_AUDIO_PRODUCT : usb_mode_identity()->product;
     case 3: return usb_mode_serial();
     case 4: return "Switch2-Pico Config";
-    case 5: return "Pro Controller headphones";
+    case 5: return USB_AUDIO_PRODUCT;
     default: return NULL;
     }
 }

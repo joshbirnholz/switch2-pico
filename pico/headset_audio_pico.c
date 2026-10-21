@@ -39,6 +39,15 @@
 // A frame taken longer ago than this is stale: s2_link.c wasn't streaming.
 #define STALE_MS  100
 
+// Core 1's stack. The SDK's default is 2 KB, and the encoder needs about
+// 4 KB (quant_all_bands alone takes 1.8 KB): it overflowed into the heap on
+// every frame, corrupting whatever lay there (a hang minutes into a game, or
+// at boot, depending on the build). Painted, so the log can show the most
+// it has used.
+#define CORE1_STACK_BYTES 16384
+#define STACK_PAINT       0x5354434bu   // "STCK"
+static uint32_t s_core1_stack[CORE1_STACK_BYTES / 4];
+
 typedef struct {
     uint8_t b[S2_AUDIO_FRAME_BYTES];
 } frame_t;
@@ -54,7 +63,7 @@ static volatile bool s_flush;   // core 0 asks core 1 to drop what's in the ring
 
 // Stats, written by one core and logged (then reset) by core 0 every 5 s.
 static volatile uint32_t s_enc_frames, s_enc_us_sum, s_enc_us_max;
-static volatile uint32_t s_squeezed, s_stretched, s_underruns, s_skipped, s_overflow;
+static volatile uint32_t s_squeezed, s_stretched, s_underruns, s_skipped, s_overflow, s_usb_in;
 static uint32_t s_taken, s_missed, s_report_at, s_last_take;
 static bool s_usb_stream;
 static uint32_t s_usb_stream_end;   // when the host last closed its stream (0: never opened)
@@ -169,9 +178,16 @@ static void core1_main(void) {
 }
 
 void headset_audio_init(void) {
-    usb_audio_init();
     queue_init(&s_frames, sizeof(frame_t), 1);
-    multicore_launch_core1(core1_main);
+    for (size_t i = 0; i < CORE1_STACK_BYTES / 4; i++) s_core1_stack[i] = STACK_PAINT;
+    multicore_launch_core1_with_stack(core1_main, s_core1_stack, sizeof s_core1_stack);
+}
+
+// The most core 1's stack has used (bytes), from the paint left at its bottom.
+static uint32_t core1_stack_used(void) {
+    size_t i = 0;
+    while (i < CORE1_STACK_BYTES / 4 && s_core1_stack[i] == STACK_PAINT) i++;
+    return (uint32_t)(CORE1_STACK_BYTES - i * 4);
 }
 
 int headset_audio_encoder_error(void) {
@@ -180,6 +196,7 @@ int headset_audio_encoder_error(void) {
 
 void __not_in_flash_func(headset_audio_pcm)(const volatile uint32_t *lr, uint32_t samples) {
     uint32_t w = s_w, r = s_r;
+    s_usb_in += samples;
     for (uint32_t i = 0; i < samples; i++) {
         if (w - r >= RING_LEN) {   // full: core 1 isn't reading (no controller)
             s_overflow += samples - i;
@@ -191,6 +208,8 @@ void __not_in_flash_func(headset_audio_pcm)(const volatile uint32_t *lr, uint32_
     __dmb();   // the samples before the level
     s_w = w;
 }
+
+static void report(uint32_t now);
 
 void headset_audio_usb_stream(bool on) {
     if (on == s_usb_stream) return;
@@ -205,22 +224,36 @@ void headset_audio_task(void) {
     bool on = S2_AUDIO_TEST_TONE || usb_audio_streaming() ||
               (s_usb_stream_end && now - s_usb_stream_end < LINGER_MS);
     if (!on) s_usb_stream_end = 0;
+    if ((int32_t)(now - s_report_at) >= 30000) report(now);
     s2_link_set_headset_audio(on, g_settings.headset_low_latency ? S2_AUDIO_MODE_LOW_LATENCY : S2_AUDIO_MODE_STABLE);
 }
 
 static void report(uint32_t now) {
     // One line every 30 s: the log holds the main loop up (UART).
+    static bool stack_logged;
+    uint32_t used = core1_stack_used();
+    if (used > CORE1_STACK_BYTES - 1024 && !stack_logged) {
+        stack_logged = true;
+        LOG("audio: core 1 stack nearly full (%lu of %u bytes used)", (unsigned long)used, CORE1_STACK_BYTES);
+    }
     uint32_t n = s_enc_frames;
-    if (s_taken || n) {
-        LOG("audio 30 s: %lu sent, %lu missing; enc avg %lu max %lu us; ring %lu, +%lu -%lu, %lu under, %lu skip, %lu over",
+    if (s_taken || n || s_usb_in) {
+        LOG("audio 30 s: %lu sent, %lu missing; enc avg %lu max %lu us, stack %lu; USB in %lu, ring %lu, "
+            "+%lu -%lu, %lu under, %lu skip, %lu over",
             (unsigned long)s_taken, (unsigned long)s_missed, (unsigned long)(n ? s_enc_us_sum / n : 0),
-            (unsigned long)s_enc_us_max, (unsigned long)(s_w - s_r), (unsigned long)s_squeezed,
-            (unsigned long)s_stretched, (unsigned long)s_underruns, (unsigned long)s_skipped,
-            (unsigned long)s_overflow);
+            (unsigned long)s_enc_us_max, (unsigned long)used, (unsigned long)s_usb_in, (unsigned long)(s_w - s_r),
+            (unsigned long)s_squeezed, (unsigned long)s_stretched, (unsigned long)s_underruns,
+            (unsigned long)s_skipped, (unsigned long)s_overflow);
+        uint32_t both, step, gap;
+        usb_audio_stats(&both, &step, &gap);
+        if (both || step || gap) {
+            LOG("audio 30 s: USB late %lu, out of step %lu, frames without SOF %lu", (unsigned long)both,
+                (unsigned long)step, (unsigned long)gap);
+        }
     }
     s_taken = s_missed = 0;
     s_enc_frames = s_enc_us_sum = s_enc_us_max = 0;
-    s_squeezed = s_stretched = s_underruns = s_skipped = s_overflow = 0;
+    s_squeezed = s_stretched = s_underruns = s_skipped = s_overflow = s_usb_in = 0;
     s_report_at = now;
 }
 
@@ -231,7 +264,6 @@ headset_audio_take_t headset_audio_take_frame(uint8_t frame[S2_AUDIO_FRAME_BYTES
         LOG("audio: Opus encoder error %d", s_encoder_error);
     }
     uint32_t now = to_ms_since_boot(get_absolute_time());
-    if ((int32_t)(now - s_report_at) >= 30000) report(now);
     bool stale = now - s_last_take > STALE_MS;
     frame_t f;
     if (!queue_try_remove(&s_frames, &f)) {

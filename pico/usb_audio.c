@@ -8,20 +8,27 @@
 //
 // TinyUSB only queues the next receive from tud_task(), and the main loop is
 // often busy for longer than the 1 ms between packets (Bluetooth, Wi-Fi):
-// isochronous packets that find no buffer are lost. So the endpoint's
-// packets are taken in an interrupt handler of our own, which runs before
-// TinyUSB's, copies the samples out of the USB RAM and arms the buffer again
-// at once. TinyUSB never sees this endpoint's traffic.
+// isochronous packets that find no buffer are lost. So we run the endpoint
+// ourselves: double buffered, with no buffer interrupt, emptied and armed
+// again at every start of frame (the class driver's SOF callback, in the
+// USB interrupt). Each buffer has a whole frame of slack.
+//
+// Without a buffer interrupt the endpoint never shows in BUFF_STATUS, so
+// TinyUSB's interrupt handler never sees it. (An earlier version took the
+// packets in its own buffer interrupt handler ahead of TinyUSB's. A packet
+// completing between the two handlers' reads of BUFF_STATUS reached TinyUSB,
+// which panics on an endpoint it has no transfer for: the main loop stopped
+// and the watchdog reset the dongle, minutes into a game.)
 
 #include "usb_audio.h"
 
 #include <string.h>
 
-#include "hardware/irq.h"
 #include "hardware/structs/usb.h"
 #include "tusb.h"
 
 #include "headset_audio_pico.h"
+#include "settings.h"
 #include "usb_mode.h"
 
 #define CHANNELS      2
@@ -32,6 +39,12 @@
 #define EP_SIZE       ((RATE / 1000 + 1) * CHANNELS * SAMPLE_BYTES)
 #define AC_CS_LEN     (9 + 12 + 9)   // header, input terminal, output terminal
 
+// Buffer 1 starts 256 bytes after buffer 0 (the ISO offset field of the
+// buffer control register); allocate room for both.
+#define BUF1_OFFSET   256u
+#define ISO_OFFSET_256 (1u << 27)
+#define EP_ALLOC      512u
+
 #define TERMINAL_USB_STREAMING 1
 #define TERMINAL_HEADPHONES    2
 
@@ -39,41 +52,91 @@ static struct {
     uint8_t itf_ac;   // AudioStreaming is itf_ac + 1
     uint8_t ep_out;
     volatile uint8_t alt;
-    bool running;    // the endpoint is set up and armed by us
+    volatile bool running;   // the endpoint is set up and armed by us
+    uint8_t next;            // the buffer the next packet goes to (0, 1)
     tusb_desc_endpoint_t const *ep_desc;
-    // The endpoint's registers and buffer in the USB RAM.
+    // The endpoint's buffer control register and buffers in the USB RAM.
     io_rw_32 *buf_ctrl;
     const volatile uint32_t *buf;
-    uint32_t status_bit;   // its bit in BUFF_STATUS
 } s_audio;
 
 CFG_TUSB_MEM_SECTION CFG_TUSB_MEM_ALIGN static uint8_t s_ctrl[4];
 
-static void __not_in_flash_func(arm)(void) {
-    // Isochronous: always DATA0. Write the rest before AVAIL, 12 cycles
-    // apart (RP2350 datasheet, USB "concurrent access").
-    *s_audio.buf_ctrl = EP_SIZE;
+// Write the buffer control register: the bits, then 12 cycles later the
+// same with AVAIL (RP2350 datasheet, USB "concurrent access").
+static void __not_in_flash_func(buf_ctrl_set)(uint32_t v, uint32_t avail) {
+    *s_audio.buf_ctrl = v;
     busy_wait_at_least_cycles(12);
-    *s_audio.buf_ctrl = EP_SIZE | USB_BUF_CTRL_AVAIL;
+    *s_audio.buf_ctrl = v | avail;
 }
 
-static void __not_in_flash_func(usb_audio_irq)(void) {
-    if (!s_audio.running || !(usb_hw->buf_status & s_audio.status_bit)) return;
-    hw_clear_alias(usb_hw)->buf_status = s_audio.status_bit;   // as TinyUSB clears it
-    uint32_t len = *s_audio.buf_ctrl & USB_BUF_CTRL_LEN_MASK;
+static void arm_both(void) {
+    // Isochronous: always DATA0. SEL: start with buffer 0.
+    buf_ctrl_set(ISO_OFFSET_256 | USB_BUF_CTRL_SEL | EP_SIZE | EP_SIZE << 16,
+                 USB_BUF_CTRL_AVAIL | USB_BUF_CTRL_AVAIL << 16);
+    s_audio.next = 0;
+}
+
+// Take buffer b's packet and arm it again. Done right after a start of
+// frame: the other buffer may be armed, but its packet (130 us on the wire)
+// can't have completed yet, so rewriting its half of the register is safe.
+static void __not_in_flash_func(take)(uint32_t bc, int b) {
+    uint32_t shift = b ? 16u : 0u;
+    uint32_t len = (bc >> shift) & USB_BUF_CTRL_LEN_MASK;
     // A stereo sample is one word of the buffer (L, then R, little-endian).
-    if (s_audio.alt == 1) headset_audio_pcm(s_audio.buf, len / (CHANNELS * SAMPLE_BYTES));
-    arm();
+    if (s_audio.alt == 1) {
+        headset_audio_pcm(s_audio.buf + (b ? BUF1_OFFSET / 4 : 0), len / (CHANNELS * SAMPLE_BYTES));
+    }
+    uint32_t other = bc & (0xffffu << (16u - shift)) & ~ISO_OFFSET_256 & ~USB_BUF_CTRL_SEL;
+    buf_ctrl_set(other | ISO_OFFSET_256 | (uint32_t)EP_SIZE << shift, USB_BUF_CTRL_AVAIL << shift);
 }
 
-void usb_audio_init(void) {
-    // Same order priority as TinyUSB's handler, added later: the SDK puts it
-    // first in the chain.
-    irq_add_shared_handler(USBCTRL_IRQ, usb_audio_irq, PICO_SHARED_IRQ_HANDLER_HIGHEST_ORDER_PRIORITY);
+// Diagnostics: start-of-frame callbacks that found both buffers full or
+// were out of step, and frame numbers skipped between callbacks.
+static volatile uint32_t s_both_full, s_out_of_step, s_frames_skipped;
+static uint32_t s_last_frame;
+
+void usb_audio_stats(uint32_t *both_full, uint32_t *out_of_step, uint32_t *frames_skipped) {
+    *both_full = s_both_full;
+    *out_of_step = s_out_of_step;
+    *frames_skipped = s_frames_skipped;
+    s_both_full = s_out_of_step = s_frames_skipped = 0;
+}
+
+static void __not_in_flash_func(audio_sof)(uint8_t rhport, uint32_t frame_count) {
+    (void)rhport;
+    if (!s_audio.running) return;
+    uint32_t gap = (frame_count - s_last_frame) & 0x7ffu;
+    if (gap > 1 && s_last_frame) s_frames_skipped += gap - 1;
+    s_last_frame = frame_count;
+    {
+        uint32_t bc = *s_audio.buf_ctrl;
+        if ((bc & USB_BUF_CTRL_FULL) && (bc & (USB_BUF_CTRL_FULL << 16))) s_both_full++;
+    }
+    // Usually one buffer is full; both after a late start of frame. In the
+    // order they were filled, starting with s_audio.next.
+    for (int i = 0; i < 2; i++) {
+        uint32_t bc = *s_audio.buf_ctrl;
+        int b = s_audio.next;
+        if (!((bc >> (b ? 16 : 0)) & USB_BUF_CTRL_FULL)) {
+            b ^= 1;   // out of step (a packet lost): follow the hardware
+            if (!((bc >> (b ? 16 : 0)) & USB_BUF_CTRL_FULL)) return;
+            s_out_of_step++;
+        }
+        take(bc, b);
+        s_audio.next = (uint8_t)(b ^ 1);
+    }
 }
 
 bool usb_audio_present(void) {
-    return !usb_mode_config_only() && usb_mode_active() == USB_MODE_SINPUT;
+    // A Pro Controller 2 (the controller type the dongle started for) in
+    // SInput mode. Latched like the USB mode: descriptors must not change.
+    static int present = -1;
+    if (usb_mode_config_only()) return false;
+    if (present < 0) {
+        present = usb_mode_active() == USB_MODE_SINPUT && settings_boot_ctrl(&g_settings) == CTRL_PRO;
+    }
+    return present == 1;
 }
 
 uint16_t usb_audio_desc(uint8_t *buf, uint16_t cap, uint8_t itf, uint8_t ep_out, uint8_t str_idx) {
@@ -116,7 +179,7 @@ static bool audio_deinit(void) {
 
 static void audio_reset(uint8_t rhport) {
     (void)rhport;
-    s_audio.running = false;   // before the rest, for the interrupt handler
+    s_audio.running = false;   // before the rest, for audio_sof()
     memset(&s_audio, 0, sizeof s_audio);
 }
 
@@ -141,7 +204,7 @@ static uint16_t audio_open(uint8_t rhport, tusb_desc_interface_t const *desc_itf
     s_audio.ep_out = s_audio.ep_desc->bEndpointAddress;
     s_audio.alt = 0;
     s_audio.running = false;   // allocating resets the endpoint
-    TU_ASSERT(usbd_edpt_iso_alloc(rhport, s_audio.ep_out, EP_SIZE), 0);
+    TU_ASSERT(usbd_edpt_iso_alloc(rhport, s_audio.ep_out, EP_ALLOC), 0);
     return len;
 }
 
@@ -153,12 +216,14 @@ static bool set_alt(uint8_t rhport, uint8_t alt) {
         TU_ASSERT(usbd_edpt_iso_activate(rhport, s_audio.ep_desc));
         uint8_t num = tu_edpt_number(s_audio.ep_out);
         io_rw_32 *ep_ctrl = &usb_dpram->ep_ctrl[num - 1].out;
-        *ep_ctrl |= EP_CTRL_INTERRUPT_PER_BUFFER;
+        // Double buffered, and no buffer interrupt (see the top).
+        *ep_ctrl = (*ep_ctrl & ~(EP_CTRL_INTERRUPT_PER_BUFFER | EP_CTRL_INTERRUPT_PER_DOUBLE_BUFFER)) |
+                   EP_CTRL_DOUBLE_BUFFERED_BITS;
         s_audio.buf = (const volatile uint32_t *)((uintptr_t)usb_dpram + (*ep_ctrl & 0xffc0u));
         s_audio.buf_ctrl = &usb_dpram->ep_buf_ctrl[num].out;
-        s_audio.status_bit = 1u << (2 * num + 1);
-        arm();
+        arm_both();
         s_audio.running = true;
+        usbd_sof_enable(rhport, SOF_CONSUMER_AUDIO, true);
     }
     headset_audio_usb_stream(alt == 1);
     return true;
@@ -200,7 +265,7 @@ static bool audio_control_xfer_cb(uint8_t rhport, uint8_t stage, tusb_control_re
 }
 
 static bool audio_xfer_cb(uint8_t rhport, uint8_t ep_addr, xfer_result_t result, uint32_t xferred_bytes) {
-    return true;   // the endpoint is handled in usb_audio_irq()
+    return true;   // the endpoint is handled in audio_sof()
 }
 
 const usbd_class_driver_t usb_audio_driver = {
@@ -215,5 +280,5 @@ const usbd_class_driver_t usb_audio_driver = {
     .open = audio_open,
     .control_xfer_cb = audio_control_xfer_cb,
     .xfer_cb = audio_xfer_cb,
-    .sof = NULL,
+    .sof = audio_sof,
 };
