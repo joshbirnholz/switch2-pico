@@ -844,3 +844,22 @@ packets/s).
 - Not done yet: measure the latency in each mode from the laptop (18/03 02
   vs 07); sniff the console's mic test; the mono-frame test; Opus on the
   RP2350.
+
+### The mic works: console mic test, decrypted (2026-10-20, `sniff-20261020-223146-ttyACM1`)
+
+- With **Low Latency** mode set, the console's mic test **recorded and
+  played back** the earbuds' mic. The same test earlier, in **Stable**,
+  recorded nothing.
+- Sequence on reconnection (key `a7a3…91ce` from the Low Latency pairing):
+  the usual setup, then `18/04 01`, `18/03 02` and `17/02` (0x0032), then
+  **unsubscribe input report 0x09 (`00 00` to 0x000f) and subscribe to
+  audio-in (`01 00` to 0x002f)**. About 17 s later it switches back
+  (0x002f off, 0x000f on).
+- Audio-in: 112-byte notifications at about 183/s (5 ms interval); 50
+  frames/s, each 50 B Opus CELT FB 20 ms mono, TOC 0xF8 (as before).
+  **Byte 13 is now 0x17/0x1f/0x27/0x2f**; it was 0x07/0x0f in our Stable
+  tests, so bits 4-5 are new. Decoded (`data/console-mic-test.wav`): noise
+  floor around -71 dBFS, then **speech-like signal up to -18 dBFS at
+  35-41 s**, which was the mic test's recording.
+- Theory: **the mic is live only in Low Latency mode (`18/03 02`)**. Next:
+  test 02 vs 07 from the laptop.
