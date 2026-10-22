@@ -270,22 +270,43 @@ static void test_motion(void) {
     CHECK_NEAR(g[2], 37, 2);
     CHECK(!s2_motion_gyro(&mb, &mb, 14.3f, g));   // no time between them
 
+    // Frame 1 stores (y, z, x): mapped back on parsing.
     from_hex("2864f7000ea7ae0e6ac6c052f79ff16b3dee7e542802c89ff1a79ecf4f2b2c028d3fc6eff40cfe8700", a, 41);
     from_hex("2871d7000e67b20feec540f4df9ff13b3dbd3f5d2802cabff19b9ef92f2f200298bfc68ff400008700", b, 41);
     CHECK(s2_parse_motion(a, sizeof a, &ma) && s2_parse_motion(b, sizeof b, &mb));
     CHECK(mb.frame == 1);
-    CHECK(s2_motion_gyro(&ma, &mb, 14.3f, g));   // stored (y, z, x)
+    CHECK(s2_motion_gyro(&ma, &mb, 14.3f, g));
     CHECK_NEAR(g[0], -11002, 3);
     CHECK_NEAR(g[1], -278, 2);
     CHECK_NEAR(g[2], -423, 2);
-    s2_motion_t other = ma;
-    other.frame = 0;
-    CHECK(!s2_motion_gyro(&other, &mb, 14.3f, g));   // a frame change
 
-    // The console's 30-byte layout isn't decoded: rejected.
-    from_hex("1e7243000c00400e000253d0ff806ef77fd79b2b00ece89cfde095f10f54fe", a, 31);
-    CHECK(!s2_parse_motion(a, 31, &ma));
-    CHECK(!s2_parse_motion(b, 20, &ma));
+    // The other two layouts, from the dongle's mic stream at 7.5 ms
+    // (/api/motion dump): a 40-byte block with layout 6, then a 30-byte one,
+    // and the gyro from a 30-byte block 16 ms before it.
+    uint8_t c[31];
+    s2_motion_t mc;
+    from_hex("287cce000d83d0d617c138c8385f41d33ee599c20f22f071fe83ec062c70806bed232e29487a022301", b, 41);
+    CHECK(s2_parse_motion(b, sizeof b, &mb));
+    CHECK(mb.tick == 3708 && mb.frame == 0);
+    CHECK_NEAR(mb.q[1], -0.02011, 1e-5);
+    CHECK_NEAR(mb.q[2], -0.944576, 1e-5);
+    CHECK_NEAR(mb.q[3], -0.31402, 1e-5);
+    CHECK(mb.accel[0] == 4020 && mb.accel[1] == 665 && mb.accel[2] == 136);
+    from_hex("1e701e000c00aab0f501e36e0d00c3b657f08db20f84e99d029a3d80002601", a, 31);
+    from_hex("1e804e000c005ac2f501546e0f009ff657f0b0b40f885f8f02a42fb1002101", c, 31);
+    CHECK(s2_parse_motion(a, 31, &ma) && s2_parse_motion(c, sizeof c, &mc));
+    CHECK(mc.tick == 3712 && mc.frame == 0);
+    CHECK_NEAR(mc.q[0], 0.136696, 1e-5);
+    CHECK_NEAR(mc.q[2], -0.939723, 1e-5);
+    CHECK(mc.accel[0] == 4020 && mc.accel[1] == 655 && mc.accel[2] == 177);
+    CHECK(s2_motion_gyro(&ma, &mc, 14.3f, g));
+    CHECK_NEAR(g[0], 113, 2);
+    CHECK_NEAR(g[1], 8247, 3);
+    CHECK_NEAR(g[2], 2739, 3);
+
+    CHECK(!s2_parse_motion(c, 20, &mc));   // shorter than its length byte
+    c[0] = 35;
+    CHECK(!s2_parse_motion(c, sizeof c, &mc));   // unknown layout
 }
 
 // ---------------------------------------------------------------------------

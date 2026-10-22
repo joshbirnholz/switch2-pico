@@ -1114,18 +1114,33 @@ shake the controller (`data/motion-20261021-192212.raw` with 0x09,
   and all, so the dongle's gyro calibration still applies. It stays right
   across gaps (the half-second switches), unlike a sampled gyro.
 - **Frame index:** near a half turn from the reference (w near 0) the
-  controller switches the quaternion to frame 1 or 2 (2% of blocks). Frame
-  1 stores (y, z, x) of frame 0 (seen at a switch: the same values,
-  rotated). Frame 2 looked like (-z, y, -x); not confirmed. The dongle
-  takes no gyro across a switch and maps the gyro back per frame.
-- **The console's layout differs:** at its 5 ms interval, 98% of the blocks
-  were 30 bytes with header bits 25-27 = 6 (and 32-33 = 0); its rare
-  40-byte blocks also had 6. Those look like the same idea at other widths
-  (three slow 25-bit fields from bit 41, 6 bits apart, then noisier ones)
-  but aren't decoded. Both laptop captures (15 ms interval) had only the
-  layout above. Which one the dongle gets at 7.5 ms is the next check: the
-  mic build logs "mic motion, 30 s: N blocks decoded, M other" every 30 s.
-- **Firmware:** `s2_parse_motion()` / `s2_motion_gyro()` (core/src/s2_proto.c,
-  tested on captured blocks) and `on_audio_in_notification()`: accel from
-  the block, gyro from the rotation; the gyro holds its last value for up
-  to 250 ms across blocks in another layout, then reads still.
+  controller switches the quaternion to frame 1 or 2. Frame 1 stores
+  (y, z, x) of frame 0, frame 2 (z, -y, x) (from continuity at switches
+  in the dongle's dump below; few switches were caught, and one frame-2
+  block had |x, y, z| = 1.09, so frame 2 isn't fully settled).
+- **On the dongle (first test, 7.5 ms interval):** the mic build logged
+  "1231 blocks decoded, 1775 other" per 30 s, and Steam's gyro view lagged
+  and jumped: the controller mixes three layouts there. A debug build
+  (`-DS2_MOTION_DUMP=1`, GET /api/motion: the last 512 raw blocks) caught
+  9300 blocks while Josh rolled, pitched, yawed and flipped it:
+  - 40 bytes, header bits 25-27 = 7 (the layout above): 3759
+  - 40 bytes, 6: 2077. Quaternion 3 x 23 bits from 37; accel 3 x 22 bits
+    from 106 with 8 fractional bits
+  - 30 bytes (6, bits 32-35 = 0): 3392. Frame at bits 32-33, quaternion
+    3 x 31 bits from 35; accel 3 x 32 bits from 128 with 16 fractional bits
+    (then a slow 16-bit field, temperature?)
+  - 4-byte blocks: 74 (empty)
+  Found by matching against the decoded layout's neighbours (interpolated
+  by tick): quaternion error 0.0003/0.0007 median, accel 11/15 LSB, about
+  what the interpolation itself costs. The 30-byte blocks come 2-4 ms after
+  a 40-byte one; bits 12-16 are the time since the previous block. The
+  console's 30-byte stream is the same layout.
+- **Gyro baseline:** between blocks 2-4 ms apart the gyro is noisy (the tick
+  doesn't quite match each sample); against the newest block at least
+  10 ms older, the change between updates drops from 216 to 82 LSB median.
+- **Firmware:** `s2_parse_motion()` (all three layouts, frames mapped back
+  to frame 0) and `s2_motion_gyro()` (core/src/s2_proto.c, tested on
+  captured blocks of each layout), and `on_audio_in_notification()`: accel
+  from each block, gyro from the newest of the last four blocks that is
+  10+ ms older; it holds across a block that gives none, for up to 250 ms
+  across undecodable ones, then reads still.

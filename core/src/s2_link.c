@@ -122,8 +122,8 @@ typedef struct link {
     uint8_t mic;                 // MIC_*: audio-in instead of the input report
     uint8_t mic_len;             // bytes of mic_frame collected
     uint8_t mic_frame[S2_MIC_FRAME_BYTES];
-    s2_motion_t motion;          // the last motion block from audio-in
-    bool motion_valid;
+    s2_motion_t motion[4];       // the last motion blocks from audio-in, newest at motion_n - 1
+    uint8_t motion_n;            // how many (since the mic came on), wraps at 256
     uint32_t motion_ms;          // when it came
     uint32_t motion_blocks, motion_other;   // decoded / other layouts, logged every 30 s
     uint8_t motion_other_len, motion_other_hdr;   // the last other layout seen
@@ -1377,6 +1377,29 @@ static void on_input_notification(link_t *k, const uint8_t *value, uint16_t len)
 // that isn't decoded, and is still after that.
 #define MOTION_HOLD_MS 250
 
+#if S2_MOTION_DUMP
+// Debug (mic builds): the last audio-in motion blocks, raw, for decoding the
+// other layout. GET /api/motion.
+#define MOTION_DUMP_N 512
+static struct {
+    uint32_t ms;
+    uint8_t b[1 + S2_MOTION_MAX_LEN];
+} s_mdump[MOTION_DUMP_N];
+static uint32_t s_mdump_pos;
+
+size_t s2_link_motion_dump(char *out, size_t max) {
+    size_t n = 0;
+    for (uint32_t i = 0; i < MOTION_DUMP_N && n + 100 < max; i++) {
+        const typeof(s_mdump[0]) *e = &s_mdump[(s_mdump_pos + i) % MOTION_DUMP_N];
+        if (!e->ms) continue;
+        n += (size_t)snprintf(out + n, max - n, "%lu ", (unsigned long)e->ms);
+        for (int j = 0; j < 1 + S2_MOTION_MAX_LEN; j++) n += (size_t)snprintf(out + n, max - n, "%02x", e->b[j]);
+        out[n++] = '\n';
+    }
+    return n;
+}
+#endif
+
 static void on_audio_in_notification(link_t *k, const uint8_t *value, uint16_t len) {
     s2_audio_in_t a;
     if (!s2_parse_audio_in(value, len, &a)) return;
@@ -1386,17 +1409,30 @@ static void on_audio_in_notification(link_t *k, const uint8_t *value, uint16_t l
     if (a.jack & 0x07) in.buttons |= S2_BTN_HEADSET;   // 0x05 headphones, 0x07 with a mic
     memcpy(in.stick_l, a.stick_l, sizeof in.stick_l);
     memcpy(in.stick_r, a.stick_r, sizeof in.stick_r);
+#if S2_MOTION_DUMP
+    if (len > S2_AUDIO_IN_MOTION) {
+        typeof(s_mdump[0]) *e = &s_mdump[s_mdump_pos++ % MOTION_DUMP_N];
+        e->ms = platform_millis() | 1;
+        size_t n = len - S2_AUDIO_IN_MOTION;
+        memset(e->b, 0, sizeof e->b);
+        memcpy(e->b, value + S2_AUDIO_IN_MOTION, n < sizeof e->b ? n : sizeof e->b);
+    }
+#endif
     s2_motion_t m;
     if (len > S2_AUDIO_IN_MOTION &&
         s2_parse_motion(value + S2_AUDIO_IN_MOTION, len - S2_AUDIO_IN_MOTION, &m)) {
         k->motion_blocks++;
         memcpy(in.accel, m.accel, sizeof in.accel);
-        if (k->motion_valid)
-            s2_motion_gyro(&k->motion, &m, k->gyro_lsb_per_dps, in.gyro);   // or holds
-        else
-            memset(in.gyro, 0, sizeof in.gyro);
-        k->motion = m;
-        k->motion_valid = true;
+        // The gyro from the newest block at least S2_MOTION_GYRO_MS older.
+        bool got = false;
+        for (unsigned i = 1; i <= 4 && i <= k->motion_n && !got; i++) {
+            const s2_motion_t *p = &k->motion[(uint8_t)(k->motion_n - i) % 4];
+            if ((unsigned)((m.tick - p->tick) & 0xFFF) >= S2_MOTION_GYRO_MS)
+                got = s2_motion_gyro(p, &m, k->gyro_lsb_per_dps, in.gyro);
+        }
+        if (!k->motion_n) memset(in.gyro, 0, sizeof in.gyro);   // otherwise holds when !got
+        k->motion[k->motion_n % 4] = m;
+        k->motion_n = (uint8_t)(k->motion_n + 1) ? (uint8_t)(k->motion_n + 1) : 4;
         k->motion_ms = platform_millis();
     } else {
         if (len > S2_AUDIO_IN_MOTION + 4 && value[S2_AUDIO_IN_MOTION]) {
@@ -1404,7 +1440,7 @@ static void on_audio_in_notification(link_t *k, const uint8_t *value, uint16_t l
             k->motion_other_len = value[S2_AUDIO_IN_MOTION];
             k->motion_other_hdr = value[S2_AUDIO_IN_MOTION + 4];
         }
-        if (!k->motion_valid || platform_millis() - k->motion_ms > MOTION_HOLD_MS) memset(in.gyro, 0, sizeof in.gyro);
+        if (!k->motion_n || platform_millis() - k->motion_ms > MOTION_HOLD_MS) memset(in.gyro, 0, sizeof in.gyro);
     }
     on_input(k, &in, false);
     if (a.mic_len != S2_MIC_HALF_BYTES) return;
@@ -1734,7 +1770,7 @@ void s2c_on_audio_in_enabled(uint8_t link, bool on, bool ok) {
         return;
     }
     k->mic = on ? MIC_ON : MIC_OFF;
-    k->motion_valid = false;
+    k->motion_n = 0;
     LOG("s2: link %u headset mic %s", k->idx, on ? "on (input from audio-in)" : "off");
 }
 

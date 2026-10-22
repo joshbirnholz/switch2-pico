@@ -63,6 +63,9 @@ ctrl_type_t s2_link_ctrl_type(void);
 // Latest input (a Joy-Con 2 pair merged, a single one turned sideways);
 // returns false while not connected. `seq` increments per report.
 bool s2_link_get_input(s2_input_t *out, uint32_t *seq);
+#if S2_MOTION_DUMP
+size_t s2_link_motion_dump(char *out, size_t max);   // debug: raw audio-in motion blocks
+#endif
 const mapping_ctx_t *s2_link_mapping_ctx(void);
 // One Joy-Con 2's own input (pid S2_PID_JOYCON2_L / _R) and stick calibration.
 bool s2_link_side_input(uint16_t pid, s2_input_t *out, s2_stick_cal_t *cal);

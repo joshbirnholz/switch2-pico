@@ -657,6 +657,19 @@ void web_api_handle(const http_request_t *req, http_response_t *r) {
     if (post && !strcmp(req->path, "/api/action")) return api_action(req, r);
     if (!strncmp(req->path, "/api/fw/", 8)) return api_fw(req, r, get, post);
     if (get && !strcmp(req->path, "/api/events")) return api_events(r);
+#if S2_MOTION_DUMP
+    if (get && !strcmp(req->path, "/api/motion")) {
+        size_t max = 512 * 100;
+        char *buf = malloc(max);
+        if (!buf) return respond_text(r, 500, "oom");
+        r->status = 200;
+        r->content_type = "text/plain; charset=utf-8";
+        r->body_len = s2_link_motion_dump(buf, max);
+        r->body = (const uint8_t *)buf;
+        r->body_owned = true;
+        return;
+    }
+#endif
     if (get && !strcmp(req->path, "/api/log")) {
         // Saved log from before this boot (boards that keep one), then this boot's.
         static const char sep[] = "===== saved log from before this start is above =====\n";

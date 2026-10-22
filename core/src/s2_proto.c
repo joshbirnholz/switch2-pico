@@ -172,28 +172,48 @@ static uint32_t bits_at(const uint8_t *b, unsigned pos, unsigned n) {
 }
 
 bool s2_parse_motion(const uint8_t *block, size_t len, s2_motion_t *out) {
-    if (len < 1 + S2_MOTION_LEN || block[0] != S2_MOTION_LEN) return false;
+    if (len < 1 || len < 1u + block[0]) return false;
     const uint8_t *b = block + 1;
-    if (bits_at(b, 25, 3) != 7 || bits_at(b, 32, 2) != 3) return false;
+    unsigned layout = block[0] >= 5 ? bits_at(b, 25, 3) : 0;
+    unsigned frame_at, q_at, q_bits, a_at, a_bits, a_frac;
+    if (block[0] == 40 && layout == 7) {
+        frame_at = 34, q_at = 37, q_bits = 21, a_at = 100, a_bits = 14, a_frac = 0;
+    } else if (block[0] == 40 && layout == 6) {
+        frame_at = 34, q_at = 37, q_bits = 23, a_at = 106, a_bits = 22, a_frac = 8;
+    } else if (block[0] == 30 && layout == 6) {
+        frame_at = 32, q_at = 35, q_bits = 31, a_at = 128, a_bits = 32, a_frac = 16;
+    } else {
+        return false;
+    }
     out->tick = (uint16_t)bits_at(b, 0, 12);
-    out->frame = (uint8_t)bits_at(b, 34, 2);
-    float n = 0.0f;
-    for (int i = 0; i < 3; i++) {
-        float v = (float)((int32_t)bits_at(b, 37 + 21 * i, 21) - (1 << 20)) / (float)(1 << 20);
-        out->q[1 + i] = v;
-        n += v * v;
+    out->frame = (uint8_t)bits_at(b, frame_at, 2);
+    if (out->frame == 3) return false;
+    float v[3], n = 0.0f;
+    for (unsigned i = 0; i < 3; i++) {
+        int32_t raw = (int32_t)(bits_at(b, q_at + q_bits * i, q_bits) - (1u << (q_bits - 1)));
+        v[i] = ldexpf((float)raw, 1 - (int)q_bits);
+        n += v[i] * v[i];
     }
     out->q[0] = n < 1.0f ? sqrtf(1.0f - n) : 0.0f;
-    for (int i = 0; i < 3; i++) {
-        uint32_t v = bits_at(b, 100 + 14 * i, 14);
-        out->accel[i] = (int16_t)(v & 0x2000 ? (int32_t)v - 0x4000 : (int32_t)v);
+    // Frame 1 stores (y, z, x) and frame 2 (z, -y, x) of frame 0's x, y, z.
+    if (out->frame == 1) {
+        out->q[1] = v[2], out->q[2] = v[0], out->q[3] = v[1];
+    } else if (out->frame == 2) {
+        out->q[1] = v[2], out->q[2] = -v[1], out->q[3] = v[0];
+    } else {
+        out->q[1] = v[0], out->q[2] = v[1], out->q[3] = v[2];
+    }
+    for (unsigned i = 0; i < 3; i++) {
+        uint32_t raw = bits_at(b, a_at + a_bits * i, a_bits);
+        int32_t v32 = a_bits < 32 && (raw >> (a_bits - 1)) ? (int32_t)(raw - (1u << a_bits)) : (int32_t)raw;
+        out->accel[i] = (int16_t)(v32 >> a_frac);
     }
     return true;
 }
 
 bool s2_motion_gyro(const s2_motion_t *prev, const s2_motion_t *cur, float lsb_per_dps, int16_t gyro[3]) {
     unsigned dt = (unsigned)(cur->tick - prev->tick) & 0xFFFu;
-    if (dt == 0 || dt > 1000 || cur->frame != prev->frame || cur->frame > 2) return false;
+    if (dt == 0 || dt > 1000) return false;
     // d = conj(prev) * cur: the rotation since `prev`, in the controller's axes.
     const float *a = prev->q, *c = cur->q;
     float dw = a[0] * c[0] + a[1] * c[1] + a[2] * c[2] + a[3] * c[3];
@@ -210,19 +230,12 @@ bool s2_motion_gyro(const s2_motion_t *prev, const s2_motion_t *cur, float lsb_p
     // angle / |axis| / dt, in degrees per second
     float k = s > 1e-9f ? 2.0f * atan2f(s, dw) / s : 2.0f;
     k *= 57.29578f * 1000.0f / (float)dt * lsb_per_dps;
-    float g[3] = {d[0] * k, d[1] * k, d[2] * k};
-    // Frame 1 stores (y, z, x); frame 2 looked like (-z, y, -x) in the few
-    // blocks captured (unconfirmed).
-    float out[3];
-    if (cur->frame == 1) {
-        out[0] = g[2], out[1] = g[0], out[2] = g[1];
-    } else if (cur->frame == 2) {
-        out[0] = -g[2], out[1] = g[1], out[2] = -g[0];
-    } else {
-        out[0] = g[0], out[1] = g[1], out[2] = g[2];
+    float g[3];
+    for (int i = 0; i < 3; i++) {
+        g[i] = d[i] * k;
+        if (g[i] > 32767.0f || g[i] < -32768.0f) return false;
     }
-    for (int i = 0; i < 3; i++)
-        gyro[i] = (int16_t)(out[i] > 32767.0f ? 32767 : out[i] < -32768.0f ? -32768 : (int32_t)lrintf(out[i]));
+    for (int i = 0; i < 3; i++) gyro[i] = (int16_t)lrintf(g[i]);
     return true;
 }
 
