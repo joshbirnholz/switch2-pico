@@ -36,6 +36,7 @@ jobs:
         run: |
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DPICO_BOARD=pico2_w
           cmake --build build
+          python3 test/check_embedded_web.py build/switch2_pico.bin
       - uses: actions/upload-artifact@v4
         with:
           name: switch2-pico2w-firmware

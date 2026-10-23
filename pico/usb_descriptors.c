@@ -56,7 +56,7 @@ uint8_t const *tud_descriptor_device_cb(void) {
     uint8_t cls = usb_mode_config_only() ? 0x00 : id->device_class;
     s_device.bDeviceClass = s_device.bDeviceSubClass = s_device.bDeviceProtocol = cls;
     if (has_audio()) {
-        // The audio function is two interfaces under an interface association.
+        // AudioControl and the streaming interfaces share an association.
         s_device.bDeviceClass = TUSB_CLASS_MISC;
         s_device.bDeviceSubClass = MISC_SUBCLASS_COMMON;
         s_device.bDeviceProtocol = MISC_PROTOCOL_IAD;
@@ -65,6 +65,8 @@ uint8_t const *tud_descriptor_device_cb(void) {
     // descriptor" answer from a genuine controller.
     s_device.bcdUSB = g_settings.webusb_enabled || usb_mode_config_only() ? 0x0210 : 0x0200;
     s_device.bcdDevice = (uint16_t)(id->bcd_device | (g_settings.webusb_enabled ? 1 : 0));
+    // Distinguish the UAC2 layout from older cached UAC1 descriptors.
+    if (has_audio()) s_device.bcdDevice |= 0x0010;
     return (uint8_t const *)&s_device;
 }
 
@@ -81,6 +83,7 @@ uint8_t const *tud_descriptor_bos_cb(void) {
 #define EP_VENDOR_OUT 0x02
 #define EP_MOUSE_IN   0x83   // .. 0x84 (one per Joy-Con 2)
 #define EP_AUDIO_OUT  0x05
+#define EP_AUDIO_NOTIFY 0x87
 #define EP_AUDIO_IN   0x86   // the headset mic (S2_HEADSET_MIC)
 #ifndef USB_AUDIO_DESC_LEN
 #define USB_AUDIO_DESC_LEN 0
@@ -117,7 +120,7 @@ uint8_t const *tud_descriptor_configuration_cb(uint8_t index) {
     }
 #if S2_HEADSET_AUDIO
     if (has_audio()) {
-        n += usb_audio_desc(s_config + n, (uint16_t)(sizeof s_config - n), itfs, EP_AUDIO_OUT, EP_AUDIO_IN, 5);
+        n += usb_audio_desc(s_config + n, (uint16_t)(sizeof s_config - n), itfs, EP_AUDIO_OUT, EP_AUDIO_IN, EP_AUDIO_NOTIFY, 5);
         itfs += USB_AUDIO_ITF_COUNT;
     }
 #endif

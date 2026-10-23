@@ -23,6 +23,7 @@
 #include "pico/util/queue.h"
 #include "s2_link.h"
 #include "settings.h"
+#include "mic_test.h"
 #include "usb_audio.h"
 #if S2_HEADSET_MIC
 #include "headset_mic_pico.h"
@@ -87,6 +88,9 @@ static uint32_t s_usb_stream_end;   // when the host last closed its stream (0: 
 
 #if S2_AUDIO_TEST_TONE
 static void fill_pcm(int16_t *pcm) {
+#if S2_HEADSET_MIC
+    if (headset_mic_test_fill(pcm)) return;
+#endif
     // 440 Hz at -20 dBFS in both channels.
     static float phase;
     const float step = 2.0f * (float)M_PI * 440.0f / 48000.0f;
@@ -99,6 +103,9 @@ static void fill_pcm(int16_t *pcm) {
 }
 #else
 static void fill_pcm(int16_t *pcm) {
+#if S2_HEADSET_MIC
+    if (headset_mic_test_fill(pcm)) return;
+#endif
     static bool playing;   // false: waiting for the ring to reach TARGET
     uint32_t r = s_r;
     if (s_flush) {
@@ -251,12 +258,21 @@ void headset_audio_usb_stream(bool on) {
 }
 
 void headset_audio_task(void) {
+    usb_audio_task();
     uint32_t now = to_ms_since_boot(get_absolute_time());
+#if S2_HEADSET_MIC
+    mic_test_tick(now, s2_link_headset_jack(), usb_audio_active());
+    static bool test_was_active;
+    bool test_is_active = mic_test_active();
+    if (test_was_active != test_is_active) s_flush = true;
+    test_was_active = test_is_active;
+    s2_link_set_headset_mic(headset_mic_open() || mic_test_input());
+#endif
     // The mic needs the stream to the controller on too.
-    bool on = S2_AUDIO_TEST_TONE || usb_audio_streaming() ||
+    bool on = S2_AUDIO_TEST_TONE || usb_audio_streaming() || s2_link_headset_detecting() ||
               (s_usb_stream_end && now - s_usb_stream_end < LINGER_MS);
 #if S2_HEADSET_MIC
-    on = on || headset_mic_open();
+    on = on || headset_mic_open() || mic_test_active();
 #endif
     if (!on) s_usb_stream_end = 0;
     if ((int32_t)(now - s_report_at) >= 30000) report(now);

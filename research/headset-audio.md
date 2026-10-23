@@ -1144,3 +1144,615 @@ shake the controller (`data/motion-20261021-192212.raw` with 0x09,
   from each block, gyro from the newest of the last four blocks that is
   10+ ms older; it holds across a block that gives none, for up to 250 ms
   across undecodable ones, then reads still.
+
+## Quaternion correction (2026-10-22)
+
+The first hardware test of 7f96ea3 failed: Josh reported that Steam's gyro
+view initially matched, then quickly went out of sync. Capture:
+`audio/data/handoff-20261021/motion/dongle-test-20261022.txt` (11,564 unique
+blocks, including 135 empty 4-byte blocks). All three layouts arrived even
+though `/api/status` reported a 15 ms connection interval. There were 10,476
+frame-0, 90 frame-1, 780 frame-2, and 83 frame-3 blocks.
+
+**The quaternion interpretation above was wrong.** The three offset-binary
+fields are ratios to an omitted component, rather than unit-quaternion
+components. The two frame bits select the omitted component in (w,x,y,z),
+and the fields follow it in cyclic order:
+
+| Frame | Fields | Reconstruct before normalization |
+|---|---|---|
+| 0 | x/w, y/w, z/w | (1, a, b, c) |
+| 1 | y/x, z/x, w/x | (c, 1, a, b) |
+| 2 | z/y, w/y, x/y | (b, c, 1, a) |
+| 3 | w/z, x/z, y/z | (a, b, c, 1) |
+
+Normalize by `sqrt(1 + a*a + b*b + c*c)`. The omitted component can be
+chosen positive, since negating a quaternion leaves the orientation
+unchanged; `s2_motion_gyro()` already chooses the shorter rotation across
+such a sign change. A vector norm above 1 is valid for these ratios.
+The old decoder's square-root reconstruction distorted rotation even in
+frame 0, its frame-1/2 mapping was wrong, and it rejected frame 3.
+
+Evidence: this reconstruction stays continuous across captured 0→1, 0→2,
+2→3, 3→2, and 2→0 transitions. In the older 192212 laptop capture, using
+samples within 150 LSB of 1 g, the spread of world gravity improves from
+1.35° median / 7.02° at the 95th percentile (old decoder, frame 0 only) to
+0.86° / 2.28° (corrected decoder, all frames). The corrected C decoder
+accepts all 11,429 nonempty blocks in the new recording with unit-length
+quaternions. Offline gyro replay over the existing four-block / ≥10 ms
+history gives no out-of-range results after ordering tied dump timestamps
+by the 12-bit tick (dump timestamps are ORed with 1, so ties are possible).
+
+Updated `s2_parse_motion()`, its header notes, and host tests (464 passing),
+including five real transition pairs and quaternion sign invariance.
+The next mic/motion debug firmware is `build/motion4/switch2_pico.uf2`:
+Pico 2 W, mic ON, motion dump ON, version still 0.17.0. Hardware validation
+of this correction initially remained pending; the mic stays disabled by default
+until the remaining audio checks are complete.
+
+
+### Hardware retest of the correction (2026-10-22)
+
+Installed `build/motion4/switch2_pico.uf2` through the update API. With the
+headset mic and silent headphone stream open, Josh repeated the rotations
+and reported that Steam's gyro calibration icons matched the controller's
+movements. The capture is
+`audio/data/handoff-20261021/motion/dongle-motion4-test-20261022.txt`:
+8,490 nonempty blocks, all decoded; 71 empty 4-byte blocks. Frame counts:
+0: 873, 1: 6,309, 2: 1,306, 3: 2. No dongle reset or controller disconnect
+was logged. Mic Opus counters showed 0 bad or dropped frames.
+
+The audio output counters did show underruns and missing frames during
+raw-dump polling (193 missing / 30 s in one window, then 172). This does
+not establish clean full-duplex audio yet. Next check: streams alone,
+without the repeated large `/api/motion` responses; then speech level and
+stereo listening with the reliable headset. Test build remains installed.
+
+
+A follow-up silent full-duplex check without `/api/motion` polling produced
+one complete 30 s window with 1,500 headphone frames sent, 0 missing,
+0 output ring underruns/skips/overflows, and 0 busy BLE writes. The mic
+window had 1,501 frames, 0 dropped, 0 bad; one mic USB-ring underflow was
+counted. Motion logged 3,003 decoded blocks and two empty blocks. This
+supports raw-dump polling as the cause of the earlier output disruption;
+listening and speech-level tests are still pending. Both clean-test services
+were stopped afterwards. Final diagnostic log on SteamOS:
+`/tmp/s2log/motion4-test-log.txt`.
+
+
+### Reliable headset speech and stereo check (2026-10-22)
+
+Josh confirmed the quiet 440 Hz left / 660 Hz right test played in the
+correct ears. The speech recording `/tmp/s2log/mic-speech.wav` (SteamOS;
+local working copy `/tmp/s2-mic-speech.wav`) contained normal spoken test
+phrases at about -18.8 dBFS RMS across the 18 s speech interval, with
+1,098 samples at or very near full scale (0.127% of that interval).
+The fixed MIC_GAIN=4 (+12 dB), added for the old quiet headset, clips this
+reliable headset. Change to unity gain for a fresh speech measurement;
+clipped audio cannot establish its original peak/headroom. No mic Opus
+frames were bad or dropped, and the headphone stream had no missing frames
+during the speech check. Do not treat this as a completed level test until
+the unity-gain recording is measured.
+
+
+### Unity-gain speech repeat (2026-10-22)
+
+Installed `build/switch2_pico-motion4-unity-mic.uf2` and repeated the same
+normal-volume phrases. SteamOS recording `/tmp/s2log/mic-unity.wav`, local
+working copy `/tmp/s2-mic-unity.wav`: 37.39 s, 48 kHz stereo host recording
+of the mono source. Speech was at 7.3–19.3 s. Peak -11.03 dBFS, zero samples
+near the rails (threshold 0.999); active 100 ms speech windows above -48
+dBFS averaged -29.29 dBFS RMS. Including pauses in the 7.1–19.5 s interval,
+RMS was -31.47 dBFS. Unity gain preserves headroom and removes the clipping
+seen with the fixed +12 dB boost; comparing separate spoken takes cannot
+establish an exact 12 dB level difference.
+
+A full 30 s log window reported 1,500 headphone frames, 0 missing, 0 output
+ring underruns/skips/overflows, 0 busy writes; mic 1,502 Opus frames,
+0 dropped/0 bad. However, the mic USB PCM ring logged 9 underruns in that
+window. This still needs investigation before calling full-duplex capture
+reliably clean or enabling the mic by default. Both repeat-test streams
+were stopped. Current installed test build retains mic/motion dump support
+and MIC_GAIN=1; no release/default change has been made.
+
+
+### Investigating mic PCM underruns (2026-10-22, in progress)
+
+The unity-gain WAV contains exact-zero runs beyond startup, mostly 11–29 ms
+long, at the same frequency as the mic-ring underrun counter. These are
+real inserted silence, not merely harmless startup counts. The current
+MIC_TARGET is 1,440 samples (30 ms); candidate cause is insufficient
+buffering for BLE delivery/decode jitter. No buffer size change yet.
+
+Added lightweight timing counters to `headset_mic_pico.c`: maximum complete
+Opus-frame arrival gap and decoded-PCM publication gap (microseconds), USB
+packets replaced with silence, and samples lost to ring overflow. They are
+included in the existing 30 s mic line (`gaps ARRIVAL/DECODE us, N silent,
+M over`). First 400 ms are still deliberately discarded; use a full later
+30 s window for assessing steady-state silence. Firmware builds cleanly:
+`build/switch2_pico-mic-timing.uf2` (mic ON, unity gain, corrected motion,
+motion dump compiled in but not polled). Install, reconnect, then run
+silent full-duplex streams for at least two full reporting windows.
+
+
+### Buffered mic continuity measurement (2026-10-23)
+
+Installed guarded mic build uses MIC_RING_LEN=8192, MIC_TARGET=5760
+(120 ms target, +90 ms versus previous), unity gain. Measured the existing
+SteamOS `/tmp/s2log/lifecycle-mic.wav` locally on the host without transferring
+audio: mono PCM16, 48 kHz, 1061.525 s. Exactly two zero runs >=5 ms:
+startup 0.000–0.604 s and the deliberate Switch2 poweroff interval
+737.283–801.650 s. No other >=5 ms exact-zero runs; zero samples >=32760
+in magnitude; overall peak -1.514 dBFS (near the controller-off handling,
+not a controlled speech-level measurement). This supports elimination of
+the earlier 11–29 ms inserted-silence dropouts under this workload, with
+increased latency. It does not prove speech intelligibility or latency.
+
+User paused the host-freeze investigation and requested mic work continue;
+they are not using the PC. Started bounded capture-only test (no host
+playback client) in s2mic-only, 100 s max, source is application-facing
+WirePlumber loopback. Verified capture ALSA RUNNING, playback closed.
+Do not resume Steam Controller reconnect tests as part of this work.
+
+
+Mic-only test completed: `/tmp/s2log/mic-only-buffered.wav`, mono PCM16
+48 kHz, 97.365 s. Playback ALSA closed, capture RUNNING. Two complete
+steady-state 30 s windows: 0 dropped/bad frames, 0 underruns, 0 silent USB
+packets, 0 overflow. Largest complete-frame/decode gap in these windows
+45.271/50.654 ms. WAV has zero runs >=5 ms only at startup: 0.000–0.011 s
+and 0.013–1.053 s, then none. Peak -32.107 dBFS, no rail samples, ambient
+only (not a spoken level/intelligibility test). Startup window has 1 under
+and 1040 silent packets; exclude startup from steady-state claims. Initial
+brief nonzero data before startup silence remains to inspect on reopen.
+Stopped s2mic-only; no firmware modification or update during this test.
+Freeze investigation remains PAUSED by explicit user request. Mic buffer
+now has measured steady-state continuity in both full duplex and capture
+only. Remaining: controlled speech/listening, measure latency (120 ms
+nominal target), startup/reopen behavior, optional BLE session reset review.
+
+
+### USB microphone integration (2026-10-23)
+
+User reiterated primary goal: a mic input audio interface on the dongle.
+Changed CMake S2_HEADSET_MIC default from OFF to ${S2_HEADSET_AUDIO}; normal
+Pico2W audio builds now include capture, with explicit OFF opt-out. Updated
+README with input selection, independent HDMI output, format and startup/
+latency limits. No release/version bump/commit.
+Fresh Release build `build/mic-default/switch2_pico.uf2` succeeds WITHOUT
+explicit S2_HEADSET_MIC or S2_MOTION_DUMP. Uses local SDK/Opus and picotool
+from motion4 build. Cache confirms audio=ON, mic=ON, no motion dump. Existing
+464 core +35 lifecycle assertions, 14 preflight/probe tests, 1 Decky test
+pass; git diff --check passes. New default-build artifact is NOT installed:
+installed guarded test build already exposes and captures this interface;
+updating would require manual controller reconnect while user is away.
+
+Read installed raw USB descriptors from sysfs: AudioControl interface2;
+playback interface3 alt1 EP0x05 adaptive OUT max196; microphone interface4
+alt0 no endpoints, alt1 EP0x86 asynchronous IN max98. Mic format descriptor
+is TypeI, one channel, two bytes/sample, 16 bits, fixed 48000 Hz. This
+confirms actual host-visible capture interface, alongside working recording
+tests. It is restricted to Pico2W SInput audio mode, as planned; no other
+mode support added. Freeze investigation remains paused.
+
+
+### UAC2 connector reporting (2026-10-23, in progress)
+
+User explicitly authorized UAC2 jack reporting. New portable
+core/src/usb_audio2.c/.h supplies UAC2 descriptors (217 B mic-on/125 B
+speaker-only), read-only clock CUR/RANGE/validity, connector CUR, six-byte
+interrupt messages. Playback adaptive OUT0x05, capture async IN0x86 retained;
+separate clocks5/6, AC interrupt IN0x87. Board queues notifications from main
+loop with busy/claim handling. Audio bcdDevice adds0x10 to distinguish old
+cached UAC1 layout. Status API adds headset_jack bit0 headphone/bit1 mic.
+Audio-in parser clears old headset bit before applying current jack bits
+(fixes sticky presence after unplug during recording).
+
+Initial installed image SHA256 5719cce656703c74d6f68d4baff8a648e0e2bdcf03d3deee43af25d8e73b18ad,
+CRC0xf66bc8b4. Linux creates Headphone - Output Jack and Mic - Input Jack.
+User connected headset: both on, USB [1,11]. User unplugged: both off;
+PipeWire EnumRoute analog-input-mic and analog-output-headphones available=no,
+same USB [1,11]. Replug: headphone=yes, mic=no until recording starts.
+Thus read-only audio-in characteristic polling was inadequate for idle mic
+availability (initial apparent success was from host capability probes).
+Removed that new transport polling code entirely. Current fix uses existing
+notification-mode switch briefly on headset insertion, observes one audio-in
+jack report, then restores normal reports if host is not recording. Bounded
+to1500ms on no response. No USB audio client/stream is opened for this probe.
+Second image is being installed now, CRC0x5eef44be; user will need reconnect.
+
+First image full duplex after recording began: steady 30s window 1500 frames,
+0 missing headphone frames, 0 mic dropped/bad/under/silent/overflow, max
+arrival/decode gaps71.871/79.498ms. Startup late-frame catch-up logged2249
+frames (old inactive audio_due), not steady-state BLE loss. Streams stopped.
+Artifacts remote /tmp/s2log/uac2-*.txt/.json; do not upload recordings.
+
+Tests cover descriptors/controls for mic-on and speaker-only, independent
+jack states, invalid controls, clock ranges, exact notification bytes; actual
+link-state/probe unit checks cover no overlapping mode switches, probe end
+after first report, timeout, real recording. Existing suite passes. Both
+firmware variants build; rerunning speaker build for updated probe. No release.
+
+
+UAC2 follow-up: second installed image SHA256
+09e324d7dfdfa7f7169e744a3784bcb8958e08e1bd9dd12722dc42d0dfe330d0
+(CRC0x5eef44be), USB [1,13]. Bounded idle notification probe WORKS: after
+user unplugged/replugged with both ALSA endpoints CLOSED, PipeWire route
+availability changed no→yes for BOTH headphone and mic. No USB re-enumeration.
+Probe: headset insertion49.887s, mic-notification mode49.947→50.022s (~75ms).
+The probe does not open a USB stream. Normal input is restored after one
+valid audio-in report. All new and existing tests pass; mic-OFF build also
+succeeds. There are no final changes to s2_transport.h or BTstack transport.
+
+Active-stream unplug/replug also passed connector-state checks: same USB
+[1,13] retained. On removal96.316s, host closed playback and capture in
+~25ms; both jack controls off. Replug117.641s triggered brief probe, both
+routes became available, capture automatically reopened117.766s. Existing
+silent playback moved to HDMI on removal and did not automatically return;
+this is host policy. Started a new named playback stream targeting headphones
+for final steady-state duplex check. No audible speaker tones used.
+Artifacts /tmp/s2log/uac2-v2-*-pw.json, uac2-active-*-pw.json,
+uac2-probe-v2-log.txt, uac2-active-replugged-log.txt, uac2-usb-descriptors.txt.
+Actual settings UI hiding not observed; verified underlying route availability.
+Headphones-without-mic hardware test and Windows/macOS testing remain undone.
+
+
+UAC2 completion checkpoint (2026-10-23): final full-duplex window
+150–180s firmware uptime: headphones1500 sent/0 missing, 0 under/skip/over;
+mic1500 frames/0 dropped/0 bad/0 under/0 silent/0 over, max arrival/decode
+gaps60.042/61.864ms. Both ALSA directions verified RUNNING before counting
+this window. User headset unplug/replug during recording correctly changed
+jack states and resumed mic capture without USB re-enumeration. Final WAV
+94.944s, mono48kHzPCM16, zero rail samples, peak-0.440dBFS (handling included;
+not speech/headroom validation). No audio recording transferred.
+Stopped s2jack-rec and s2jack-play-final. Final preflight: all dongle PCM
+handles CLOSED, audio_active=false, host queries responsive; USB [1,13],
+controller ready, headset remains plugged. No host audio/service/config
+changes. No Valve Steam Controller reconnect tests (investigation paused).
+Mic-on and mic-OFF firmware builds pass; full host suite passes and diff
+whitespace clean. Current installed SHA25609e324d7... as above; no version
+bump, commit, merge, or release. Local evidence directory:
+research/audio/data/handoff-20261021/uac2-jack-20261023/ (gitignored).
+
+Implemented/verified: USB Audio2 connector controls and interrupt updates;
+SteamOS ALSA jack controls and PipeWire availability; idle and active headset
+unplug/replug; same USB identity retained across jack changes. Unverified:
+actual Steam settings UI hiding; headphone-only TRS hardware; Windows/macOS;
+long-term stability. Previous startup/latency/quality and paused host-stall
+limitations still apply. USB configuration-only enumeration on BLE loss when
+no audio is open remains existing behavior; jack changes alone never request
+USB reconnect. Generic ALSA policy also advertises an unknown S/PDIF route;
+firmware has only the analog playback and capture streams.
+
+Standards/host implementation references used for this change:
+https://github.com/torvalds/linux/blob/master/sound/usb/mixer.c
+https://github.com/torvalds/linux/blob/master/include/linux/usb/audio-v2.h
+https://learn.microsoft.com/en-us/windows-hardware/drivers/audio/usb-2-0-audio-drivers
+Local SDK TinyUSB src/class/audio/audio.h and src/device/usbd.h supply
+matching UAC2 descriptor/control layouts.
+
+
+### Mic test popups (2026-10-23)
+
+User paused the validation checklist to request a five-second microphone
+test in BOTH Decky and web config, matching research/IMG_9142.JPG–9144.JPG.
+Inspected all three images. Implemented ready/live meter → Begin Recording
+→ preparing (~600ms) → exactly5s recording → automatic headphone playback
+with a playback meter → done. Cancel/Close/Escape cleanup and errors.
+
+Architecture: dongle-local test, shared API /api/mic-test (GET status; POST
+do=open|record|cancel with session=). No browser microphone permission,
+voice transfer, or host routing/service changes. Preview opens controller mic
+when popup opens, recording starts only on Begin. ~26KB compressed CELT RAM
+buffer, erased on completion/cancel/error. Replay decoded on core1, duplicated
+to stereo, half amplitude (-6dB) through existing encoder; ~300ms drain for
+controller output buffer. Refuses another audio app, requires connected
+headset mic/SInput, auto-aborts headset loss or5s without UI heartbeat.
+Platform audio guard includes test-active; settings writes blocked during
+test. The self-test exercises headset/BLE/codec playback, not host USB capture.
+
+New core/src/mic_test.c/.h (supported implementation only when MIC=ON,
+stubs otherwise); board decoder/encoder hooks; /api/settings mic_test
+capability flag. New decky-plugin/src/mic-test.tsx + validated Python
+mic_test RPC. Web native dialog in Headphones section, Decky Microphone
+section. UI styled after supplied images; responsive and accessible meters.
+Actual mic test has not yet been heard/verified on hardware: user has been
+asked to reconnect and try the web popup, answer pending. Latest read-only
+status confirms controller READY, headset_jack=3, audio_active=false,
+/api/mic-test session0/idle. Do NOT start a recording without the user's
+Begin action.
+
+Validation: existing464 core/35 lifecycle assertions + UAC2/jack tests pass.
+New portable test checks exact5s capture boundary, frame order/playback,
+lease cleanup, unplug/USB conflict/no-frame errors, stale-session isolation.
+New actual HTTP/WebUSB handler tests and three Decky RPC unit tests pass.
+Mic-ON and mic-OFF Release builds succeed; Python compile and whitespace
+check clean. Plugin TypeScript/build pass using @decky/ui4.12.1 (lockfile
+version; npm initially pulled4.16, which removed pre-existing SideMenu export;
+restored pinned UI without changing manifests). Local node_modules ignored.
+
+Headless Chromium web tests (test/test_mic_ui.mjs) pass ready/record/playback
+meters, Escape/cancel, late-open cleanup, errors, mobile fit. Mocks only;
+no hardware voice recording. Run with PLAYWRIGHT_MODULE=/tmp/s2-ui-test/
+node_modules/playwright/index.mjs, PLAYWRIGHT_BROWSERS_PATH=/tmp/s2-browsers.
+Browser process needs sandbox escalation. Render screenshots in
+/tmp/s2-mic-test-ui/{ready,recording,playback,mobile}.png (visually inspected
+ready; screenshot matches reference layout).
+
+Installed firmware build/mic-default/switch2_pico.uf2 SHA256
+6ee1a156c1d0224692719ed108ed0a6a7345ccd27673951a380fa21b1f725eb1
+CRC0x57008dd6, version still0.17.0. Host rebooted since previous session:
+/tmp/s2log was absent; recreated helpers from TRACKED guarded scripts plus
+api_get.py. Updater verified idle/healthy before installation. Current
+image staged remotely /tmp/s2log/mic-test.uf2.
+
+Built Decky ZIP decky-plugin/out/Switch2-Pico.zip, SHA256
+de178fc61aef7b9cde8947fb263fc005b34a4cb9ce878a0f8385db10a72aaaca,
+copied to SteamOS /tmp/s2log/Switch2-Pico-mic-test.zip. Plugin installation
+is for user to do per existing handoff; NOT installed automatically. No
+version bump/commit/merge/release. Reload web config to see firmware's
+new button. Freeze investigation remains paused. No test services or
+recorders were started in this turn, no recordings exported.
+
+
+### Mic test correction: native styling and provisional jack status
+
+User clarified screenshot reference was FUNCTIONAL ONLY, not visual. Decky
+should use standard Decky popups/components; web popup should match existing
+page. Replaced copied dark/cyan card/icons/footer with native ModalRoot,
+DialogButton and ProgressBar; normal title/body styles. Web dialog now uses
+existing card/theme variables, normal buttons, page accent and labeled meter.
+This preference overrides earlier instructions to match screenshot styling.
+
+User reported test wrongly refused their connected Pro2 headset/SInput.
+Read-only status confirmed ready Pro2/SInput/audio inactive, but cached
+headset_jack=1 (headphones only). Log showed a brief controller audio/mic
+startup then stop. The old test required jack=3 before opening and stopped
+on initial headphone-only metadata. Fixed validation: connected headphone
+jack can open preview; actual mic presence checked after preparing/settling,
+up to3s, before recording starts. Loss of physical jack still stops test
+immediately. Test does not record before Begin.
+
+Jack observation now debounces candidate type for300ms after500ms warm-up.
+Insertion probe holds a bounded silent controller audio stream so microphone
+detection can settle even when USB endpoints are idle; max2s insertion
+probe. Previously probe ended on first audio-in packet and could cache a
+provisional headphones-only status. Existing confirmed mic status is kept
+through transient startup metadata. New regression cases cover provisional
+5→7 jack states, stable TRS, idle probing, delayed mic in preparing, actual
+no-mic failure, and allowing API open when physical headset exists but mic
+classification is not yet confirmed. Full tests pass.
+
+Mic-on/off firmware builds pass; Decky typecheck/build pass; browser tests
+pass after restyling, visually inspected ready popup matches page theme.
+New firmware SHA25657098d5aa909b80bc2289455a3069714da899f11b3b70e005ddb3f44ff46c8d4
+CRC0x67a8442f, updater currently running. Plugin ZIP SHA256
+95b063d9d67c3f4d8cb588ed60a05ab3bf805905b6c23eb04bf3f033448e8c4f
+copied as USER REQUESTED to /home/deck/Downloads/Switch2-Pico-mic-test.zip.
+No install server. User installs ZIP via file picker, then reconnects Switch2
+controller after firmware update and retries. Hardware success not yet
+confirmed. No recordings initiated by agent. No commit/release/version bump.
+
+
+### Mic test wording and automatic dismissal (2026-10-23)
+
+USER CONFIRMED the corrected microphone test WORKS IN DECKY. Web popup has
+not been hardware-tested by user. New request: match Switch screenshot TEXT
+closely (not styling), automatically dismiss on completion, remove visible
+Microphone level/Playback level labels and all elapsed/remaining time lines
+in BOTH clients. Implemented exact ready instructions, Recording... /
+Speak toward the mic. (Recording for five seconds.), Now playing back... /
+Make sure you can hear the recorded voice audio. Native Decky/page styling
+retained. Live meter retained with ARIA labels only. Both clients dismiss
+on done before rendering a final state. Updated browser regression test
+covers auto-dismiss and absence of visible label/time nodes. Passes.
+Decky typecheck/build passes; new ZIP SHA256
+9526c815636ec95bc19de258e5c75827441800c7ff2eac42302180fbf2901764
+copied to /home/deck/Downloads/Switch2-Pico-mic-test.zip. User installs.
+
+CAUGHT EXISTING WEB EMBEDDING BUG: weak const zero web_ui_size initializer
+in same TU as router was constant-folded by Release compiler; linker then
+discarded strong embedded data. Prior web changes were present in generated
+C but NOT in firmware; prior firmware hashes did not change on HTML edits.
+Informed user candidly. Moved weak defaults to core/src/web_ui_stub.c,
+router uses extern declarations; added stub to CMake. Arduino core library
+will pick up stub for non-web boards. New test/check_embedded_web.py checks
+exact source-page bytes exist in final firmware binary; CI Pico build now
+runs this check. Both mic-on and speaker-only final binaries pass; symbols
+web_ui_data and web_ui_size now retained. Full existing/new host suite passes.
+An initial same-image update in this turn completed before bug was found;
+then installed corrected image (currently updater running):
+UF2 SHA2564b80c251e03e7060650bed0afca7ef5484fdc67d8bcb64f42d1eac058fa6c55d
+image965120bytes CRC0x79460880. Embedded HTML207776bytes SHA256
+330b33d18ec96d31278bc2bd6eaacc6967cdf893767ce8df4051c624ec472cfe.
+Next verify GET / served-body length/hash after update, then tell user new
+ZIP in Downloads, controller needs reconnect, web page reload. No audio
+engine changes this turn, no recordings started, no release/version bump.
+
+
+### Resumed mic validation: USB speech and Switch comparison
+
+User resumed original mic validation after popup work; freeze investigation
+remains paused. Explicitly ready for agreed USB speech recording. Recorded
+via named PipeWire application-facing loopback, verified ALSA captureRUNNING
+(card nowSInput/card0; do not assume oldcard2). Bounded s2usb-speech25s
+completed: /tmp/s2log/usb-speech.wav, mono48kPCM16,25.173333s; peak-18.7477dBFS,
+0 rail samples,62 active100ms windows RMS-32.5632dBFS, exactlyone>=5ms zero
+run at0–1.055s startup, no later gaps. JSONusb-speech-measurements.json,
+logusb-speech-log.txt remain onhost. No voice transferred.
+
+Played derived stereo half-amplitude file usb-speech-headphones.wav directly
+to plughw:CARD=SInput,DEV=0 withaplay (no HDMI fallback), boundedunit
+s2usb-speech-play35s. User confirmed playback worked and voice sounds good,
+but reported a lot of background noise. They compared sameheadset onactual
+Switch2 and reported MUCH cleaner audio. This is a quality issue to investigate,
+not a proven headset limitation. User suggested console-side noise reduction.
+Code inspection: MIC_GAIN1, direct CELT decode toUSB ring, no noise reduction
+or AGC. Plugin localtest also replays raw decoded mono throughstereo encoder.
+
+Official Nintendo support confirms Microphone Noise Suppression toggle in
+System Settings→Audio→Audio Input; input volume is a separate setting:
+https://en-americas-support.nintendo.com/app/answers/detail/a_id/68202/p/1095/c/235
+Asked user to repeat Switchmic test with noise suppressionOFF, sameheadset
+selected and volumeunchanged, compare to dongle. Answer pending. Do not
+attribute noise discrepancy conclusively toDSP until this controlled check.
+No denoiser implemented or firmwarechange in this turn. Optional lightweight
+noise reduction is a possible follow-up, but ifSwitch remainscleaner with
+noise suppressionOFF, inspect controller setup/gain/otherprocessing first.
+Also looked at SpeexDSPpreprocessor officialdocs: supports noise suppression,
+AGC,VAD. Not downloaded/integrated/benchmarked; noalgorithm choice made.
+
+
+Controlled Switch comparison CONFIRMED by user: Switch2 Microphone Noise
+Suppression wasON. WithOFF, backgroundnoise sounds similar to dongle/PC.
+WithON, quiet room levelmeter falls to0; withOFF, the sameambientnoise
+shows lowmeterlevel. This supports missing console-side noise suppression
+as the explanation for subjective noise difference, not a headset-quality
+problem or demonstrated raw USB decode defect. User observation is not a
+bitwise/gain-matched capturecomparison. No DSP added. If optionalnoise
+suppression is added later, route processed audio consistently to USB capture
+and self-test capture/playback/levelmeter; zeroing only meter or gate alone
+is not equivalent to actual noise reduction during speech. Rawlevel/gain
+currentlyunity; noaudio updates this turn. Continue startup/reopen/BLE
+reconnect validation next, latency/hardwarecompat remain outstanding.
+Controller may currently be connected to Switch2 for comparison; ask user
+to reconnect to dongle withheadset before further USBtests.
+
+
+### USB mic reopen regression (2026-10-23, in progress)
+
+User reconnected to dongle to resume startup/BLE checks. Host USB1/25,
+SInput is now ALSAcard0. No active test/PCM before probe. Ran5 bounded
+direct hw:CARD=SInput,DEV=0 arecord captures (3s each,0.7s gaps), ambient
+only, no voice playback. Script /tmp/s2log/mic-reopen.py, systemdunit
+s2mic-reopen finished. Baseline /tmp/s2log/mic-reopen-before/ contains
+trial1..5.wav andmeasurements.json (renamed before new firmware).
+Trial1 initialzero1.039s. Trials2–5 contain2.000–2.042ms nonzero OLD audio
+thenstartupzero0.558–1.037s. No rail samples or later>=5ms zero gaps.
+This reproduces earlier brief stale data on USB capture reopen.
+
+Code cause: set_mic_alt left mic_running=true onalt0; SOF refilled two
+1ms hardware IN buffers with oldPCM and nextalt1 reused them. Changed
+pico/usb_audio.c set_mic_alt: stop mic SOF first on every change; request
+PCMflush BEFORE rearming; onalt0 clear both IN buffers; onalt1 reactivate
+allocated endpoint and reinitialize both buffercontrol/nextindex before SOF
+resumes. SDK iso_activate reuses allocated DPRAM (verified in dcd source).
+Mic-on build and exact embedded-page check pass; whitespace clean. No
+plugin/audio gain/DSP changes. Guarded updater currently installing image
+965888bytes CRC0x2a939110, UF2SHA256
+728c75ecd67d6c51e4bbafce786b95666be4e3daa647ed5ca3fd6ae715ee1caa.
+After update user must reconnect, rerun same5-open probe. Do NOT call fix
+validated until hardware recordings start with uninterrupted zero silence.
+Then testBLE loss/return with directALSA capture held open (PipeWire policy
+otherwise closes capture on jackunavailable); watch reconnect startup pop
+because current decoder flush/skip only occurs on USB open, not new BLE
+session. No BLE reconnect test performed yet in this resumed validation.
+Recordings stay on host; no new audio exported. Freeze investigationpaused.
+
+
+Post-fix5-open probe PASSED: currentinstalled728c75ec... USB1/27. Allfive
+3s captures have uninterrupted exact-zero startup fromsample0 to liveaudio,
+no old2ms packets, no rail samples or later>=5ms zero gaps. Startup timings
+0.542,0.362,0.547,1.040,1.041s fromactualcapture samples. Files now
+/tmp/s2log/mic-reopen/; baseline preservedmic-reopen-before/. Saved tested
+UF2asbuild/switch2_pico-mic-reopen-fixed.uf2.
+
+Started bounded directALSA capture s2mic-ble (180s arecord,185s service)
+/tmp/s2log/mic-ble.wav to keep USB capture open regardless of PipeWire jack
+policy. ALSA hw:CARD=SInput,DEV=0,mono48kPCM16, ownerpid56378, trigger
+monotonic5752.760434056s, beforestatus1/27mounted/active/ready. User asked
+to power off onlySwitch2 withheadsetleftin; answerpending. Then verify
+sameUSB/ALSA RUNNING duringBLEloss, askreconnect, saveaudio/logs, stop
+unitbeforeautomatic180sexpiry. Watch for full-scale startup pop or stale
+decoder state because open USB stream currently doesn't reset decoder on
+newBLEsession; do not assume reconnect clean from transportretention alone.
+
+
+### Reconnect test exposed clock regression in first reopen fix
+
+DirectALSA s2mic-ble kept sameUSB1/27 and ALSA RUNNING acrossoff/on; user
+powered off then reconnected, no Valve SteamController manipulation.
+Stopped capture manually at78.500333 recordedseconds. No clipping/pop:
+overallpeak-29.8275dBFS; first1s afterresumepeak-38.5548dBFS, no rails.
+Zero runs startup0–0.698s andoffinterval20.208792–50.378792 recordedtime.
+HOWEVER recordedoff interval30.17s vsfirmwarearrival gap45.404s and
+USB ringoverflow447105samples per30s afterreturn indicate timing failure,
+so not a clean reconnect pass. All evidence /tmp/s2log/mic-ble*.json/txt/wav.
+
+Timed comparison on first reset-basedfix: arecord8s took8.0739wallsecs
+firstopen,11.8316wallsecs nextopen. A pw-record attempt recorded0samples
+(unlinked/unavailable; NOT a capture-rate pass). Metadata
+/tmp/s2log/mic-rate-reset/measurements.json, sourceaudiofiles. Initial
+mic-rate.py had indentationerror; corrected locally/remote andsecondrun
+producedthese actualresults. User informed firstfix introduced/interacted
+with USB timing problem despite removingstalesamples.
+
+Revised pico/usb_audio.c fix: RESTORE original continuously active endpoint
+(bank selector untouched acrossalt0/1, activateonlyonce). Onalt0 overwrite
+both queuedDPRAM PCM payloads withzeros without touching controlregisters;
+mic_fill produces48sample zeros whilealt0 instead of draining PCM ring.
+RequestPCMflush before arming firstopen. This eliminates staleaudio while
+preserving endpointstate/clock that was stable in earlier longruns. Built
+cleanly, exactembeddedpage checkpasses. Guarded updater installing revised
+image965888bytes CRC0xc39a3d31, UF2SHA256
+758911e87223b06f526261ab56b8c3812bb32021314dadc7775fb04340b0abbd.
+DO NOT use earlier728c75ec reset-basedimage as final; revert to original
+pre-fix f4a02915 if this revised queued-silence fix fails. Needuserreconnect
+then measure BOTH startup samples and wallclock sample rate, not just WAV
+length. Currenthandset may needreconnect after update. Freezeinvestigation
+paused, micvalidation continues. No agentinitiatedvoice recording/playback;
+ambientUSB probes only.
+
+
+### 2026-10-23: USB mic startup, clock and BLE reconnect validated
+
+This supersedes the failed reopen experiments above. Installed firmware:
+`78d6ea50b2927c5162b6336e7760a6996482489b8ec157609702f6d5d065c573`
+(UF2); a matching copy is `build/switch2_pico-mic-bank-validated.uf2`.
+Do not use the earlier file named `switch2_pico-mic-reopen-fixed.uf2`:
+that reset-based experiment failed timing despite passing startup checks.
+
+The final change keeps the mic endpoint continuously armed, silences queued
+payloads on close, and silences closed-state refills while preserving the
+packet-size controller. Crucially, mic refills write only the selected
+16-bit buffer-control bank. Whole-word writes previously risked restoring
+stale AVAIL/FULL bits for the sibling bank if hardware completed it during
+PCM preparation. Speaker control writes were not changed. The bank-local
+fix passed the same checks that the preceding experiments failed.
+
+Measured on SteamOS with the user's headset:
+
+- Five successive USB capture opens began with uninterrupted silence
+  (0.557–0.576 seconds), with no stale initial packets, clipping, or later
+  exact-zero gaps of at least 5 ms.
+- Two eight-second direct ALSA captures took 8.0250 and 8.0272 seconds.
+  PipeWire captured 9.9413 seconds in 10.0035 seconds elapsed.
+- Direct ALSA capture held open across controller power-off/reconnection
+  retained USB address 1/35 and the same RUNNING capture process, PID86610.
+  The final recording contains 155.375875 seconds in 155.391863 seconds
+  elapsed. Silence was limited to startup (1.019 seconds) and controller
+  loss (37.888 seconds), closely matching the firmware's 37.920-second
+  mic-arrival gap. No other >=5ms zero gaps and no clipped samples.
+- First second after audio resumed peaked at -41.24 dBFS (RMS -57.77 dBFS),
+  with no large reconnect spike. This is waveform evidence, not a fresh
+  listening test. Overall peak was -14.03 dBFS.
+- The complete 30-second post-reconnect window decoded1500 frames with
+  zero dropped/bad frames, underruns, silent packets or ring overflows.
+  Ring stayed near its120ms target. Controller-silence periods and startup
+  are expected; a missing headphone frame in an earlier window does not
+  establish dropout-free headphone playback.
+
+Stopped the bounded recording normally; dongle audio handles are closed,
+link ready, and host audio queries respond. No playback, host audio/Steam
+restart or Valve Steam Controller manipulation. Raw WAVs remain on SteamOS.
+Numeric results and firmware log copied to
+`research/audio/data/mic-bank-validation-20261023/` (local ignored evidence).
+Microphone-on/off builds, exact embedded-web check, existing host suite
+(464 core cases plus lifecycle/UAC2/jack/mic/API/Python tests) and whitespace
+check pass. No commit, merge or release performed.
+
+Remaining limits: end-to-end input latency has not been measured; only this
+SteamOS/headset combination has been validated. Noise suppression is not
+implemented; user previously confirmed raw input sounds like the Switch2
+with its noise suppression disabled. The Steam Controller/freeze inquiry
+remains PAUSED at the user's request, and these mic results do not resolve
+it. Decky/web mic-test UI remains as approved; plugin ZIP is unchanged.

@@ -242,24 +242,24 @@ bool s2_parse_audio_in(const uint8_t *data, size_t len, s2_audio_in_t *out);
 // little-endian bit stream:
 //   bits 0-11   tick, milliseconds (wraps); 12-16 the time since the last block
 //   bits 25-27  the layout with the length: 40 bytes and 7, 40 and 6, or 30
-//   then the orientation quaternion x, y, z (offset binary, 2^(n-1) = 1.0;
-//   w = +sqrt(1 - x² - y² - z²)) and the accelerometer x, y, z (signed, with
+//   then three quaternion component ratios (offset binary, 2^(n-1) = 1.0)
+//   and the accelerometer x, y, z (signed, with
 //   f fractional bits, the units of report 0x05's: 4096 = 1 g):
 //     40 bytes, 7: frame bits 34-35, quaternion 3 x 21 bits from 37, accel 3 x 14 from 100
 //     40 bytes, 6: frame bits 34-35, quaternion 3 x 23 bits from 37, accel 3 x 22 (f 8) from 106
 //     30 bytes:    frame bits 32-33, quaternion 3 x 31 bits from 35, accel 3 x 32 (f 16) from 128
 // The rest isn't decoded. At the dongle's 7.5 ms interval the controller
-// mixes all three (a 40-byte block, then a 30-byte one 2-4 ms later); at 15
-// ms only the first. The orientation is integrated from the raw gyro (bias
+// mixes all three (a 40-byte block, then a 30-byte one 2-4 ms later).
+// The orientation is integrated from the raw gyro (bias
 // included), so the rotation between two blocks gives the gyro in report
-// 0x05's axes. Near a half turn from the reference the controller switches
-// to another frame: frame 1 stores (y, z, x), frame 2 (z, -y, x);
-// s2_parse_motion() maps them back to frame 0.
+// 0x05's axes. The frame selects the omitted component in (w, x, y, z).
+// The fields give the following three components, cyclically, divided by
+// the omitted one. Set that component to +1 and normalize all four.
 #define S2_MOTION_MAX_LEN 40
 
 typedef struct {
     uint16_t tick;              // ms, 12 bits
-    uint8_t frame;              // as sent (q is in frame 0)
+    uint8_t frame;              // omitted component index, as sent
     float q[4];                 // w, x, y, z
     int16_t accel[3];
 } s2_motion_t;

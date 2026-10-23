@@ -52,8 +52,9 @@ else()
 endif()
 # Development: play a 440 Hz tone to the headphones instead of silence.
 option(S2_AUDIO_TEST_TONE "Headphone audio test tone" OFF)
-# In development: the headset mic as a USB microphone (not tested yet).
-option(S2_HEADSET_MIC "Pro Controller 2 headset mic (in development)" OFF)
+# Expose headset capture alongside playback on audio-capable builds.
+# Keep an opt-out for speaker-only builds and constrained boards.
+option(S2_HEADSET_MIC "Pro Controller 2 headset USB microphone" ${S2_HEADSET_AUDIO})
 if (S2_HEADSET_AUDIO)
     include(${CMAKE_CURRENT_LIST_DIR}/pico/opus.cmake)
 endif()
@@ -61,6 +62,7 @@ endif()
 set(CORE ${CMAKE_CURRENT_LIST_DIR}/core/src)
 set(PICO_SRC ${CMAKE_CURRENT_LIST_DIR}/pico)
 add_executable(switch2_pico
+        ${CORE}/mic_test.c
         ${CORE}/app_core.c
         ${CORE}/ds5.c
         ${CORE}/hd_rumble.c
@@ -83,6 +85,7 @@ add_executable(switch2_pico
         ${CORE}/gc_adapter.c
         ${CORE}/sinput.c
         ${CORE}/web_api.c
+        ${CORE}/web_ui_stub.c
         ${CORE}/webusb.c
         ${PICO_SRC}/fw_update_pico.c
         ${PICO_SRC}/main.c
@@ -98,7 +101,7 @@ add_executable(switch2_pico
         ${WEB_UI_GEN}
 )
 if (S2_HEADSET_AUDIO)
-    target_sources(switch2_pico PRIVATE ${PICO_SRC}/headset_audio_pico.c ${PICO_SRC}/usb_audio.c)
+    target_sources(switch2_pico PRIVATE ${PICO_SRC}/headset_audio_pico.c ${PICO_SRC}/usb_audio.c ${CORE}/usb_audio2.c)
     target_link_libraries(switch2_pico opus pico_multicore)
     target_compile_definitions(switch2_pico PRIVATE S2_HEADSET_AUDIO=1
             S2_AUDIO_TEST_TONE=$<BOOL:${S2_AUDIO_TEST_TONE}>)

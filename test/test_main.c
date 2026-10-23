@@ -249,8 +249,8 @@ static void from_hex(const char *hex, uint8_t *out, size_t n) {
 }
 
 // Motion blocks as captured with input report 0x09 (motion-20261021-192212.raw):
-// a roll at about -170 dps (report 0x05 read about -1550 LSB 60 ms later), and
-// two blocks in frame 1. Expected values from the Python analysis.
+// a roll and two blocks with x omitted. Expected values independently
+// reconstructed from component ratios in the Python analysis.
 static void test_motion(void) {
     uint8_t a[41], b[41];
     s2_motion_t ma, mb;
@@ -259,26 +259,26 @@ static void test_motion(void) {
     from_hex("287ddb000e83698582453f7c1298fabb1df60f145fff10a0fb8f8e00f48da3ff1880f1bf7214408500", b, 41);
     CHECK(s2_parse_motion(a, sizeof a, &ma) && s2_parse_motion(b, sizeof b, &mb));
     CHECK(mb.tick == 2941 && mb.frame == 0);
-    CHECK_NEAR(mb.q[0], 0.965346, 1e-5);
-    CHECK_NEAR(mb.q[1], 0.260571, 1e-5);
-    CHECK_NEAR(mb.q[2], -0.011383, 1e-5);
-    CHECK_NEAR(mb.q[3], 0.009026, 1e-5);
+    CHECK_NEAR(mb.q[0], 0.967592, 1e-5);
+    CHECK_NEAR(mb.q[1], 0.252126, 1e-5);
+    CHECK_NEAR(mb.q[2], -0.011014, 1e-5);
+    CHECK_NEAR(mb.q[3], 0.008733, 1e-5);
     CHECK(mb.accel[0] == -87 && mb.accel[1] == 1902 && mb.accel[2] == 4086);
     CHECK(s2_motion_gyro(&ma, &mb, 14.3f, g));
-    CHECK_NEAR(g[0], -2407, 2);
-    CHECK_NEAR(g[1], -78, 2);
-    CHECK_NEAR(g[2], 37, 2);
+    CHECK_NEAR(g[0], -2160, 2);
+    CHECK_NEAR(g[1], -83, 2);
+    CHECK_NEAR(g[2], 40, 2);
     CHECK(!s2_motion_gyro(&mb, &mb, 14.3f, g));   // no time between them
 
-    // Frame 1 stores (y, z, x): mapped back on parsing.
+    // Frame 1 omits x and stores (y/x, z/x, w/x).
     from_hex("2864f7000ea7ae0e6ac6c052f79ff16b3dee7e542802c89ff1a79ecf4f2b2c028d3fc6eff40cfe8700", a, 41);
     from_hex("2871d7000e67b20feec540f4df9ff13b3dbd3f5d2802cabff19b9ef92f2f200298bfc68ff400008700", b, 41);
     CHECK(s2_parse_motion(a, sizeof a, &ma) && s2_parse_motion(b, sizeof b, &mb));
     CHECK(mb.frame == 1);
     CHECK(s2_motion_gyro(&ma, &mb, 14.3f, g));
-    CHECK_NEAR(g[0], -11002, 3);
-    CHECK_NEAR(g[1], -278, 2);
-    CHECK_NEAR(g[2], -423, 2);
+    CHECK_NEAR(g[0], 728, 3);
+    CHECK_NEAR(g[1], 144, 2);
+    CHECK_NEAR(g[2], -119, 2);
 
     // The other two layouts, from the dongle's mic stream at 7.5 ms
     // (/api/motion dump): a 40-byte block with layout 6, then a 30-byte one,
@@ -288,21 +288,61 @@ static void test_motion(void) {
     from_hex("287cce000d83d0d617c138c8385f41d33ee599c20f22f071fe83ec062c70806bed232e29487a022301", b, 41);
     CHECK(s2_parse_motion(b, sizeof b, &mb));
     CHECK(mb.tick == 3708 && mb.frame == 0);
-    CHECK_NEAR(mb.q[1], -0.02011, 1e-5);
-    CHECK_NEAR(mb.q[2], -0.944576, 1e-5);
-    CHECK_NEAR(mb.q[3], -0.31402, 1e-5);
+    CHECK_NEAR(mb.q[1], -0.014251, 1e-5);
+    CHECK_NEAR(mb.q[2], -0.669384, 1e-5);
+    CHECK_NEAR(mb.q[3], -0.222534, 1e-5);
     CHECK(mb.accel[0] == 4020 && mb.accel[1] == 665 && mb.accel[2] == 136);
     from_hex("1e701e000c00aab0f501e36e0d00c3b657f08db20f84e99d029a3d80002601", a, 31);
     from_hex("1e804e000c005ac2f501546e0f009ff657f0b0b40f885f8f02a42fb1002101", c, 31);
     CHECK(s2_parse_motion(a, 31, &ma) && s2_parse_motion(c, sizeof c, &mc));
     CHECK(mc.tick == 3712 && mc.frame == 0);
-    CHECK_NEAR(mc.q[0], 0.136696, 1e-5);
-    CHECK_NEAR(mc.q[2], -0.939723, 1e-5);
+    CHECK_NEAR(mc.q[0], 0.710433, 1e-5);
+    CHECK_NEAR(mc.q[2], -0.667610, 1e-5);
     CHECK(mc.accel[0] == 4020 && mc.accel[1] == 655 && mc.accel[2] == 177);
     CHECK(s2_motion_gyro(&ma, &mc, 14.3f, g));
-    CHECK_NEAR(g[0], 113, 2);
-    CHECK_NEAR(g[1], 8247, 3);
-    CHECK_NEAR(g[2], 2739, 3);
+    CHECK_NEAR(g[0], -24, 2);
+    CHECK_NEAR(g[1], 402, 3);
+    CHECK_NEAR(g[2], 102, 3);
+
+    // Real frame transitions during the failed 2026-10-22 hardware test.
+    // These include frame 3, which the original decoder rejected, and the
+    // upside-down frame 2, which it reflected into the wrong orientation.
+    static const struct {
+        const char *before, *after;
+        uint8_t frame_before, frame_after;
+    } transitions[] = {
+        {"28ff0a010ec36fc595fafcf995390e570060c5b97f36ffc20c43804781de4b361cc632bc02701315ff",
+         "280cdb000ecb906eca297f3116b70ddb009044c837351cc30e9b800ef1e6973437c63e1c06ac0f17ff", 0, 2},
+        {"281d94000d83dbf54f3e3d7ca2c4bde3f9aad00e8817f06a82c4b401679700459d5f76e404effe14ff",
+         "282d04010e078b1de2ad386ddb6fe7bf3617bffb28016b40e81b1a947f7ae800ec40a5ffc774f614ff", 0, 1},
+        {"2825cd000deb0cf64f0bce3b1a4822240343b5ce1c83a05199bb05024c9000f233f0f5e9b4240a1dff",
+         "1e261d000c031af9e601ac162401a0fbfe98e0d600b0d9900e3895dc021aff00000000000000000000", 2, 3},
+        {"281eb0000dcf068e57d59b4c9dfea730043a698e3207f1ed965c35ff48bd00e43f503de818d60e1dff",
+         "282e00010e0b51f2e747bc0135b90e4c3a478339b1ff4fc00d149daea09db4ff7f4034d0e7fc0820ff", 3, 2},
+        {"2887d6010f0b3543ea5bffb0c5f9335725b70012c2ccfc2abc72ee24fca04e01f51e163e8916469885",
+         "1e8b46000c00ecd66f02e471ff01bffa8dc06fc5f460885c0890de0c0323ff00000000000000000000", 2, 0},
+    };
+    for (unsigned i = 0; i < sizeof transitions / sizeof transitions[0]; i++) {
+        from_hex(transitions[i].before, a, sizeof a);
+        from_hex(transitions[i].after, b, sizeof b);
+        CHECK(s2_parse_motion(a, sizeof a, &ma) && s2_parse_motion(b, sizeof b, &mb));
+        CHECK(ma.frame == transitions[i].frame_before && mb.frame == transitions[i].frame_after);
+        float dot = 0, na = 0, nb = 0;
+        for (int j = 0; j < 4; j++) {
+            dot += ma.q[j] * mb.q[j];
+            na += ma.q[j] * ma.q[j];
+            nb += mb.q[j] * mb.q[j];
+        }
+        CHECK_NEAR(na, 1, 1e-6);
+        CHECK_NEAR(nb, 1, 1e-6);
+        CHECK(fabsf(dot) > 0.999f); // less than 5.2 degrees across the switch
+    }
+    // Either sign represents the same quaternion, including after a switch.
+    mb = ma;
+    mb.tick = (ma.tick + 16) & 0xFFF;
+    for (int j = 0; j < 4; j++) mb.q[j] = -ma.q[j];
+    CHECK(s2_motion_gyro(&ma, &mb, 14.3f, g));
+    CHECK(g[0] == 0 && g[1] == 0 && g[2] == 0);
 
     CHECK(!s2_parse_motion(c, 20, &mc));   // shorter than its length byte
     c[0] = 35;

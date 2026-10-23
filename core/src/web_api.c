@@ -29,11 +29,14 @@
 #include "mode_select.h"
 #include "version.h"
 #include "web_api.h"
+#include "mic_test.h"
 
 // The page itself is embedded only on boards that serve it over HTTP (the
 // Pico's Wi-Fi); elsewhere these weak placeholders are used.
-__attribute__((weak)) const uint8_t web_ui_data[1] = {0};
-__attribute__((weak)) const size_t web_ui_size = 0;
+// Keep fallback definitions in another translation unit: a const initializer
+// here can be folded to zero before the linker sees the Pico's strong data.
+extern const uint8_t web_ui_data[];
+extern const size_t web_ui_size;
 
 // ---------------------------------------------------------------------------
 // Small JSON writer
@@ -120,6 +123,8 @@ static void api_status(http_response_t *r) {
     jb_printf(&j, ",\"profile\":");
     jb_str(&j, settings_active(&g_settings, settings_boot_ctrl(&g_settings))->name);
     jb_printf(&j, ",\"usb_config_only\":%s", usb_mode_config_only() ? "true" : "false");
+    jb_printf(&j, ",\"audio_active\":%s", platform_audio_active() ? "true" : "false");
+    jb_printf(&j, ",\"headset_jack\":%u", s2_link_headset_jack());
     jb_printf(&j, ",\"usb_mouse\":%s,\"ctrl_type\":%u", usb_mode_has_mouse() ? "true" : "false",
               s2_link_ctrl_type());
     platform_supply_t sup;
@@ -284,11 +289,11 @@ static void api_settings_get(http_response_t *r) {
     jb_printf(&j, ",\"wifi_has_pass\":%s,\"ble_tx_power\":%u,\"idle_disconnect\":%u,\"idle_minutes\":%u,"
                   "\"pair_button\":%u,\"joycon_single\":%u,\"sync_button\":%s,"
                   "\"decky_options\":%u,\"decky_outputs\":{\"switch\":[%d],\"gp\":[%d]},"
-                  "\"headset_audio\":%s,\"audio_mode\":%u}",
+                  "\"headset_audio\":%s,\"audio_mode\":%u,\"mic_test\":%s}",
               s->wifi_pass[0] ? "true" : "false", s->ble_tx_power, !s->idle_disconnect_off, s->idle_minutes,
               s->pair_button, s->joycon_single, platform_has_sync_button() ? "true" : "false",
               s->decky_options, OUT_DECKY_QAM, GP_DECKY_QAM, platform_has_headset_audio() ? "true" : "false",
-              s->headset_low_latency);
+              s->headset_low_latency, mic_test_supported() ? "true" : "false");
     respond_json(r, &j);
 }
 
@@ -466,6 +471,7 @@ static bool apply_kv(settings_t *s, const char *k, const char *v, bool *usb_reco
 }
 
 static void api_settings_post(const http_request_t *req, http_response_t *r) {
+    if (mic_test_active()) return respond_text(r, 409, "Close the microphone test before saving settings.");
     char *body = malloc(req->body_len + 1);
     if (!body) return respond_text(r, 500, "oom");
     memcpy(body, req->body, req->body_len);
@@ -486,6 +492,8 @@ static void api_settings_post(const http_request_t *req, http_response_t *r) {
     free(body);
     settings_sanitize(&s);
     bool mode_changed = settings_boot_usb_mode(&s) != usb_mode_active() || settings_boot_mouse(&s) != usb_mode_has_mouse();
+    if ((usb || mode_changed) && platform_audio_active())
+        return respond_text(r, 409, "Close headphone playback and microphone recording before changing USB settings.");
     g_settings = s;
     if (mode_changed) {
         // The host must see a different device: save and restart.
@@ -502,6 +510,41 @@ static void api_settings_post(const http_request_t *req, http_response_t *r) {
 }
 
 // ---------------------------------------------------------------------------
+static bool query_get(const char *q, const char *key, char *out, size_t out_len);
+
+// Shared dongle-local microphone test: no voice data is exported to clients.
+static void api_mic_test(const http_request_t *req, http_response_t *r, bool post) {
+    if (!mic_test_supported()) return respond_text(r, 404, "Update to firmware with microphone testing support.");
+    char v[24];
+    uint32_t session = query_get(req->query, "session", v, sizeof v) ? (uint32_t)strtoul(v, NULL, 10) : 0;
+    if (post) {
+        if (!query_get(req->query, "do", v, sizeof v)) return respond_text(r, 400, "missing do=");
+        if (!strcmp(v, "open")) {
+            if (platform_audio_active()) return respond_text(r, 409, "Close other headphone playback and microphone recording before starting the test.");
+            if (!platform_has_headset_audio() || usb_mode_active() != USB_MODE_SINPUT ||
+                (s2_link_headset_jack() & 1) == 0)
+                return respond_text(r, 409, "Connect a Switch 2 Pro Controller with a headset mic plugged in, in SInput mode.");
+            session = mic_test_open(platform_millis());
+            if (!session) return respond_text(r, 409, "A microphone test is already open.");
+        } else if (!strcmp(v, "record")) {
+            if (!mic_test_record(session, platform_millis())) return respond_text(r, 409, "Reopen the microphone test and try again.");
+        } else if (!strcmp(v, "cancel")) {
+            if (!mic_test_cancel(session)) return respond_text(r, 409, "This microphone test has already closed.");
+        } else return respond_text(r, 400, "unknown microphone test action");
+    }
+    mic_test_status_t state;
+    mic_test_status(session, platform_millis(), &state);
+    jbuf_t j;
+    if (!jb_init(&j, 512)) return respond_text(r, 500, "oom");
+    jb_printf(&j, "{\"session\":%lu,\"phase\":", (unsigned long)state.session);
+    jb_str(&j, mic_test_phase_name(state.phase));
+    jb_printf(&j, ",\"elapsed_ms\":%lu,\"remaining_ms\":%lu,\"peak\":%u,\"error\":",
+              (unsigned long)state.elapsed_ms, (unsigned long)state.remaining_ms, state.peak);
+    jb_str(&j, state.error ? state.error : "");
+    jb_printf(&j, "}");
+    respond_json(r, &j);
+}
+
 // POST /api/action
 // ---------------------------------------------------------------------------
 static bool query_get(const char *q, const char *key, char *out, size_t out_len) {
@@ -541,6 +584,9 @@ static bool parse_addr(const char *v, uint8_t out[6]) {
 static void api_action(const http_request_t *req, http_response_t *r) {
     char what[24];
     if (!query_get(req->query, "do", what, sizeof what)) return respond_text(r, 400, "missing do=");
+    if ((!strcmp(what, "usb_reconnect") || !strcmp(what, "reboot") ||
+         !strcmp(what, "bootloader") || !strcmp(what, "factory")) && platform_audio_active())
+        return respond_text(r, 409, "Close headphone playback and microphone recording before restarting the dongle.");
     LOG("web: action %s", what);
     if (!strcmp(what, "forget")) {
         // addr=AA:BB:CC:DD:EE:FF forgets that controller; without it, all of them.
@@ -623,6 +669,8 @@ static void api_fw(const http_request_t *req, http_response_t *r, bool get, bool
         return respond_json(r, &j);
     }
     if (!post) return respond_text(r, 405, "POST");
+    if (platform_audio_active())
+        return respond_text(r, 409, "Close headphone playback and microphone recording before updating firmware.");
     if (!strcmp(op, "begin")) {
         ok = platform_fw_begin(query_u32(req->query, "size"), query_u32(req->query, "crc"), &err);
         if (ok) LOG("fw: update started (%lu bytes)", (unsigned long)query_u32(req->query, "size"));
@@ -651,6 +699,7 @@ void web_api_handle(const http_request_t *req, http_response_t *r) {
         r->body_len = web_ui_size;
         return;
     }
+    if ((get || post) && !strcmp(req->path, "/api/mic-test")) return api_mic_test(req, r, post);
     if (get && !strcmp(req->path, "/api/status")) return api_status(r);
     if (get && !strcmp(req->path, "/api/settings")) return api_settings_get(r);
     if (post && !strcmp(req->path, "/api/settings")) return api_settings_post(req, r);

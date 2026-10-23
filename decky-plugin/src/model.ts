@@ -52,6 +52,7 @@ export interface Settings {
   decky_options?: number;
   // Pro Controller 2 headphones (firmware 0.17.0+, Pico 2 W): 0 Stable, 1 Low Latency.
   headset_audio?: boolean;
+  mic_test?: boolean;
   audio_mode?: number;
 }
 

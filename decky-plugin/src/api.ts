@@ -44,3 +44,14 @@ export interface PluginUpdate extends Result {
 }
 export const checkPluginUpdate = callable<[force: boolean], PluginUpdate>("check_plugin_update");
 export const installPluginUpdate = callable<[], Result & { version?: string }>("install_plugin_update");
+
+export interface MicTestState {
+  session: number;
+  phase: "idle" | "ready" | "preparing" | "recording" | "playback" | "done" | "error";
+  elapsed_ms: number;
+  remaining_ms: number;
+  peak: number;
+  error: string;
+}
+export const micTest = callable<[operation: "status" | "open" | "record" | "cancel", session: number],
+  Result & { test?: MicTestState }>("mic_test");

@@ -201,6 +201,17 @@ body.offline #usb-help{display:flex}
 }
 #toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:8px 16px;border-radius:8px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:30}
 #toast.show{opacity:1}
+
+.mic-dialog{width:min(520px,calc(100vw - 32px));color:var(--fg);box-shadow:0 12px 48px #0004}
+.mic-dialog::backdrop{background:#0007}
+.mic-body{display:flex;flex-direction:column;gap:12px}
+.mic-title{font-size:14px;font-weight:600;margin:0}
+.mic-description{margin:0}
+.mic-level-row{display:flex;align-items:center;gap:12px;margin-top:4px}
+.mic-level-symbol{width:22px;height:22px;flex:none;color:var(--muted)}
+.mic-level{flex:1;min-width:0;height:8px;border-radius:4px;background:var(--soft);overflow:hidden}
+.mic-level-fill{height:100%;width:0;background:var(--acc);transition:width 90ms linear}
+.mic-actions{justify-content:flex-end;margin-top:16px;padding-top:12px;border-top:1px solid var(--line)}
 </style>
 </head>
 <body class="offline">
@@ -375,6 +386,7 @@ body.offline #usb-help{display:flex}
     </section>
     <section class="card stack audio-only" aria-label="Headphones" hidden>
       <h2>Headphones</h2>
+      <div class="row"><button id="mic-test-open" onclick="openMicTest()" hidden>Test Microphone</button></div>
       <label class="kvrow">Audio mode<select data-k="audio_mode"><option value="0">Stable</option><option value="1">Low Latency</option></select></label>
       <p class="note">For headphones plugged into a Switch 2 Pro Controller, in SInput mode. Low Latency will reduce the delay (about 70 ms in the controller instead of 155 ms), but the sound may cut out more often, as on the Switch 2. It will take effect as soon as it's saved, even during playback.</p>
     </section>
@@ -469,6 +481,24 @@ body.offline #usb-help{display:flex}
 </div>
 </main>
 <div id="toast"></div>
+<dialog id="mic-test-dialog" class="card mic-dialog" aria-label="Test Microphone" aria-describedby="mic-test-description">
+  <div class="mic-body">
+    <h2>Test Microphone</h2>
+    <p id="mic-test-title" class="mic-title" aria-live="polite">Connecting to the microphone…</p>
+    <p id="mic-test-description" class="note mic-description">Playback will come through your controller’s headphones at a reduced volume.</p>
+    <div id="mic-test-level-row" class="mic-level-row ready">
+      <svg class="mic-level-symbol" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <g id="mic-test-input-symbol"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></g>
+        <g id="mic-test-output-symbol" hidden><path d="M3 9h4l5-4v14l-5-4H3z"/><path d="M16 8a6 6 0 0 1 0 8M19 5a10 10 0 0 1 0 14"/></g>
+      </svg>
+      <div id="mic-test-level" class="mic-level" role="meter" aria-label="Microphone audio level" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="mic-test-fill" class="mic-level-fill"></div></div>
+    </div>
+  </div>
+  <div class="row mic-actions">
+    <button id="mic-test-close" onclick="closeMicTest()">Cancel</button>
+    <button id="mic-test-begin" class="dark" onclick="beginMicTest()" hidden>Begin Recording</button>
+  </div>
+</dialog>
 <script>
 // ---------------------------------------------------------------------------
 // Transport: HTTP when served by the dongle's Wi-Fi, WebUSB everywhere else.
@@ -553,6 +583,77 @@ const S2BIT={A:3,B:2,X:1,Y:0,L:22,R:6,ZL:23,ZR:7,Minus:8,Plus:9,LStick:11,RStick
 let S=null;
 const $=id=>document.getElementById(id);
 function toast(t){const e=$('toast');e.textContent=t;e.classList.add('show');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove('show'),1800)}
+// The firmware owns capture/playback so this also works over HTTP and WebUSB
+// without browser media permissions. Only level/status data crosses the link.
+let micTestView=null;
+const micTestText={
+  ready:['Record yourself using your microphone and then listen back.','Once recording starts, speak into the mic.'],
+  preparing:['Preparing microphone','The five-second recording will begin when the microphone is ready.'],
+  recording:['Recording...','Speak toward the mic. (Recording for five seconds.)'],
+  playback:['Now playing back...','Make sure you can hear the recorded voice audio.']
+};
+async function micTestRequest(operation,session=0){
+  const path='/api/mic-test?session='+session+(operation==='status'?'':'&do='+operation);
+  const r=await api(path,{method:operation==='status'?'GET':'POST'});
+  if(!r.ok)throw new Error(r.text()||'The microphone test could not be reached.');
+  return r.json();
+}
+function renderMicTest(state,error=''){
+  const phase=state?.phase, failure=error||(phase==='error'?state.error:'');
+  const text=micTestText[phase]||['Connecting to the microphone…','Playback will come through your controller’s headphones at a reduced volume.'];
+  $('mic-test-title').textContent=failure?'Microphone test unavailable':text[0];
+  $('mic-test-description').textContent=failure||text[1];
+  const playing=phase==='playback';
+  $('mic-test-input-symbol').toggleAttribute('hidden',playing);
+  $('mic-test-output-symbol').toggleAttribute('hidden',!playing);
+  $('mic-test-level-row').hidden=!!failure;
+  $('mic-test-level-row').classList.toggle('ready',phase==='ready');
+  const level=state?.peak?Math.max(0,Math.min(100,(20*Math.log10(state.peak/32768)+60)/60*100)):0;
+  $('mic-test-fill').style.width=level+'%';
+  $('mic-test-level').setAttribute('aria-valuenow',Math.round(level));
+  $('mic-test-level').setAttribute('aria-label',playing?'Playback audio level':'Microphone audio level');
+  $('mic-test-close').textContent=failure||playing?'Close':'Cancel';
+  $('mic-test-begin').hidden=!!failure||phase!=='ready';
+}
+async function openMicTest(){
+  if(micTestView)return;
+  const view={session:0,timer:0,busy:false,failed:false};micTestView=view;
+  renderMicTest(null);$('mic-test-dialog').showModal();
+  try{
+    const state=await micTestRequest('open');view.session=state.session;
+    if(micTestView!==view){micTestRequest('cancel',view.session).catch(()=>{});return}
+    renderMicTest(state);view.timer=setTimeout(()=>pollMicTest(view),120);
+  }catch(e){if(micTestView===view)renderMicTest(null,e.message)}
+}
+async function pollMicTest(view){
+  if(micTestView!==view||view.failed)return;
+  try{
+    const state=await micTestRequest('status',view.session);
+    if(micTestView!==view||view.failed)return;
+    if(state.session!==view.session)throw new Error('This microphone test has closed. Reopen it to try again.');
+    if(state.phase==='done'){closeMicTest();return}
+    renderMicTest(state);
+    if(!['idle','done','error'].includes(state.phase))view.timer=setTimeout(()=>pollMicTest(view),120);
+  }catch(e){
+    if(micTestView===view)renderMicTest(null,e.message);
+    micTestRequest('cancel',view.session).catch(()=>{});
+  }
+}
+async function beginMicTest(){
+  const view=micTestView;if(!view||!view.session||view.busy)return;
+  view.busy=true;$('mic-test-begin').disabled=true;
+  try{const state=await micTestRequest('record',view.session);if(micTestView===view)renderMicTest(state)}
+  catch(e){view.failed=true;clearTimeout(view.timer);if(micTestView===view)renderMicTest(null,e.message);micTestRequest('cancel',view.session).catch(()=>{})}
+  finally{view.busy=false;$('mic-test-begin').disabled=false}
+}
+function closeMicTest(){
+  const view=micTestView;micTestView=null;
+  if(view){clearTimeout(view.timer);if(view.session)micTestRequest('cancel',view.session).catch(()=>{})}
+  $('mic-test-dialog').close();
+}
+$('mic-test-dialog').addEventListener('cancel',e=>{e.preventDefault();closeMicTest()});
+window.addEventListener('pagehide',()=>{if(micTestView)closeMicTest()});
+
 async function haptic(e){try{const r=await api('/api/action?do=haptic&effect='+e,{method:'POST'});if(!r.ok)toast(r.text()||'Failed')}catch(x){toast('Failed')}}
 async function playSample(n){
   try{const r=await api('/api/action?do=sample&n='+n,{method:'POST'});toast(r.ok?'Sample '+n:(r.text()||'Failed'))}catch(x){toast('Failed')}}
@@ -1005,6 +1106,7 @@ function render(){
   });
   $('bias').textContent='bias: '+S.gyro_bias.join(', ');
   document.querySelectorAll('.audio-only').forEach(e=>e.hidden=S.headset_audio!==true);
+  $('mic-test-open').hidden=S.mic_test!==true;
   // Pairing window: boards with a Sync button only (the Pico's BOOTSEL).
   const pb=document.querySelector('[data-k="pair_button"]');
   pb.disabled=!S.sync_button;

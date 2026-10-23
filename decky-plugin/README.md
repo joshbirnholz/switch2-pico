@@ -30,6 +30,13 @@ menu (Decky Loader), on a Steam Deck or any SteamOS / Linux machine with Decky.
   (`/etc/udev/rules.d/70-switch2-pico.rules`) so Steam can read the dongle
   through hidraw in SInput mode, unless a rule for its ID (2e8a:10c6) is
   already there.
+* **Test Microphone** (Pico 2 W, Pro Controller 2, SInput mode, supported
+  firmware): a popup with live mic and playback levels. **Begin Recording**
+  will record five seconds and play it through the controller’s headphones
+  at reduced volume. The recording stays in dongle RAM and is discarded
+  afterward. The popup will close automatically after playback. Cancel/Close
+  will stop the test early. Close other apps using the
+  dongle’s audio first; the test will leave the PC’s audio routing alone.
 * **Motion server (DSU)**: the connected controller's gyro and accelerometer
   for emulators (Cemu, Dolphin, Ryujinx, the Yuzu / Citra forks...), which
   under Steam Input only see Steam's virtual controller. A cemuhook / DSU

@@ -15,6 +15,7 @@ import {
   Profile, profileForm, quickRemap, Settings, slotLabel, Status, STATUS_MODES,
 } from "./model";
 import { AllButtonsModal, confirm, PairedModal, SOFT_CSS, SoftButton, UpdateModal } from "./modals";
+import { MicTestModal } from "./mic-test";
 import { pickOutput, ProfilesModal } from "./profiles";
 
 const hint: CSSProperties = { fontSize: 12.5, color: "#a3adba", lineHeight: 1.35 };
@@ -418,6 +419,16 @@ function Content() {
                 onChange={(o) => save(`audio_mode=${o.data}`)}
               />
             </Block>
+          </PanelSectionRow>
+        </PanelSection>
+      )}
+
+      {S?.mic_test && P && ready.length > 0 && headsetAudio(S, t, mode) && (
+        <PanelSection title="Microphone">
+          <PanelSectionRow>
+            <ButtonItem layout="below" onClick={() => showModal(<MicTestModal />)}>
+              Test Microphone
+            </ButtonItem>
           </PanelSectionRow>
         </PanelSection>
       )}

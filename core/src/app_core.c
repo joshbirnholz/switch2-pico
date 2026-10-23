@@ -33,6 +33,7 @@
 
 static uint32_t s_raw_buttons;
 static bool s_usb_reconnect;
+static bool s_usb_reconnect_waiting;
 static uint32_t s_usb_reconnect_at;
 static int s_reboot;   // 0 none, 1 normal, 2 bootloader
 static uint32_t s_reboot_at;
@@ -50,6 +51,10 @@ uint32_t app_decky_qam_presses(void) {
 void app_request_usb_reconnect(void) {
     if (!s_usb_reconnect) {
         s_usb_reconnect = true;
+        if (platform_audio_active()) {
+            s_usb_reconnect_waiting = true;
+            return;
+        }
         tud_disconnect();
         s_usb_reconnect_at = platform_deadline_ms(300);
         LOG("usb: re-enumerating");
@@ -102,6 +107,13 @@ static void usb_present_controller(bool controller) {
     static uint32_t switch_at;
     bool config_only = !controller && platform_usb_config_only_supported();
     if (config_only && !usb_mode_config_only()) {
+        // Keep the USB audio endpoints present across a controller loss.
+        // They can deliver silence until the controller returns or the host
+        // closes the streams; removing an active sound card can stall hosts.
+        if (platform_audio_active()) {
+            waiting = false;
+            return;
+        }
         if (tud_suspended()) {
             waiting = true;
             switch_at = platform_deadline_ms(USB_RESUMED_MS);
@@ -328,6 +340,10 @@ static void idle_check(const s2_input_t *in, uint32_t prev_buttons, bool first) 
         if (d > IDLE_STICK_DELTA || d < -IDLE_STICK_DELTA) active = true;
     }
     if (active) {
+        idle_reset(in);
+        return;
+    }
+    if (platform_audio_active()) {
         idle_reset(in);
         return;
     }
@@ -660,11 +676,16 @@ static void usb_watch_task(void) {
 
 static void maintenance_task(void) {
     if (!s_usb_reconnect) usb_present_controller(s2_link_state() == S2_LINK_READY);
-    if (s_usb_reconnect && platform_time_reached(s_usb_reconnect_at)) {
+    if (s_usb_reconnect_waiting && !platform_audio_active()) {
+        s_usb_reconnect_waiting = false;
+        tud_disconnect();
+        s_usb_reconnect_at = platform_deadline_ms(300);
+    }
+    if (s_usb_reconnect && !s_usb_reconnect_waiting && platform_time_reached(s_usb_reconnect_at)) {
         s_usb_reconnect = false;
         tud_connect();
     }
-    if (s_reboot && platform_time_reached(s_reboot_at)) {
+    if (s_reboot && !platform_audio_active() && platform_time_reached(s_reboot_at)) {
         platform_reboot(s_reboot == 2);
     }
 }

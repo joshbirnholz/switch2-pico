@@ -187,22 +187,20 @@ bool s2_parse_motion(const uint8_t *block, size_t len, s2_motion_t *out) {
     }
     out->tick = (uint16_t)bits_at(b, 0, 12);
     out->frame = (uint8_t)bits_at(b, frame_at, 2);
-    if (out->frame == 3) return false;
-    float v[3], n = 0.0f;
+    float v[3], n = 1.0f;
     for (unsigned i = 0; i < 3; i++) {
         int32_t raw = (int32_t)(bits_at(b, q_at + q_bits * i, q_bits) - (1u << (q_bits - 1)));
         v[i] = ldexpf((float)raw, 1 - (int)q_bits);
         n += v[i] * v[i];
     }
-    out->q[0] = n < 1.0f ? sqrtf(1.0f - n) : 0.0f;
-    // Frame 1 stores (y, z, x) and frame 2 (z, -y, x) of frame 0's x, y, z.
-    if (out->frame == 1) {
-        out->q[1] = v[2], out->q[2] = v[0], out->q[3] = v[1];
-    } else if (out->frame == 2) {
-        out->q[1] = v[2], out->q[2] = -v[1], out->q[3] = v[0];
-    } else {
-        out->q[1] = v[0], out->q[2] = v[1], out->q[3] = v[2];
-    }
+    // The frame selects the omitted quaternion component (w, x, y, z).
+    // The three fields are ratios to it, in cyclic order, not components
+    // of a unit quaternion. Set the omitted component to +1 and normalize;
+    // a global sign change represents the same orientation.
+    float scale = 1.0f / sqrtf(n);
+    out->q[out->frame] = scale;
+    for (unsigned i = 0; i < 3; i++)
+        out->q[(out->frame + i + 1) % 4] = v[i] * scale;
     for (unsigned i = 0; i < 3; i++) {
         uint32_t raw = bits_at(b, a_at + a_bits * i, a_bits);
         int32_t v32 = a_bits < 32 && (raw >> (a_bits - 1)) ? (int32_t)(raw - (1u << a_bits)) : (int32_t)raw;

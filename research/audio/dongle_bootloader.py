@@ -14,6 +14,7 @@ import glob
 import os
 import struct
 import ctypes
+import sys
 
 CONFIG_INTERFACE_NAME = "Switch2-Pico Config"
 USBDEVFS_BULK = 0xC0185502
@@ -52,6 +53,9 @@ def bulk(fd, ep, data, length, timeout_ms=3000):
 
 
 def main():
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from audio_preflight import require_idle
+    require_idle()
     bus, dev, itf, eps = find()
     fd = os.open(f"/dev/bus/usb/{bus:03d}/{dev:03d}", os.O_RDWR)
     try:
@@ -62,6 +66,8 @@ def main():
         got = bulk(fd, eps["in"], None, 4096)
         status = struct.unpack_from("<H", got, 4)[0] if got[:4] == b"S2PR" else None
         print(f"board answered {status}: {got[12:].decode(errors='replace')}")
+        if status != 200:
+            raise SystemExit("Bootloader request was refused; no restart confirmed.")
         print("it will restart into its UF2 bootloader in half a second; a USB drive should appear")
     finally:
         try:

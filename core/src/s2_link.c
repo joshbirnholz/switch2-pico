@@ -127,6 +127,11 @@ typedef struct link {
     uint32_t motion_ms;          // when it came
     uint32_t motion_blocks, motion_other;   // decoded / other layouts, logged every 30 s
     uint8_t motion_other_len, motion_other_hdr;   // the last other layout seen
+    bool headset_mic;            // audio-in jack status distinguishes TRS/TRRS
+    bool jack_known;
+    uint32_t jack_probe_until, jack_probe_after;
+    uint32_t jack_candidate_since;
+    uint8_t jack_candidate;
     bool headset;                // the input report's headset bit
     bool audio_second_half;      // the next write is a frame's second half
     uint32_t audio_due;          // when it goes out (ms)
@@ -432,6 +437,44 @@ void s2_link_set_headset_audio(bool on, uint8_t mode) {
     s_audio_mode = mode;
 }
 
+uint8_t s2_link_headset_jack(void) {
+    for (int i = 0; i < S2T_LINKS; i++) {
+        const link_t *k = &s_links[i];
+        if (k->state == S2_LINK_READY && k->pid == S2_PID_PRO2 && k->headset)
+            return (uint8_t)(1 | (k->headset_mic ? 2 : 0));
+    }
+    return 0;
+}
+
+bool s2_link_headset_detecting(void) {
+    for (int i = 0; i < S2T_LINKS; i++) {
+        const link_t *k = &s_links[i];
+        if (k->state == S2_LINK_READY && k->pid == S2_PID_PRO2 && k->headset && !k->jack_known)
+            return true;
+    }
+    return false;
+}
+
+static void observe_headset_jack(link_t *k, uint8_t jack) {
+    if (!k->headset) {
+        k->jack_known = true;
+        k->headset_mic = false;
+        return;
+    }
+    uint32_t now = now_ms();
+    uint8_t candidate = jack & 7;
+    if (candidate != 5 && candidate != 7) return;
+    if (candidate != k->jack_candidate) {
+        k->jack_candidate = candidate;
+        k->jack_candidate_since = now;
+    }
+    // Audio-in can initially say headphones-only while the mic settles.
+    // Keep the last confirmed status until a stable report after warm-up.
+    if ((int32_t)(now - k->jack_probe_after) < 0 || now - k->jack_candidate_since < 300) return;
+    k->jack_known = true;
+    k->headset_mic = candidate == 7;
+}
+
 void s2_link_set_headset_mic(bool on) {
     s_mic_on = on;
 }
@@ -440,7 +483,15 @@ void s2_link_set_headset_mic(bool on) {
 // (and the stream to the controller is on, which the mic needs).
 static void mic_task(link_t *k) {
     if (k->mic == MIC_SWITCHING) return;
-    bool want = s_mic_on && k->audio == AUDIO_STREAM;
+    // A brief silent stream/subscription on insertion learns TRS vs TRRS
+    // after the controller has settled, even when no host app records.
+    bool probe = k->headset && !k->jack_known;
+    if (probe && (int32_t)(now_ms() - k->jack_probe_until) >= 0) {
+        k->jack_known = true;
+        probe = false;
+        LOG("s2: link %u jack detection timed out", k->idx);
+    }
+    bool want = (s_mic_on || probe) && k->audio == AUDIO_STREAM;
     if (want == (k->mic == MIC_ON)) return;
     if (s2t_set_audio_in(k->idx, want)) {
         k->mic = MIC_SWITCHING;
@@ -1305,6 +1356,13 @@ static void on_input(link_t *k, const s2_input_t *inp, bool has_imu) {
     bool headset = (in.buttons & S2_BTN_HEADSET) != 0;
     if (headset != k->headset || !k->info.reports)
         LOG("s2: link %u headset %s", k->idx, headset ? "plugged in" : "unplugged");
+    if (headset != k->headset) {
+        k->headset_mic = false;
+        k->jack_known = !headset;
+        k->jack_probe_until = now_ms() + 2000;
+        k->jack_probe_after = now_ms() + 500;
+        k->jack_candidate = 0;
+    }
     k->headset = headset;
     in.buttons &= ~S2_BTN_HEADSET;
     k->input = in;
@@ -1405,7 +1463,7 @@ static void on_audio_in_notification(link_t *k, const uint8_t *value, uint16_t l
     if (!s2_parse_audio_in(value, len, &a)) return;
     s2_input_t in = k->input;
     in.counter = a.seq;
-    in.buttons = (in.buttons & ~S2_AUDIO_IN_BUTTONS) | a.buttons;
+    in.buttons = (in.buttons & ~(S2_AUDIO_IN_BUTTONS | S2_BTN_HEADSET)) | a.buttons;
     if (a.jack & 0x07) in.buttons |= S2_BTN_HEADSET;   // 0x05 headphones, 0x07 with a mic
     memcpy(in.stick_l, a.stick_l, sizeof in.stick_l);
     memcpy(in.stick_r, a.stick_r, sizeof in.stick_r);
@@ -1443,6 +1501,7 @@ static void on_audio_in_notification(link_t *k, const uint8_t *value, uint16_t l
         if (!k->motion_n || platform_millis() - k->motion_ms > MOTION_HOLD_MS) memset(in.gyro, 0, sizeof in.gyro);
     }
     on_input(k, &in, false);
+    observe_headset_jack(k, a.jack);
     if (a.mic_len != S2_MIC_HALF_BYTES) return;
     if (a.jack & S2_AUDIO_IN_FIRST_HALF) {
         memcpy(k->mic_frame, a.mic, S2_MIC_HALF_BYTES);
@@ -1770,6 +1829,7 @@ void s2c_on_audio_in_enabled(uint8_t link, bool on, bool ok) {
         return;
     }
     k->mic = on ? MIC_ON : MIC_OFF;
+    if (on) k->jack_probe_after = now_ms() + 500;
     k->motion_n = 0;
     LOG("s2: link %u headset mic %s", k->idx, on ? "on (input from audio-in)" : "off");
 }

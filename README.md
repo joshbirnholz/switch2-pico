@@ -37,7 +37,7 @@ Switch 2 Pro Controller  ──BLE──▶  dongle    ──USB──▶  PC / 
 | USB modes | **Switch Pro Controller** (default; Switch consoles and PCs), **DualSense Edge** (GL, GR and C become its back paddles and Fn button, so Steam Input can map them), **DualSense**, **Xbox 360 controller**, **GameCube adapter**, or **SInput** (GL, GR, C and Capture as buttons of their own in Steam Input, with the Switch 2 Pro Controller's symbols, plus gyro and rumble). Each mode has its own button map. |
 | Nintendo GameCube Controller | Basic support: buttons, sticks, analog triggers acting as L/R past a threshold, and rumble on its motor (strength by switching it on and off every 12 ms, as SDL does). |
 | Joy-Con 2 | A **Joy-Con 2 (L)** and a **Joy-Con 2 (R)** connected together are one controller, **Joy-Con 2 (L/R)**. A single one is held sideways (SL / SR are its shoulders). Each of the three has its own profiles. **Untested on hardware** (see [Joy-Con 2](#joy-con-2)). |
-| Headphone jack | Pico 2 W, SInput mode: the dongle is also a USB speaker, and what the PC plays comes out of a Pro Controller 2's headphone jack (see [Headphones](#headphones-pro-controller-2)). No microphone yet. |
+| Headphone jack | Pico 2 W, SInput mode: USB headphone output and headset microphone input through a Pro Controller 2's jack (see [Headphones](#headphones-pro-controller-2)). |
 | Mouse | Mouse Mode: a Joy-Con 2's optical sensor as a USB mouse next to the controller (a profile option, Xbox 360 and SInput modes). |
 | Configuration page | Over **WebUSB** in Chrome/Edge with the dongle plugged in, or (Pico 2 W only) over the dongle's own Wi-Fi from any phone or computer. |
 
@@ -319,6 +319,34 @@ and the sound will play from headphones plugged into a Switch 2 Pro
 Controller 2's jack. The dongle encodes it the way the Switch 2 does
 (Opus, 48 kHz stereo) in its second processor core.
 
+The current development build also exposes a **mono 48 kHz, 16-bit USB
+microphone** under the same device name. Select "Switch2-Pico SInput" as
+the input device in your voice app or sound settings, with a headset mic
+plugged into the controller. Recording works without selecting the dongle
+as your playback output, so you can keep using HDMI or another speaker.
+Use **Test Microphone** in the web configuration’s Headphones section or
+in the Decky plugin’s Microphone section to check it. The popup will show
+a live level meter, record for five seconds after **Begin Recording**, then
+play your voice through the controller’s headphones at reduced volume.
+The popup will close automatically after playback.
+Close other apps using the dongle’s audio before starting. The recording
+will stay in dongle RAM and will be discarded when playback ends or you
+cancel; the test will not change the PC’s audio routing.
+
+The microphone is enabled by default in audio-capable builds; builders can
+disable it with `-DS2_HEADSET_MIC=OFF`.
+
+Allow about a second for the microphone to start recording. It discards
+the controller's initial mic noise and buffers incoming audio to absorb
+Bluetooth delivery gaps. The buffer target is 120 ms, which adds latency;
+end-to-end microphone latency has not yet been measured.
+
+The development build reports headphone and mic jack availability through
+USB Audio Class 2.0. Plugging or unplugging the headset will update those
+statuses without reconnecting the USB device. SteamOS recognizes the routes
+as available or unavailable; whether an app hides an unavailable device or
+switches automatically depends on its audio policy.
+
 * The sound comes about 0.2 s late, as on the console in its default
   "Stable" audio mode. **Low Latency** (on the configuration page, or
   Headphones Audio Mode in the Decky plugin) cuts the controller's part
@@ -336,8 +364,7 @@ Controller 2's jack. The dongle encodes it the way the Switch 2 does
 * The controller starts playing about half a second after the PC starts
   a sound. It keeps the audio link open for 30 s after the PC stops, so
   quick sounds in a row aren't cut.
-* The headphone microphone doesn't work yet, and the other USB modes don't
-  have the sound card yet.
+* The other USB modes don't have the sound card yet.
 
 **GameCube adapter mode** presents the dongle as Nintendo's Wii U / Switch
 GameCube controller adapter (WUP-028) with the controller in port 1 (ports

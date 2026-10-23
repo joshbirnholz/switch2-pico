@@ -1,5 +1,6 @@
 build/
 test/test_runner
+test/test_usb_lifecycle
 build-nrf/
 
 # Headset audio research: flash dumps and captures stay local
@@ -8,3 +9,11 @@ research/audio/data/
 # Python venv for research scripts
 .venv/
 __pycache__/
+
+/test/test_usb_audio2
+/test/test_usb_audio2_speaker
+/test/test_headset_jack
+
+/test/test_mic_test
+
+/test/test_mic_api

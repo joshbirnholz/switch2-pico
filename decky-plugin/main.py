@@ -549,6 +549,24 @@ class Plugin:
         except DongleError as e:
             return {"ok": False, "error": str(e)}
 
+    async def mic_test(self, operation="status", session=0):
+        if operation not in ("status", "open", "record", "cancel"):
+            return {"ok": False, "error": "Unknown microphone test action."}
+        try:
+            session = int(session)
+            if session < 0 or session > 0xffffffff:
+                raise ValueError()
+        except (TypeError, ValueError):
+            return {"ok": False, "error": "Invalid microphone test session."}
+        method = "GET" if operation == "status" else "POST"
+        path = "/api/mic-test?session=%d" % session
+        if operation != "status":
+            path += "&do=" + operation
+        try:
+            return {"ok": True, "test": await self._json(method, path)}
+        except DongleError as e:
+            return {"ok": False, "error": str(e)}
+
     async def get_prefs(self):
         return self.prefs
 
@@ -615,9 +633,12 @@ class Plugin:
             await post("/api/fw/end")
             await decky.emit("fw_progress", "restart", 100)
             try:
-                await self._request("POST", "/api/action?do=reboot")
+                status, resp = await self._request("POST", "/api/action?do=reboot")
             except DongleError:
                 pass
+            else:
+                if status != 200:
+                    raise DongleError(resp.decode(errors="replace") or "restart failed (%d)" % status)
             decky.logger.info("firmware %s installed", up["latest"])
             return {"ok": True, "version": up["latest"]}
         except Exception as e:

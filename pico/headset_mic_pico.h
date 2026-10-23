@@ -18,5 +18,7 @@ void headset_audio_usb_mic(bool on);
 bool headset_mic_open(void);
 // Main loop, every 30 s: one log line.
 void headset_mic_report(void);
+// Core 1 encoder: supply test playback (stereo) or silence during the test.
+bool headset_mic_test_fill(int16_t *stereo);
 
 #endif

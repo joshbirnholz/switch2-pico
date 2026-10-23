@@ -127,9 +127,13 @@ void s2_link_start_gyro_calibration(void);
 // (headset_audio.h) to it, in S2_AUDIO_MODE_STABLE or _LOW_LATENCY.
 void s2_link_set_headset_audio(bool on, uint8_t mode);
 // The headset mic: while on (and the audio is on), the controller sends
-// audio-in instead of the input report (no motion meanwhile); the mic frames
+// audio-in instead of the input report (including decoded motion); mic frames
 // go to headset_audio_mic_frame().
 void s2_link_set_headset_mic(bool on);
+// Connected Pro2 jack: bit0 headphones, bit1 microphone; zero on BLE loss.
+uint8_t s2_link_headset_jack(void);
+// A bounded insertion probe needs silent controller audio to settle jack type.
+bool s2_link_headset_detecting(void);
 
 // Lower the scan duty cycle (used while the Wi-Fi access point is on).
 void s2_link_set_low_duty_scan(bool low);

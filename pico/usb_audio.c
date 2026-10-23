@@ -1,10 +1,7 @@
 // USB speaker for the Pro Controller 2's headphone jack (see usb_audio.h).
 //
-// USB Audio Class 1.0 rather than 2.0: every host has a driver for it, and
-// a fixed 48 kHz stereo stream needs nothing 2.0 adds. There's no feature
-// unit, so the host scales the volume itself (the controller has no volume
-// control either: research/headset-audio.md). The endpoint is adaptive: the
-// host sends at its own clock, and headset_audio_pico.c absorbs the drift.
+// USB Audio Class 2.0 with connector controls and interrupt notifications.
+// The host scales volume; playback remains adaptive and capture asynchronous.
 //
 // TinyUSB only queues the next receive from tud_task(), and the main loop is
 // often busy for longer than the 1 ms between packets (Bluetooth, Wi-Fi):
@@ -33,6 +30,7 @@
 #endif
 #include "settings.h"
 #include "usb_mode.h"
+#include "s2_link.h"
 
 #define CHANNELS      2
 #define SAMPLE_BYTES  2
@@ -41,12 +39,7 @@
 // may send 49 now and then.
 #define EP_SIZE       ((RATE / 1000 + 1) * CHANNELS * SAMPLE_BYTES)
 #if S2_HEADSET_MIC
-// Header (two streaming interfaces), then speaker and mic terminals.
-#define AC_CS_LEN     (10 + 12 + 9 + 12 + 9)
-// Mono, up to 49 samples a packet (asynchronous: 47-49).
-#define MIC_EP_SIZE   ((RATE / 1000 + 1) * SAMPLE_BYTES)
-#else
-#define AC_CS_LEN     (9 + 12 + 9)   // header, input terminal, output terminal
+#define MIC_EP_SIZE ((RATE / 1000 + 1) * SAMPLE_BYTES)
 #endif
 
 // Buffer 1 starts 256 bytes after buffer 0 (the ISO offset field of the
@@ -55,14 +48,13 @@
 #define ISO_OFFSET_256 (1u << 27)
 #define EP_ALLOC      512u
 
-#define TERMINAL_USB_STREAMING 1
-#define TERMINAL_HEADPHONES    2
-#define TERMINAL_MIC           3
-#define TERMINAL_USB_MIC       4
-
 static struct {
     uint8_t itf_ac;   // AudioStreaming is itf_ac + 1
     uint8_t ep_out;
+    uint8_t ep_notify;
+    uint8_t notify_pending;
+    uint8_t jack_last;
+    uint8_t notify_buf[6];
     volatile uint8_t alt;
     volatile bool running;   // the endpoint is set up and armed by us
     uint8_t next;            // the buffer the next packet goes to (0, 1)
@@ -81,7 +73,7 @@ static struct {
 #endif
 } s_audio;
 
-CFG_TUSB_MEM_SECTION CFG_TUSB_MEM_ALIGN static uint8_t s_ctrl[4];
+CFG_TUSB_MEM_SECTION CFG_TUSB_MEM_ALIGN static uint8_t s_ctrl[14];
 
 // Write the buffer control register: the bits, then 12 cycles later the
 // same with AVAIL (RP2350 datasheet, USB "concurrent access").
@@ -114,18 +106,27 @@ static void __not_in_flash_func(take)(uint32_t bc, int b) {
 
 #if S2_HEADSET_MIC
 // Fill microphone buffer b with the next packet and hand it to the hardware
-// (FULL: data to send). `bc`: the register as read; safe right after a
-// start of frame, as for the speaker.
-static void __not_in_flash_func(mic_fill)(uint32_t bc, int b) {
+// (FULL: data to send). Update only this bank: the host can finish the
+// other IN bank while we prepare PCM, even immediately after SOF.
+static void __not_in_flash_func(mic_fill)(int b) {
     static int16_t pcm[MIC_EP_SIZE / 2 + 1];
+    // Keep the packet-size controller advancing while the host is closed,
+    // as it did before the reopen fix. Only silence the outgoing payload.
     uint32_t n = headset_mic_read(pcm, MIC_EP_SIZE / 2);
+    if (s_audio.mic_alt != 1) memset(pcm, 0, n * sizeof pcm[0]);
     pcm[n] = 0;
     volatile uint32_t *dst = s_audio.mic_buf + (b ? BUF1_OFFSET / 4 : 0);
     for (uint32_t i = 0; i < (n + 1) / 2; i++) dst[i] = (uint16_t)pcm[2 * i] | (uint32_t)(uint16_t)pcm[2 * i + 1] << 16;
-    uint32_t shift = b ? 16u : 0u;
-    uint32_t other = bc & (0xffffu << (16u - shift)) & ~ISO_OFFSET_256 & ~USB_BUF_CTRL_SEL;
-    uint32_t half = (n * SAMPLE_BYTES) | USB_BUF_CTRL_FULL;
-    buf_ctrl_set(s_audio.mic_buf_ctrl, other | ISO_OFFSET_256 | half << shift, USB_BUF_CTRL_AVAIL << shift);
+    // DPRAM supports independent 16-bit accesses. A whole-word read/modify/
+    // write can resurrect the other bank's AVAIL/FULL bits after hardware
+    // clears them, losing synchronization with the host. Preserve the ISO
+    // offset in bank 1 without touching bank 0 (or vice versa).
+    volatile uint16_t *ctrl = (volatile uint16_t *)s_audio.mic_buf_ctrl + b;
+    uint16_t half = (uint16_t)((n * SAMPLE_BYTES) | USB_BUF_CTRL_FULL |
+                               (b ? ISO_OFFSET_256 >> 16 : 0));
+    *ctrl = half;
+    busy_wait_at_least_cycles(12);
+    *ctrl = (uint16_t)(half | USB_BUF_CTRL_AVAIL);
 }
 
 static void __not_in_flash_func(mic_sof)(void) {
@@ -134,7 +135,7 @@ static void __not_in_flash_func(mic_sof)(void) {
         uint32_t bc = *s_audio.mic_buf_ctrl;
         int b = s_audio.mic_next;
         if ((bc >> (b ? 16 : 0)) & USB_BUF_CTRL_AVAIL) return;   // still waiting to go
-        mic_fill(bc, b);
+        mic_fill(b);
         s_audio.mic_next = (uint8_t)(b ^ 1);
     }
 }
@@ -191,52 +192,42 @@ bool usb_audio_present(void) {
     return present == 1;
 }
 
-uint16_t usb_audio_desc(uint8_t *buf, uint16_t cap, uint8_t itf, uint8_t ep_out, uint8_t ep_in, uint8_t str_idx) {
-    const uint8_t as = (uint8_t)(itf + 1);
-    (void)ep_in;
-    const uint8_t desc[] = {
-        // Interface association: the interfaces are one function.
-        8, TUSB_DESC_INTERFACE_ASSOCIATION, itf, USB_AUDIO_ITF_COUNT, TUSB_CLASS_AUDIO, 0x01, 0x00, str_idx,
-        // AudioControl interface
-        9, TUSB_DESC_INTERFACE, itf, 0, 0, TUSB_CLASS_AUDIO, 0x01, 0x00, str_idx,
+uint16_t usb_audio_desc(uint8_t *buf, uint16_t cap, uint8_t itf, uint8_t ep_out,
+                        uint8_t ep_in, uint8_t ep_notify, uint8_t str_idx) {
+    return audio2_descriptor(buf, cap, itf, ep_out, ep_in, ep_notify, str_idx);
+}
+
+// Main loop only: retain changes while an interrupt transfer is outstanding.
+void usb_audio_task(void) {
+    if (!s_audio.ep_notify || !tud_mounted() || tud_suspended()) return;
+    uint8_t jack = s2_link_headset_jack();
+    uint8_t changed = jack ^ s_audio.jack_last;
+    if (changed & 1) s_audio.notify_pending |= 1;
 #if S2_HEADSET_MIC
-        10, 0x24, 0x01, U16_TO_U8S_LE(0x0100), U16_TO_U8S_LE(AC_CS_LEN), 2, as, (uint8_t)(as + 1),   // header
-#else
-        9, 0x24, 0x01, U16_TO_U8S_LE(0x0100), U16_TO_U8S_LE(AC_CS_LEN), 1, as,    // header, UAC 1.0
+    if (changed & 2) s_audio.notify_pending |= 2;
 #endif
-        12, 0x24, 0x02, TERMINAL_USB_STREAMING, U16_TO_U8S_LE(0x0101), 0, CHANNELS,
-        U16_TO_U8S_LE(0x0003), 0, 0,                                              // input: USB, L + R
-        9, 0x24, 0x03, TERMINAL_HEADPHONES, U16_TO_U8S_LE(0x0302), 0, TERMINAL_USB_STREAMING, 0,
-#if S2_HEADSET_MIC
-        12, 0x24, 0x02, TERMINAL_MIC, U16_TO_U8S_LE(0x0201), 0, 1, U16_TO_U8S_LE(0x0000), 0, 0,   // input: mic, mono
-        9, 0x24, 0x03, TERMINAL_USB_MIC, U16_TO_U8S_LE(0x0101), 0, TERMINAL_MIC, 0,              // output: USB
-#endif
-        // AudioStreaming interface: alternate 0 has no endpoint (not streaming).
-        9, TUSB_DESC_INTERFACE, as, 0, 0, TUSB_CLASS_AUDIO, 0x02, 0x00, 0,
-        9, TUSB_DESC_INTERFACE, as, 1, 1, TUSB_CLASS_AUDIO, 0x02, 0x00, 0,
-        7, 0x24, 0x01, TERMINAL_USB_STREAMING, 1, U16_TO_U8S_LE(0x0001),         // general: PCM
-        11, 0x24, 0x02, 0x01, CHANNELS, SAMPLE_BYTES, 16, 1,
-        (uint8_t)RATE, (uint8_t)(RATE >> 8), (uint8_t)(RATE >> 16),             // type I, 48 kHz
-        9, TUSB_DESC_ENDPOINT, ep_out, 0x09, U16_TO_U8S_LE(EP_SIZE), 1, 0, 0,    // isochronous, adaptive
-        7, 0x25, 0x01, 0x00, 0, U16_TO_U8S_LE(0),
-#if S2_HEADSET_MIC
-        // The microphone's AudioStreaming interface, the same way.
-        9, TUSB_DESC_INTERFACE, (uint8_t)(as + 1), 0, 0, TUSB_CLASS_AUDIO, 0x02, 0x00, 0,
-        9, TUSB_DESC_INTERFACE, (uint8_t)(as + 1), 1, 1, TUSB_CLASS_AUDIO, 0x02, 0x00, 0,
-        7, 0x24, 0x01, TERMINAL_USB_MIC, 1, U16_TO_U8S_LE(0x0001),
-        11, 0x24, 0x02, 0x01, 1, SAMPLE_BYTES, 16, 1, (uint8_t)RATE, (uint8_t)(RATE >> 8), (uint8_t)(RATE >> 16),
-        9, TUSB_DESC_ENDPOINT, ep_in, 0x05, U16_TO_U8S_LE(MIC_EP_SIZE), 1, 0, 0,  // isochronous, asynchronous
-        7, 0x25, 0x01, 0x00, 0, U16_TO_U8S_LE(0),
-#endif
-    };
-    _Static_assert(sizeof desc == USB_AUDIO_DESC_LEN, "USB_AUDIO_DESC_LEN");
-    if (cap < sizeof desc) return 0;
-    memcpy(buf, desc, sizeof desc);
-    return sizeof desc;
+    s_audio.jack_last = jack;
+    if (!s_audio.notify_pending || usbd_edpt_busy(0, s_audio.ep_notify)) return;
+    if (!usbd_edpt_claim(0, s_audio.ep_notify)) return;
+    uint8_t bit = (s_audio.notify_pending & 1) ? 1 : 2;
+    audio2_notification(s_audio.notify_buf, s_audio.itf_ac,
+                        bit == 1 ? AUDIO2_TERMINAL_HEADPHONES : AUDIO2_TERMINAL_MIC);
+    if (usbd_edpt_xfer(0, s_audio.ep_notify, s_audio.notify_buf, 6))
+        s_audio.notify_pending &= ~bit;
+    else
+        usbd_edpt_release(0, s_audio.ep_notify);
 }
 
 bool usb_audio_streaming(void) {
     return s_audio.alt == 1 && tud_mounted() && !tud_suspended();
+}
+
+bool usb_audio_active(void) {
+    bool open = s_audio.alt == 1;
+#if S2_HEADSET_MIC
+    open = open || s_audio.mic_alt == 1;
+#endif
+    return open && tud_mounted() && !tud_suspended();
 }
 
 static void audio_init(void) {
@@ -254,6 +245,12 @@ static void audio_reset(uint8_t rhport) {
     s_audio.mic_running = false;
 #endif
     memset(&s_audio, 0, sizeof s_audio);
+    // A bus reset need not be preceded by SET_INTERFACE(0). Clear the codec
+    // side's open flags too, or the old mic session can survive a USB reset.
+    headset_audio_usb_stream(false);
+#if S2_HEADSET_MIC
+    headset_audio_usb_mic(false);
+#endif
 }
 
 static uint16_t audio_open(uint8_t rhport, tusb_desc_interface_t const *desc_itf, uint16_t max_len) {
@@ -271,6 +268,12 @@ static uint16_t audio_open(uint8_t rhport, tusb_desc_interface_t const *desc_itf
         }
         if (tu_desc_type(d) == TUSB_DESC_ENDPOINT) {
             tusb_desc_endpoint_t const *e = (tusb_desc_endpoint_t const *)d;
+            if (e->bmAttributes.xfer == TUSB_XFER_INTERRUPT) {
+                s_audio.ep_notify = e->bEndpointAddress;
+                TU_ASSERT(usbd_edpt_open(rhport, e), 0);
+                len = (uint16_t)(len + tu_desc_len(d));
+                continue;
+            }
 #if S2_HEADSET_MIC
             if (tu_edpt_dir(e->bEndpointAddress) == TUSB_DIR_IN) s_audio.mic_ep_desc = e;
             else
@@ -318,6 +321,7 @@ static bool set_alt(uint8_t rhport, uint8_t alt) {
 #if S2_HEADSET_MIC
 static bool set_mic_alt(uint8_t rhport, uint8_t alt) {
     s_audio.mic_alt = alt;
+    headset_audio_usb_mic(alt == 1); // flush PCM before any new USB packets
     if (alt == 1 && !s_audio.mic_running) {
         TU_ASSERT(usbd_edpt_iso_activate(rhport, s_audio.mic_ep_desc));
         uint8_t num = tu_edpt_number(s_audio.mic_ep_desc->bEndpointAddress);
@@ -326,12 +330,21 @@ static bool set_mic_alt(uint8_t rhport, uint8_t alt) {
                    EP_CTRL_DOUBLE_BUFFERED_BITS;
         s_audio.mic_buf = (volatile uint32_t *)((uintptr_t)usb_dpram + (*ep_ctrl & 0xffc0u));
         s_audio.mic_buf_ctrl = &usb_dpram->ep_buf_ctrl[num].in;
-        *s_audio.mic_buf_ctrl = ISO_OFFSET_256 | USB_BUF_CTRL_SEL;   // both free; filled at the next SOF
+        *s_audio.mic_buf_ctrl = ISO_OFFSET_256 | USB_BUF_CTRL_SEL;
         s_audio.mic_next = 0;
         s_audio.mic_running = true;
         usbd_sof_enable(rhport, SOF_CONSUMER_AUDIO, true);
     }
-    headset_audio_usb_mic(alt == 1);
+    if (alt == 0 && s_audio.mic_buf) {
+        // Leave the running endpoint's bank selector/control alone. Resetting
+        // it on each open can lose IN polls. Zero both queued payloads instead:
+        // no old samples can survive into the next capture. Closed SOF fills
+        // also use silence until the host opens this interface again.
+        for (uint32_t i = 0; i < (MIC_EP_SIZE + 3) / 4; i++) {
+            s_audio.mic_buf[i] = 0;
+            s_audio.mic_buf[BUF1_OFFSET / 4 + i] = 0;
+        }
+    }
     return true;
 }
 #endif
@@ -366,17 +379,18 @@ static bool audio_control_xfer_cb(uint8_t rhport, uint8_t stage, tusb_control_re
             return false;
         }
     }
-    // Class requests: the only control is the endpoint's sampling rate, which
-    // the descriptor doesn't offer; some hosts set it anyway. Accept a SET,
-    // answer a GET with 48 kHz.
-    if (type != TUSB_REQ_TYPE_CLASS || request->bmRequestType_bit.recipient != TUSB_REQ_RCPT_ENDPOINT) return false;
+    // UAC2 controls address entities on AudioControl, never endpoints.
+    if (type != TUSB_REQ_TYPE_CLASS ||
+        request->bmRequestType_bit.recipient != TUSB_REQ_RCPT_INTERFACE ||
+        request->bmRequestType_bit.direction != TUSB_DIR_IN ||
+        tu_u16_low(request->wIndex) != s_audio.itf_ac) return false;
     if (stage != CONTROL_STAGE_SETUP) return true;
-    uint16_t n = tu_min16(request->wLength, 3);
-    if (request->bmRequestType_bit.direction == TUSB_DIR_OUT) return tud_control_xfer(rhport, request, s_ctrl, n);
-    s_ctrl[0] = (uint8_t)RATE;
-    s_ctrl[1] = (uint8_t)(RATE >> 8);
-    s_ctrl[2] = (uint8_t)(RATE >> 16);
-    return tud_control_xfer(rhport, request, s_ctrl, n);
+    uint8_t jack = s2_link_headset_jack();
+    uint16_t n = audio2_get(tu_u16_high(request->wIndex), tu_u16_high(request->wValue),
+                           tu_u16_low(request->wValue), request->bRequest,
+                           (jack & 1) != 0, (jack & 2) != 0, s_ctrl, sizeof s_ctrl);
+    if (!n) return false;
+    return tud_control_xfer(rhport, request, s_ctrl, tu_min16(n, request->wLength));
 }
 
 static bool audio_xfer_cb(uint8_t rhport, uint8_t ep_addr, xfer_result_t result, uint32_t xferred_bytes) {

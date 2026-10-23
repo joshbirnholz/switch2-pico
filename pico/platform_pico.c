@@ -12,6 +12,10 @@
 #include "hardware/watchdog.h"
 
 #include "platform.h"
+#include "mic_test.h"
+#if S2_HEADSET_AUDIO
+#include "usb_audio.h"
+#endif
 
 // One flash sector for settings, well clear of the BTstack TLV bank at the
 // very end of flash.
@@ -43,6 +47,14 @@ const char *platform_name(void) {
 bool platform_has_headset_audio(void) {
 #if S2_HEADSET_AUDIO
     return true;
+#else
+    return false;
+#endif
+}
+
+bool platform_audio_active(void) {
+#if S2_HEADSET_AUDIO
+    return usb_audio_active() || mic_test_active();
 #else
     return false;
 #endif

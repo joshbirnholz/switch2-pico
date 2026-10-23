@@ -23,6 +23,9 @@ const char *platform_name(void);
 bool platform_has_wifi(void);
 // Pro Controller 2 headphone audio (a USB speaker in SInput mode).
 bool platform_has_headset_audio(void);
+// A USB speaker or microphone stream is open on this board. Do not remove
+// its USB device or write firmware while the host is using those streams.
+bool platform_audio_active(void);
 // A button on the board that can act as a Sync button (Pico: BOOTSEL).
 bool platform_has_sync_button(void);
 
