@@ -191,6 +191,22 @@ static void test_commands(void) {
     CHECK(s2_parse_memory_read(&r, 0x13140, 4, &payload));
     CHECK(payload[0] == 0xde && payload[3] == 0xef);
     CHECK(!s2_parse_memory_read(&r, 0x13000, 4, &payload));
+
+    // Trigger calibration is a pair: an erased byte must preserve both defaults.
+    uint8_t neutral[2] = {30, 30};
+    const uint8_t absent[][2] = {{0xFF, 0xFF}, {25, 0xFF}, {0xFF, 26}};
+    for (size_t i = 0; i < sizeof absent / sizeof absent[0]; i++) {
+        CHECK(!s2_parse_trigger_cal(absent[i], neutral));
+        CHECK(neutral[0] == 30 && neutral[1] == 30);
+    }
+    CHECK(s2_parse_trigger_cal((const uint8_t[]){25, 26}, neutral));
+    CHECK(neutral[0] == 25 && neutral[1] == 26);
+    CHECK(s2_parse_trigger_cal((const uint8_t[]){0, 26}, neutral));
+    CHECK(neutral[0] == 0 && neutral[1] == 26);
+    CHECK(s2_parse_trigger_cal((const uint8_t[]){25, 0}, neutral));
+    CHECK(neutral[0] == 25 && neutral[1] == 0);
+    CHECK(s2_parse_trigger_cal((const uint8_t[]){0, 0}, neutral));
+    CHECK(neutral[0] == 0 && neutral[1] == 0);
 }
 
 static void test_input_report(void) {

@@ -324,6 +324,9 @@ microphone** under the same device name. Select "Switch2-Pico SInput" as
 the input device in your voice app or sound settings, with a headset mic
 plugged into the controller. Recording works without selecting the dongle
 as your playback output, so you can keep using HDMI or another speaker.
+When nothing is plugged into the controller, PC microphone capture receives
+silence and playback is discarded without starting Bluetooth audio. Normal
+controller input reports remain active.
 Use **Test Microphone** in the web configuration’s Headphones section or
 in the Decky plugin’s Microphone section to check it. The popup will show
 a live level meter, record for five seconds after **Begin Recording**, then

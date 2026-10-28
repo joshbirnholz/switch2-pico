@@ -53,5 +53,14 @@ int main(void) {
     assert(switches==3 && !switch_on && k->jack_known); // bounded on no response
     k->mic=MIC_OFF; k->audio=AUDIO_STREAM; s_mic_on=true;
     mic_task(k); assert(switches==4 && switch_on); // real recording still works
+    // A background host capture request must not enable audio-in without a
+    // physical headset, even if the headphone stream is still winding down.
+    k->headset=false; k->mic=MIC_OFF;
+    mic_task(k); assert(switches==4);
+    k->mic=MIC_ON;
+    mic_task(k); assert(switches==5 && !switch_on);
+    // Keep the host request: insertion resumes capture without reopening USB.
+    k->mic=MIC_OFF; k->headset=true;
+    mic_task(k); assert(switches==6 && switch_on);
     puts("Headset jack state/probe: passed");
 }

@@ -281,6 +281,9 @@ typedef struct {
 } s2_stick_cal_t;
 
 void s2_parse_stick_cal(const uint8_t data[9], s2_stick_cal_t *out);
+// GameCube trigger neutral bytes: 0xFF means absent; zero is valid.
+// Leaves both output values unchanged if either byte is absent.
+bool s2_parse_trigger_cal(const uint8_t data[2], uint8_t neutral[2]);
 void s2_default_stick_cal(s2_stick_cal_t *out);
 // Normalise a raw axis to -1..+1 using the calibration.
 float s2_stick_axis(const s2_stick_cal_t *cal, int axis, uint16_t raw);

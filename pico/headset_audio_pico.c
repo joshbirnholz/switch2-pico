@@ -269,11 +269,15 @@ void headset_audio_task(void) {
     s2_link_set_headset_mic(headset_mic_open() || mic_test_input());
 #endif
     // The mic needs the stream to the controller on too.
-    bool on = S2_AUDIO_TEST_TONE || usb_audio_streaming() || s2_link_headset_detecting() ||
+    bool headset = (s2_link_headset_jack() & 1) != 0;
+    bool on = usb_audio_streaming() || s2_link_headset_detecting() ||
               (s_usb_stream_end && now - s_usb_stream_end < LINGER_MS);
 #if S2_HEADSET_MIC
     on = on || headset_mic_open() || mic_test_active();
 #endif
+    // A host may leave playback/capture open with no headset attached. Do not
+    // spend radio bandwidth streaming silence or replace normal input reports.
+    on = S2_AUDIO_TEST_TONE || (headset && on);
     if (!on) s_usb_stream_end = 0;
     if ((int32_t)(now - s_report_at) >= 30000) report(now);
     s2_link_set_headset_audio(on, g_settings.headset_low_latency ? S2_AUDIO_MODE_LOW_LATENCY : S2_AUDIO_MODE_STABLE);

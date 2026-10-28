@@ -491,7 +491,9 @@ static void mic_task(link_t *k) {
         probe = false;
         LOG("s2: link %u jack detection timed out", k->idx);
     }
-    bool want = (s_mic_on || probe) && k->audio == AUDIO_STREAM;
+    // Hosts can keep capture open even with nothing in the controller's jack.
+    // Keep normal input notifications in that case; USB capture gets silence.
+    bool want = ((s_mic_on && k->headset) || probe) && k->audio == AUDIO_STREAM;
     if (want == (k->mic == MIC_ON)) return;
     if (s2t_set_audio_in(k->idx, want)) {
         k->mic = MIC_SWITCHING;
@@ -1178,10 +1180,8 @@ static void init_step_cb(link_t *k, bool ok, const s2_response_t *rsp, uint32_t 
             k->cal_r.min[1]);
         break;
     case ST_READ_GC_TRIGGERS:
-        if (s2_parse_memory_read(rsp, S2_ADDR_GC_TRIGGERS, 0x02, &payload) && payload[0] != 0x00 &&
-            payload[0] != 0xFF) {
-            k->gc_trigger_neutral[0] = payload[0];
-            k->gc_trigger_neutral[1] = payload[1];
+        if (s2_parse_memory_read(rsp, S2_ADDR_GC_TRIGGERS, 0x02, &payload)) {
+            s2_parse_trigger_cal(payload, k->gc_trigger_neutral);
         }
         break;
     case ST_LEDS:

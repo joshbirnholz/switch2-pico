@@ -245,6 +245,13 @@ void s2_parse_stick_cal(const uint8_t data[9], s2_stick_cal_t *out) {
                  out->min[0] && out->min[1] && out->center[0] != 0xFFF;
 }
 
+bool s2_parse_trigger_cal(const uint8_t data[2], uint8_t neutral[2]) {
+    if (data[0] == 0xFF || data[1] == 0xFF) return false;
+    neutral[0] = data[0];
+    neutral[1] = data[1];
+    return true;
+}
+
 void s2_default_stick_cal(s2_stick_cal_t *out) {
     out->center[0] = out->center[1] = 2048;
     out->max[0] = out->max[1] = 1400;
