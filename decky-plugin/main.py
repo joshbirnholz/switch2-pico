@@ -9,8 +9,9 @@
 # and carry the same HTTP-like API as the page (core/src/web_api.c).
 #
 # The interface is reached through Linux usbdevfs directly (no libusb), so
-# the plugin needs no extra Python packages; it runs as root (plugin.json
-# flag "_root") for access to /dev/bus/usb.
+# the plugin needs no extra Python packages. It runs as root (plugin.json
+# flag "root"; Decky ignores "_root", which earlier versions had) to write
+# the udev rule and turn on USB wake-up.
 
 import asyncio
 import ctypes

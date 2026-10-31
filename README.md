@@ -210,7 +210,7 @@ in Settings → Controller.
 the controller asks the PC to wake up. The PC has to allow it:
 
 * **Linux / SteamOS:** Linux only lets keyboards wake the PC by default.
-  With the [Decky plugin](decky-plugin/) (0.7.1 or later) installed, there's
+  With the [Decky plugin](decky-plugin/) (0.7.2 or later) installed, there's
   nothing to do: it installs the rule below and turns on wake-up for the
   dongle. Without it, install the rule from `tools/70-switch2-pico.rules` once
   (in SteamOS Desktop Mode, from Konsole) and replug the dongle:
