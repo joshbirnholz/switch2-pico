@@ -15,6 +15,7 @@ run: test_runner test_usb_lifecycle test_usb_audio2 test_usb_audio2_speaker test
 	python3 test_audio_preflight.py
 	python3 test_decky_update.py
 	python3 test_decky_mic.py
+	python3 test_decky_udev.py
 
 test_runner: $(OBJS) $(wildcard $(SRC)/*.h)
 	$(CC) $(CFLAGS) -I$(SRC) -o $@ $(OBJS) -lm
