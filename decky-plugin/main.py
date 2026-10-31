@@ -251,6 +251,19 @@ def _is_pci(name):
     return re.fullmatch(r"[0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-7]", name) is not None
 
 
+def _set_wakeup(d, on):
+    f = os.path.join(d, "power", "wakeup")
+    if _read(f) != ("disabled" if on else "enabled"):
+        return False
+    try:
+        with open(f, "w") as fh:
+            fh.write("enabled" if on else "disabled")
+        return True
+    except OSError as e:
+        decky.logger.warning("wake-up not changed on %s: %s", d, e)
+        return False
+
+
 def enable_wakeup(dev_dir):
     """Let the dongle wake the PC: wake-up on the dongle, every hub above it
     and the USB controller, as the udev rule does when the dongle is plugged
@@ -259,18 +272,19 @@ def enable_wakeup(dev_dir):
     changed = []
     d = os.path.realpath(dev_dir)
     while d.startswith(SYS_DEVICES):
-        f = os.path.join(d, "power", "wakeup")
-        if _read(f) == "disabled":
-            try:
-                with open(f, "w") as fh:
-                    fh.write("enabled")
-                changed.append(os.path.basename(d))
-            except OSError as e:
-                decky.logger.warning("wake-up not enabled on %s: %s", d, e)
+        if _set_wakeup(d, True):
+            changed.append(os.path.basename(d))
         if _is_pci(os.path.basename(d)):
             break
         d = os.path.dirname(d)
     return changed
+
+
+def disable_wakeup(dev_dir):
+    """Wake-up off for the dongle only (hubs and the controller may serve
+    other devices). Returns the devices changed."""
+    d = os.path.realpath(dev_dir)
+    return [os.path.basename(d)] if _set_wakeup(d, False) else []
 
 
 def vcmp(a, b):
@@ -530,7 +544,7 @@ class Plugin:
         self.plugin_notified = None
         self.updating = False
         self.decky_enabled = False  # turned the dongle's Decky options on (once per connection)
-        self.wakeup_for = None      # (sysfs path, device number) wake-up was enabled for
+        self.wakeup_for = None      # (sysfs path, device number, on) wake-up was set for
         loop = asyncio.get_event_loop()
         self.monitor = loop.create_task(self._monitor())
         self.events = loop.create_task(self._events())
@@ -835,17 +849,23 @@ class Plugin:
                 decky.logger.warning("events: %s", e)
                 await asyncio.sleep(1.0)
 
-    async def _enable_wakeup(self):
-        """Once per enumeration (the dongle re-enumerates on a mode change or
-        when a controller connects): let it wake the PC."""
+    async def _apply_wakeup(self):
+        """Arm the PC's USB wake-up for the dongle only while its "Wake a
+        sleeping PC from the controller" setting is on: on some PCs an armed
+        dongle wakes the PC as soon as it goes to sleep, and the udev rule arms
+        it whenever it is plugged in. Again on each enumeration (a mode change,
+        a controller connecting) and when the setting changes."""
         info = self.dongle.info
-        key = info and (info["sys"], info["dev"])
-        if not key or key == self.wakeup_for:
+        if not info:
+            return
+        want = bool((await self._json("GET", "/api/settings")).get("usb_wakeup", 1))
+        key = (info["sys"], info["dev"], want)
+        if key == self.wakeup_for:
             return
         self.wakeup_for = key
-        changed = await asyncio.to_thread(enable_wakeup, info["sys"])
+        changed = await asyncio.to_thread(enable_wakeup if want else disable_wakeup, info["sys"])
         if changed:
-            decky.logger.info("wake-up enabled on %s", ", ".join(changed))
+            decky.logger.info("wake-up %s on %s", "enabled" if want else "disabled", ", ".join(changed))
 
     # ---- Background: notifications -----------------------------------------
     async def _monitor(self):
@@ -864,7 +884,7 @@ class Plugin:
                     continue
                 s = st["status"]
                 await self._enable_decky_options()
-                await self._enable_wakeup()
+                await self._apply_wakeup()
                 # Profile switched (C + Home on the controller, or here).
                 cur = (s.get("profile"), s.get("usb_mode"))
                 if running and cur != running:
