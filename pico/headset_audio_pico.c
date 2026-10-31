@@ -277,7 +277,9 @@ void headset_audio_task(void) {
 #endif
     // A host may leave playback/capture open with no headset attached. Do not
     // spend radio bandwidth streaming silence or replace normal input reports.
-    on = S2_AUDIO_TEST_TONE || (headset && on);
+    // Headphone audio turned off (no USB audio device): nothing goes to the
+    // controller at all.
+    on = S2_AUDIO_TEST_TONE || (headset && on && usb_audio_present());
     if (!on) s_usb_stream_end = 0;
     if ((int32_t)(now - s_report_at) >= 30000) report(now);
     s2_link_set_headset_audio(on, g_settings.headset_low_latency ? S2_AUDIO_MODE_LOW_LATENCY : S2_AUDIO_MODE_STABLE);

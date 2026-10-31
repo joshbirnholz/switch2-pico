@@ -276,7 +276,10 @@ typedef struct {
     uint8_t joycon_single;
     uint8_t decky_options;              // the page shows the outputs that need the Decky plugin
     uint8_t headset_low_latency;        // Pro Controller 2 headphones: Low Latency mode (0: Stable)
-    uint8_t reserved_end[1];
+    // Inverted so saves from before it existed (zero here) keep the
+    // headphones on. On: no USB audio device and no audio stream to the
+    // controller (see settings_boot_audio()).
+    uint8_t headset_audio_off;
 
     uint32_t crc;
 } settings_t;
@@ -377,6 +380,12 @@ static inline bool settings_mouse_interfaces(const profile_t *p, ctrl_type_t t) 
 // ... for the profile the dongle starts with (the USB descriptors follow it).
 static inline bool settings_boot_mouse(const settings_t *s) {
     return settings_mouse_interfaces(settings_active(s, settings_boot_ctrl(s)), settings_boot_ctrl(s));
+}
+// Whether the dongle starts with the headphones (and the mic): a Pro
+// Controller 2 in an SInput profile, with headphone audio left on. Only on
+// boards that have it (platform_has_headset_audio()).
+static inline bool settings_boot_audio(const settings_t *s) {
+    return !s->headset_audio_off && settings_boot_ctrl(s) == CTRL_PRO && settings_boot_usb_mode(s) == USB_MODE_SINPUT;
 }
 // Sticks, triggers and rumble of a controller type's active profile.
 typedef struct {

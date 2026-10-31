@@ -386,9 +386,10 @@ body.offline #usb-help{display:flex}
     </section>
     <section class="card stack audio-only" aria-label="Headphones" hidden>
       <h2>Headphones</h2>
-      <div class="row"><button id="mic-test-open" onclick="openMicTest()" hidden>Test Microphone</button></div>
-      <label class="kvrow">Audio mode<select data-k="audio_mode"><option value="0">Stable</option><option value="1">Low Latency</option></select></label>
-      <p class="note">For headphones plugged into a Switch 2 Pro Controller, in SInput mode. Low Latency will reduce the delay (about 70 ms in the controller instead of 155 ms), but the sound may cut out more often, as on the Switch 2. It will take effect as soon as it's saved, even during playback.</p>
+      <label class="check top" id="headset-audio-row"><input type="checkbox" id="headset-audio-on" onchange="headsetAudioChanged()"><span>Headphone audio<span class="hint" style="display:block">Off: the dongle won't show up as a sound card or microphone on the PC, and no audio will go to the controller.</span></span></label>
+      <div class="row headset-on"><button id="mic-test-open" onclick="openMicTest()" hidden>Test Microphone</button></div>
+      <label class="kvrow headset-on">Audio mode<select data-k="audio_mode"><option value="0">Stable</option><option value="1">Low Latency</option></select></label>
+      <p class="note headset-on">For headphones plugged into a Switch 2 Pro Controller, in SInput mode. Low Latency will reduce the delay (about 70 ms in the controller instead of 155 ms), but the sound may cut out more often, as on the Switch 2. It will take effect as soon as it's saved, even during playback.</p>
     </section>
     <section class="card stack" aria-label="Decky plugin" data-live>
       <h2>Decky plugin</h2>
@@ -1106,6 +1107,9 @@ function render(){
   });
   $('bias').textContent='bias: '+S.gyro_bias.join(', ');
   document.querySelectorAll('.audio-only').forEach(e=>e.hidden=S.headset_audio!==true);
+  $('headset-audio-row').hidden=S.headset_audio_on===undefined;   // older firmware
+  $('headset-audio-on').checked=S.headset_audio_on!==0;
+  document.querySelectorAll('.headset-on').forEach(e=>e.hidden=S.headset_audio_on===0);
   $('mic-test-open').hidden=S.mic_test!==true;
   // Pairing window: boards with a Sync button only (the Pico's BOOTSEL).
   const pb=document.querySelector('[data-k="pair_button"]');
@@ -1132,6 +1136,16 @@ async function deckyOptionsChanged(){
   stashMap();renderMap(MAP_MODE);
   try{await api('/api/settings',{method:'POST',body:'decky_options='+on});S.decky_options=on}
   catch(e){$('decky-options').checked=!on;stashMap();renderMap(MAP_MODE)}
+}
+// Headphone audio on / off: saved right away. With a Pro Controller 2 in an
+// SInput profile, it adds or removes the USB audio device, so the dongle
+// restarts.
+async function headsetAudioChanged(){
+  const el=$('headset-audio-on'),on=el.checked?1:0,lt=S.last_ctrl||0;
+  if(lt===0&&bootOf(S).mode===5&&!confirm((on?'Turn on':'Turn off')+' headphone audio? The dongle will restart, and then you\'ll need to reconnect your controller.')){el.checked=!on;return}
+  try{const r=await api('/api/settings',{method:'POST',body:'headset_audio_on='+on});
+    if(r.ok){S.headset_audio_on=on;document.querySelectorAll('.headset-on').forEach(e=>e.hidden=!on);toast('Saved')}else{el.checked=!on;toast('Save failed')}}
+  catch(e){el.checked=!on}
 }
 async function loadSettings(){S=(await api('/api/settings')).json();render()}
 async function save(){

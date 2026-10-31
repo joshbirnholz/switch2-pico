@@ -289,11 +289,11 @@ static void api_settings_get(http_response_t *r) {
     jb_printf(&j, ",\"wifi_has_pass\":%s,\"ble_tx_power\":%u,\"idle_disconnect\":%u,\"idle_minutes\":%u,"
                   "\"pair_button\":%u,\"joycon_single\":%u,\"sync_button\":%s,"
                   "\"decky_options\":%u,\"decky_outputs\":{\"switch\":[%d],\"gp\":[%d]},"
-                  "\"headset_audio\":%s,\"audio_mode\":%u,\"mic_test\":%s}",
+                  "\"headset_audio\":%s,\"headset_audio_on\":%u,\"audio_mode\":%u,\"mic_test\":%s}",
               s->wifi_pass[0] ? "true" : "false", s->ble_tx_power, !s->idle_disconnect_off, s->idle_minutes,
               s->pair_button, s->joycon_single, platform_has_sync_button() ? "true" : "false",
               s->decky_options, OUT_DECKY_QAM, GP_DECKY_QAM, platform_has_headset_audio() ? "true" : "false",
-              s->headset_low_latency, mic_test_supported() ? "true" : "false");
+              !s->headset_audio_off, s->headset_low_latency, mic_test_supported() ? "true" : "false");
     respond_json(r, &j);
 }
 
@@ -420,6 +420,10 @@ static bool apply_kv(settings_t *s, const char *k, const char *v, bool *usb_reco
         s->quick_remap_off = atoi(v) ? 0 : 1;
         return true;
     }
+    if (strcmp(k, "headset_audio_on") == 0) {
+        s->headset_audio_off = atoi(v) ? 0 : 1;
+        return true;
+    }
     if (strcmp(k, "idle_disconnect") == 0) {
         s->idle_disconnect_off = atoi(v) ? 0 : 1;
         return true;
@@ -491,15 +495,18 @@ static void api_settings_post(const http_request_t *req, http_response_t *r) {
     }
     free(body);
     settings_sanitize(&s);
-    bool mode_changed = settings_boot_usb_mode(&s) != usb_mode_active() || settings_boot_mouse(&s) != usb_mode_has_mouse();
+    // Headphones on or off adds or removes the USB audio device too.
+    bool mode_changed = settings_boot_usb_mode(&s) != usb_mode_active() || settings_boot_mouse(&s) != usb_mode_has_mouse() ||
+                        (platform_has_headset_audio() && settings_boot_audio(&s) != settings_boot_audio(&g_settings));
     if ((usb || mode_changed) && platform_audio_active())
         return respond_text(r, 409, "Close headphone playback and microphone recording before changing USB settings.");
     g_settings = s;
     if (mode_changed) {
         // The host must see a different device: save and restart.
         settings_save_now();
-        LOG("web: USB mode -> %s%s, restarting", usb_mode_name((usb_mode_t)settings_boot_usb_mode(&s)),
-            settings_boot_mouse(&s) ? " with the mice" : "");
+        LOG("web: USB mode -> %s%s%s, restarting", usb_mode_name((usb_mode_t)settings_boot_usb_mode(&s)),
+            settings_boot_mouse(&s) ? " with the mice" : "",
+            platform_has_headset_audio() && settings_boot_audio(&s) ? " with the headphones" : "");
         app_request_reboot(false);
     } else {
         settings_save_later();
@@ -521,6 +528,8 @@ static void api_mic_test(const http_request_t *req, http_response_t *r, bool pos
         if (!query_get(req->query, "do", v, sizeof v)) return respond_text(r, 400, "missing do=");
         if (!strcmp(v, "open")) {
             if (platform_audio_active()) return respond_text(r, 409, "Close other headphone playback and microphone recording before starting the test.");
+            if (g_settings.headset_audio_off)
+                return respond_text(r, 409, "Turn on headphone audio to test the microphone.");
             if (!platform_has_headset_audio() || usb_mode_active() != USB_MODE_SINPUT ||
                 (s2_link_headset_jack() & 1) == 0)
                 return respond_text(r, 409, "Connect a Switch 2 Pro Controller with a headset mic plugged in, in SInput mode.");

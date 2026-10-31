@@ -52,6 +52,8 @@ export interface Settings {
   decky_options?: number;
   // Pro Controller 2 headphones (firmware 0.17.0+, Pico 2 W): 0 Stable, 1 Low Latency.
   headset_audio?: boolean;
+  // Headphone audio turned on (1) or off (0); missing on older firmware (on).
+  headset_audio_on?: number;
   mic_test?: boolean;
   audio_mode?: number;
 }
@@ -79,6 +81,7 @@ export const STATUS_MODES: Record<string, number> = {
 // has it (Settings.headset_audio).
 export const headsetAudio = (S: Settings, t: number, mode: number) =>
   !!S.headset_audio && t === CTRL_PRO && mode === MODE_SINPUT;
+export const headsetAudioOn = (S: Settings) => S.headset_audio_on !== 0;
 // Mouse Mode: emulated Xbox 360 and SInput controllers only.
 export const mouseMode = (mode: number) => mode === MODE_X360 || mode === MODE_SINPUT;
 

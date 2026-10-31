@@ -339,6 +339,13 @@ cancel; the test will not change the PC’s audio routing.
 The microphone is enabled by default in audio-capable builds; builders can
 disable it with `-DS2_HEADSET_MIC=OFF`.
 
+To turn headphone audio off entirely, clear **Headphone audio** in the
+configuration page's Headphones section or in the Decky plugin's
+Headphones section. The dongle will then no longer show up as a sound card
+or microphone, and no audio will go to the controller. Turning it on or off
+with a Pro Controller 2 in an SInput profile will restart the dongle, and
+then you'll need to reconnect your controller.
+
 Allow about a second for the microphone to start recording. It discards
 the controller's initial mic noise and buffers incoming audio to absorb
 Bluetooth delivery gaps. The buffer target is 120 ms, which adds latency;
@@ -352,7 +359,7 @@ switches automatically depends on its audio policy.
 
 * The sound comes about 0.2 s late, as on the console in its default
   "Stable" audio mode. **Low Latency** (on the configuration page, or
-  Headphones Audio Mode in the Decky plugin) cuts the controller's part
+  Audio mode in the Decky plugin's Headphones section) cuts the controller's part
   from about 155 ms to about 70 ms, but the sound may cut out more often,
   as on the console. The setting will take effect at once, even during
   playback.

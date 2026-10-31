@@ -159,6 +159,7 @@ void settings_sanitize(settings_t *s) {
     s->joycon_single = s->joycon_single ? 1 : 0;
     s->decky_options = s->decky_options ? 1 : 0;
     s->headset_low_latency = s->headset_low_latency ? 1 : 0;
+    s->headset_audio_off = s->headset_audio_off ? 1 : 0;
     s->last_ctrl = (uint8_t)settings_boot_ctrl(s);
     if (s->ble_tx_power > 3) s->ble_tx_power = 0;
     s->idle_disconnect_off = s->idle_disconnect_off ? 1 : 0;
@@ -279,7 +280,7 @@ void settings_init(void) {
             g_settings.joycon_single = tail + 4u <= stored->size - 4u ? raw[tail] : 0;
             g_settings.decky_options = 0;
             g_settings.headset_low_latency = 0;
-            memset(g_settings.reserved_end, 0, sizeof g_settings.reserved_end);
+            g_settings.headset_audio_off = 0;
         }
         if (rev < 10) {
             // Profiles: one per mode from that mode's map (after the steps

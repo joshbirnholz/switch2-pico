@@ -183,11 +183,12 @@ static void __not_in_flash_func(audio_sof)(uint8_t rhport, uint32_t frame_count)
 
 bool usb_audio_present(void) {
     // A Pro Controller 2 (the controller type the dongle started for) in
-    // SInput mode. Latched like the USB mode: descriptors must not change.
+    // SInput mode, with headphone audio on. Latched like the USB mode:
+    // descriptors must not change.
     static int present = -1;
     if (usb_mode_config_only()) return false;
     if (present < 0) {
-        present = usb_mode_active() == USB_MODE_SINPUT && settings_boot_ctrl(&g_settings) == CTRL_PRO;
+        present = usb_mode_active() == USB_MODE_SINPUT && settings_boot_audio(&g_settings);
     }
     return present == 1;
 }

@@ -11,7 +11,7 @@ import {
 } from "./api";
 import { InputIcon, OutputIcon, SlotIcon } from "./icons";
 import {
-  allButtons, CTRL_GC, CtrlType, Extra, extraButtons, headsetAudio, isJoyCon, MF_INVERT_H, MF_INVERT_V, MF_UP_DOWN_ONLY, MODE_NAMES, mouseMode, PIDS,
+  allButtons, CTRL_GC, CtrlType, Extra, extraButtons, headsetAudio, headsetAudioOn, isJoyCon, MF_INVERT_H, MF_INVERT_V, MF_UP_DOWN_ONLY, MODE_NAMES, mouseMode, PIDS,
   Profile, profileForm, quickRemap, Settings, slotLabel, Status, STATUS_MODES,
 } from "./model";
 import { AllButtonsModal, confirm, PairedModal, SOFT_CSS, SoftButton, UpdateModal } from "./modals";
@@ -410,20 +410,45 @@ function Content() {
       )}
 
       {S && P && ready.length > 0 && headsetAudio(S, t, mode) && (
-        <PanelSection title="Headphones Audio Mode">
-          <PanelSectionRow>
-            <Block>
-              <Dropdown
-                rgOptions={[{ data: 0, label: "Stable" }, { data: 1, label: "Low Latency" }]}
-                selectedOption={S.audio_mode === 1 ? 1 : 0}
-                onChange={(o) => save(`audio_mode=${o.data}`)}
+        <PanelSection title="Headphones">
+          {S.headset_audio_on !== undefined && (
+            <PanelSectionRow>
+              <ToggleField
+                label="Headphone audio"
+                description="Off: the dongle won't show up as a sound card or microphone, and no audio will go to the controller."
+                checked={headsetAudioOn(S)}
+                onChange={(v) =>
+                  confirm(
+                    v ? "Turn on headphone audio?" : "Turn off headphone audio?",
+                    "The dongle will restart, and then you'll need to reconnect your controller.",
+                    v ? "Turn On" : "Turn Off",
+                    () =>
+                      save(`headset_audio_on=${v ? 1 : 0}`).then((s) => {
+                        if (s) {
+                          setRestarting(true);
+                          typeSeen.current = -1;
+                        }
+                      }),
+                  )
+                }
               />
-            </Block>
-          </PanelSectionRow>
+            </PanelSectionRow>
+          )}
+          {headsetAudioOn(S) && (
+            <PanelSectionRow>
+              <Row label="Audio mode">
+                <Dropdown
+                  rgOptions={[{ data: 0, label: "Stable" }, { data: 1, label: "Low Latency" }]}
+                  selectedOption={S.audio_mode === 1 ? 1 : 0}
+                  onChange={(o) => save(`audio_mode=${o.data}`)}
+                />
+              </Row>
+            </PanelSectionRow>
+          )}
         </PanelSection>
       )}
 
-      {S?.mic_test && P && ready.length > 0 && headsetAudio(S, t, mode) && (
+      {S?.mic_test && P && ready.length > 0 && headsetAudio(S, t, mode) && headsetAudioOn(S) && (
         <PanelSection title="Microphone">
           <PanelSectionRow>
             <ButtonItem layout="below" onClick={() => showModal(<MicTestModal />)}>
