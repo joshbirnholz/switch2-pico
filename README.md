@@ -207,7 +207,13 @@ Controller, with gyro and rumble. In Steam, enable *Switch Controller Support*
 in Settings → Controller.
 
 **Waking the PC with the controller.** While the PC sleeps, a button press on
-the controller asks the PC to wake up. The PC has to allow it:
+the controller asks the PC to wake up. About 30 seconds after the PC goes to
+sleep, the dongle lets the controller go (its light will change from solid to a
+slow blink), so the controller won't connect while the PC sleeps: a button
+press will only wake the PC, and the controller will reconnect once it's awake.
+Right after it is let go, the controller keeps calling the dongle on its own
+for a few seconds; a press counts once it has gone quiet. The PC has to allow
+waking:
 
 * **Linux / SteamOS:** Linux only lets keyboards wake the PC by default.
   With the [Decky plugin](decky-plugin/) (0.7.2 or later) installed, there's
