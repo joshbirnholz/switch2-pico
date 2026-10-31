@@ -66,6 +66,30 @@ class UdevTests(unittest.TestCase):
             self.assertEqual(got, {"pci0000:00": "disabled", "0000:00:08.1": "disabled", "0000:04:00.3": "enabled",
                                    "usb3": "enabled", "3-1.2": "enabled"})
 
+    def test_wakeup_follows_setting(self):
+        import asyncio
+        from unittest.mock import AsyncMock
+        with tempfile.TemporaryDirectory() as tmp:
+            devices = os.path.join(os.path.realpath(tmp), "devices") + "/"
+            hub = os.path.join(devices, "0000:02:00.0", "usb1")
+            dongle = os.path.join(hub, "1-3")
+            for d in (os.path.dirname(hub), hub, dongle):
+                os.makedirs(os.path.join(d, "power"), exist_ok=True)
+                with open(os.path.join(d, "power", "wakeup"), "w") as f:
+                    f.write("enabled\n")
+            plugin = self.backend.Plugin()
+            plugin.dongle = Mock(info={"sys": dongle, "dev": 23})
+            plugin.wakeup_for = None
+            plugin._json = AsyncMock(return_value={"usb_wakeup": 0})
+            with patch.object(self.backend, "SYS_DEVICES", devices):
+                asyncio.run(plugin._apply_wakeup())
+                # Off: only the dongle, not the hub or controller it shares.
+                self.assertEqual(self.backend._read(os.path.join(dongle, "power", "wakeup")), "disabled")
+                self.assertEqual(self.backend._read(os.path.join(hub, "power", "wakeup")), "enabled")
+                plugin._json = AsyncMock(return_value={"usb_wakeup": 1})
+                asyncio.run(plugin._apply_wakeup())
+                self.assertEqual(self.backend._read(os.path.join(dongle, "power", "wakeup")), "enabled")
+
 
 if __name__ == "__main__":
     unittest.main()

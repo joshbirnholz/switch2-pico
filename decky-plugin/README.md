@@ -30,9 +30,12 @@ menu (Decky Loader), on a Steam Deck or any SteamOS / Linux machine with Decky.
   repository's `tools/70-switch2-pico.rules` as
   `/etc/udev/rules.d/70-switch2-pico.rules` (replacing an older copy), so
   Steam can read the dongle through hidraw in SInput mode and a button press
-  on the controller can wake the PC from sleep. It also turns on USB wake-up
+  on the controller can wake the PC from sleep. While the dongle's *Wake a
+  sleeping PC from the controller* setting is on, it also turns on USB wake-up
   for the dongle that's plugged in, every hub above it and the USB controller,
-  so waking works without replugging the dongle.
+  so waking works without replugging the dongle. While the setting is off, it
+  turns the dongle's wake-up off (on some PCs an armed dongle wakes the PC as
+  soon as it goes to sleep).
 * **Test Microphone** (Pico 2 W, Pro Controller 2, SInput mode, supported
   firmware): a popup with live mic and playback levels. **Begin Recording**
   will record five seconds and play it through the controller’s headphones
