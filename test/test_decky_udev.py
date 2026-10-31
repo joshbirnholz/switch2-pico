@@ -1,6 +1,7 @@
 """The plugin installs the same udev rule as tools/, and enables wake-up from
 the dongle up to the USB controller."""
 import importlib.util
+import json
 import os
 from pathlib import Path
 import sys
@@ -28,6 +29,12 @@ class UdevTests(unittest.TestCase):
 
     def test_rule_matches_tools(self):
         self.assertEqual(self.backend.UDEV_RULE, (ROOT / "tools" / "70-switch2-pico.rules").read_text())
+
+    def test_runs_as_root(self):
+        # Decky runs a plugin as root only with the exact flag "root" (not
+        # "_root"); without it the rule and power/wakeup writes are refused.
+        flags = json.loads((ROOT / "decky-plugin" / "plugin.json").read_text())["flags"]
+        self.assertIn("root", flags)
 
     def test_rule_has_wakeup(self):
         self.assertIn("power/wakeup", self.backend.UDEV_RULE)

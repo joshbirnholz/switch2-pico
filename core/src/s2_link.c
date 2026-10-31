@@ -23,6 +23,11 @@
 // ---------------------------------------------------------------------------
 #define CONNECT_TIMEOUT_MS      4000
 #define GATT_PHASE_TIMEOUT_MS   5000
+// Host asleep (s2_link_set_paused()): how long the dropped controller's own
+// adverts can run before any advert counts as a button press, and the quiet
+// gap that ends them sooner.
+#define PAUSE_QUIET_MS          20000
+#define PAUSE_GAP_MS            3000
 #define CMD_TIMEOUT_MS          700
 #define CMD_RETRIES             2
 #define RUMBLE_MIN_GAP_MS       8      // never write rumble faster than this
@@ -173,7 +178,11 @@ static uint32_t s_half_since;           // a pair has run with one side since th
 static bool s_any_ready;
 
 static bool s_paused;              // host asleep: scan for wake-ups but don't connect
+static uint32_t s_pause_since;
+static bool s_pause_quiet;             // the dropped controller may still be advertising on its own
 static uint32_t s_pause_quiet_until;
+static uint32_t s_pause_last_adv;      // when it was last seen advertising while paused
+static uint32_t s_pause_log_next;
 static uint32_t s_sleep_quiet_until;   // after s2_link_let_controller_sleep()
 static bool s_pair_open;               // pairing window (settings.pair_button)
 static uint32_t s_pair_until;
@@ -1579,6 +1588,22 @@ void s2c_on_stack_ready(void) {
     update_scan();
 }
 
+static void pause_quiet_start(void) {
+    s_pause_since = s_pause_last_adv = platform_millis();
+    s_pause_quiet = true;
+    s_pause_quiet_until = platform_deadline_ms(PAUSE_QUIET_MS);
+}
+
+// Paused: whether an advert from the bonded controller is a button press
+// (see s2c_on_advertisement()).
+static bool pause_advert_is_press(uint32_t now) {
+    if (now - s_pause_last_adv > PAUSE_GAP_MS) s_pause_quiet = false;
+    s_pause_last_adv = now;
+    if (s_pause_quiet && !platform_time_reached(s_pause_quiet_until)) return false;
+    s_pause_quiet = false;
+    return true;
+}
+
 static bool supported_pid(uint16_t pid) {
     return pid == S2_PID_PRO2 || pid == S2_PID_GAMECUBE || pid_is_joycon(pid);
 }
@@ -1613,10 +1638,34 @@ void s2c_on_advertisement(const uint8_t addr[6], uint8_t addr_type, int8_t rssi,
     if (s_paused) {
         // While the USB host sleeps we only watch for a bonded controller
         // waking up (a button press) so the host can be woken. Right after we
-        // dropped the link the controller keeps advertising on its own for a
-        // while, so those adverts are ignored.
-        if (for_us && is_bonded && platform_time_reached(s_pause_quiet_until) && platform_time_reached(s_seen_hook_next)) {
+        // dropped the link the controller may keep advertising on its own:
+        // that is ignored until it goes quiet for PAUSE_GAP_MS (then the next
+        // advert is a button press), and for at most PAUSE_QUIET_MS.
+        if (!is_bonded) return;
+        uint32_t now = platform_millis();
+        unsigned after_s = (unsigned)((now - s_pause_since) / 1000);
+        bool log_now = platform_time_reached(s_pause_log_next);
+        if (!for_us) {
+            if (log_now) {
+                uint8_t host[6];
+                for (int i = 0; i < 6; i++) host[i] = adv.host_addr_le[5 - i];
+                s_pause_log_next = platform_deadline_ms(5000);
+                LOG("s2: %s advertising for another host %s (wake flag %u): ignored", pid_name(adv.pid),
+                    addr_str(host), adv.wake_console);
+            }
+            return;
+        }
+        if (!pause_advert_is_press(now)) {
+            if (log_now) {
+                s_pause_log_next = platform_deadline_ms(5000);
+                LOG("s2: %s still advertising %u s after pausing (wake flag %u): not taken as a button press yet",
+                    pid_name(adv.pid), after_s, adv.wake_console);
+            }
+            return;
+        }
+        if (platform_time_reached(s_seen_hook_next)) {
             s_seen_hook_next = platform_deadline_ms(1000);
+            LOG("s2: %s woke up %u s after pausing (wake flag %u)", pid_name(adv.pid), after_s, adv.wake_console);
             s2_link_hook_controller_seen();
         }
         return;
@@ -2317,9 +2366,9 @@ void s2_link_forget(const uint8_t *addr) {
 void s2_link_set_paused(bool paused) {
     if (paused == s_paused) return;
     s_paused = paused;
-    LOG("s2: %s", paused ? "paused" : "resumed");
+    LOG("s2: %s%s", paused ? "paused" : "resumed", paused && s_scanning ? " (scanning)" : "");
     if (paused) {
-        s_pause_quiet_until = platform_deadline_ms(20000);
+        pause_quiet_start();
         disconnect_all();
     }
     update_scan();

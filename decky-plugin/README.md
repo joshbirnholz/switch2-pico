@@ -66,8 +66,8 @@ menu (Decky Loader), on a Steam Deck or any SteamOS / Linux machine with Decky.
 Over USB, through the dongle's configuration interface ("Switch2-Pico
 Config", the one the configuration page uses with WebUSB) and the same API
 (`core/src/web_api.c`). The backend (`main.py`) uses Linux usbdevfs directly,
-so it needs no extra Python packages; it runs as root (Decky flag `_root`)
-for access to `/dev/bus/usb`. The interface is claimed only during each
+so it needs no extra Python packages; it runs as root (Decky flag `root`)
+to install the udev rule and turn on USB wake-up. The interface is claimed only during each
 request, so the configuration page in a browser can still be used (but not
 at the same moment).
 

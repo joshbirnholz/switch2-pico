@@ -17,3 +17,4 @@ __pycache__/
 /test/test_mic_test
 
 /test/test_mic_api
+test/test_pause_wake
