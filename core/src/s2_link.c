@@ -1641,20 +1641,31 @@ void s2c_on_advertisement(const uint8_t addr[6], uint8_t addr_type, int8_t rssi,
         // dropped the link the controller may keep advertising on its own:
         // that is ignored until it goes quiet for PAUSE_GAP_MS (then the next
         // advert is a button press), and for at most PAUSE_QUIET_MS.
-        if (!for_us || !is_bonded) return;
+        if (!is_bonded) return;
         uint32_t now = platform_millis();
         unsigned after_s = (unsigned)((now - s_pause_since) / 1000);
-        if (!pause_advert_is_press(now)) {
-            if (platform_time_reached(s_pause_log_next)) {
+        bool log_now = platform_time_reached(s_pause_log_next);
+        if (!for_us) {
+            if (log_now) {
+                uint8_t host[6];
+                for (int i = 0; i < 6; i++) host[i] = adv.host_addr_le[5 - i];
                 s_pause_log_next = platform_deadline_ms(5000);
-                LOG("s2: %s still advertising %u s after pausing: not taken as a button press yet", pid_name(adv.pid),
-                    after_s);
+                LOG("s2: %s advertising for another host %s (wake flag %u): ignored", pid_name(adv.pid),
+                    addr_str(host), adv.wake_console);
+            }
+            return;
+        }
+        if (!pause_advert_is_press(now)) {
+            if (log_now) {
+                s_pause_log_next = platform_deadline_ms(5000);
+                LOG("s2: %s still advertising %u s after pausing (wake flag %u): not taken as a button press yet",
+                    pid_name(adv.pid), after_s, adv.wake_console);
             }
             return;
         }
         if (platform_time_reached(s_seen_hook_next)) {
             s_seen_hook_next = platform_deadline_ms(1000);
-            LOG("s2: %s woke up %u s after pausing", pid_name(adv.pid), after_s);
+            LOG("s2: %s woke up %u s after pausing (wake flag %u)", pid_name(adv.pid), after_s, adv.wake_console);
             s2_link_hook_controller_seen();
         }
         return;
@@ -2355,7 +2366,7 @@ void s2_link_forget(const uint8_t *addr) {
 void s2_link_set_paused(bool paused) {
     if (paused == s_paused) return;
     s_paused = paused;
-    LOG("s2: %s", paused ? "paused" : "resumed");
+    LOG("s2: %s%s", paused ? "paused" : "resumed", paused && s_scanning ? " (scanning)" : "");
     if (paused) {
         pause_quiet_start();
         disconnect_all();
