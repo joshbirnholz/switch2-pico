@@ -210,10 +210,15 @@ in Settings → Controller.
 the controller asks the PC to wake up. The PC has to allow it:
 
 * **Linux / SteamOS:** Linux only lets keyboards wake the PC by default.
-  Install the rule from `tools/70-switch2-pico.rules` once (in SteamOS Desktop
-  Mode, from Konsole) and replug the dongle:
+  With the [Decky plugin](decky-plugin/) (0.7.1 or later) installed, there's
+  nothing to do: it installs the rule below and turns on wake-up for the
+  dongle. Without it, install the rule from `tools/70-switch2-pico.rules` once
+  (in SteamOS Desktop Mode, from Konsole) and replug the dongle:
   `sudo cp tools/70-switch2-pico.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules`.
-  `cat /sys/bus/usb/devices/*/power/wakeup` should then list one more `enabled`.
+  The rule turns on wake-up for the dongle, for every hub between it and the
+  PC (a dock, for example) and for the USB controller; a wake request is lost
+  if any of them has it off. `cat /sys/bus/usb/devices/*/power/wakeup` should
+  then list one more `enabled`.
 * **Windows:** Device Manager → the dongle → Power Management → *Allow this
   device to wake the computer* (Windows may only offer this for keyboards and
   mice).
@@ -308,7 +313,7 @@ above its SL.) There are no Steam shortcut outputs in this mode (Quick
 Access Menu (Decky) and Capture do those jobs). Mouse Mode works in this
 mode too. On Linux, Steam needs to read the device through hidraw: the
 current `tools/70-switch2-pico.rules` allows it (the Decky plugin installs
-such a rule on SteamOS). It needs an SDL / Steam recent enough to know
+it on SteamOS). It needs an SDL / Steam recent enough to know
 SInput.
 
 #### Headphones (Pro Controller 2)

@@ -21,6 +21,7 @@ import fcntl
 import glob
 import json
 import os
+import re
 import select
 import shutil
 import ssl
@@ -83,7 +84,8 @@ def find_dongle():
             else:
                 ep_out = addr
         if bus and dev and itf is not None and ep_in and ep_out:
-            return {"bus": int(bus), "dev": int(dev), "itf": int(itf, 16), "ep_in": ep_in, "ep_out": ep_out}
+            return {"bus": int(bus), "dev": int(dev), "itf": int(itf, 16), "ep_in": ep_in, "ep_out": ep_out,
+                    "sys": dev_dir}
     return None
 
 
@@ -170,14 +172,47 @@ def uf2_image(data, family, base, max_len):
     return bytes(img)
 
 
-# SInput mode: Steam reads the controller through hidraw. SteamOS's own rules
-# may not cover its ID (2e8a:10c6), so the plugin adds one.
+# The same rule as tools/70-switch2-pico.rules (test_decky_udev.py checks it
+# stays the same): lets Steam read the dongle in SInput mode (SteamOS's own
+# rules may not cover 2e8a:10c6), lets Chrome open the configuration page, and
+# lets the dongle wake the PC from sleep. It is kept here, not as a file next to
+# main.py, because older versions' self-update copies only PLUGIN_FILES.
 UDEV_RULE_PATH = "/etc/udev/rules.d/70-switch2-pico.rules"
-UDEV_RULE = (
-    "# Added by the Switch2-Pico Decky plugin: lets Steam read the dongle in SInput mode.\n"
-    'KERNEL=="hidraw*", ATTRS{idVendor}=="2e8a", ATTRS{idProduct}=="10c6", MODE="0660", TAG+="uaccess"\n'
-)
-UDEV_DIRS = ("/etc/udev/rules.d", "/usr/lib/udev/rules.d", "/lib/udev/rules.d", "/run/udev/rules.d")
+UDEV_RULE = """\
+# Lets Chrome/Edge (WebUSB) open the Switch2-Pico configuration interface
+# without root, in every USB mode (Switch Pro, DualSense Edge, DualSense,
+# Xbox 360, GameCube adapter, SInput, no controller). Install:
+#   sudo cp 70-switch2-pico.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules
+# then unplug and replug the dongle. Keep the 70- prefix: TAG+="uaccess" only
+# takes effect in rules that run before systemd's 73-seat-late.rules (as
+# 99-switch2-pico.rules it never did). The Decky plugin installs this same file.
+SUBSYSTEM=="usb", ATTRS{idVendor}=="057e", ATTRS{idProduct}=="2009", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="054c", ATTRS{idProduct}=="0df2", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="054c", ATTRS{idProduct}=="0ce6", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="045e", ATTRS{idProduct}=="028e", TAG+="uaccess"
+# GameCube adapter mode (also lets Dolphin / Slippi open it without root).
+SUBSYSTEM=="usb", ATTRS{idVendor}=="057e", ATTRS{idProduct}=="0337", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="2e8a", ATTRS{idProduct}=="10c6", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="1209", ATTRS{idProduct}=="0001", ATTRS{product}=="Switch2-Pico*", TAG+="uaccess"
+# SInput mode: Steam and SDL read the controller through hidraw.
+KERNEL=="hidraw*", ATTRS{idVendor}=="2e8a", ATTRS{idProduct}=="10c6", MODE="0660", TAG+="uaccess"
+
+# Lets the dongle wake the PC from sleep when you press a button on the
+# controller. Linux only arms USB wake-up for keyboards by default, so without
+# these lines the dongle's wake request is ignored. The request also has to get
+# through every hub between the dongle and the PC and through the USB
+# controller itself, so the last line enables wake-up on each of them too
+# (up to the first PCI device, the controller).
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="057e", ATTR{idProduct}=="2009", ENV{SWITCH2_PICO_WAKE}="1"
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="054c", ATTR{idProduct}=="0df2", ENV{SWITCH2_PICO_WAKE}="1"
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="054c", ATTR{idProduct}=="0ce6", ENV{SWITCH2_PICO_WAKE}="1"
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="045e", ATTR{idProduct}=="028e", ENV{SWITCH2_PICO_WAKE}="1"
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="057e", ATTR{idProduct}=="0337", ENV{SWITCH2_PICO_WAKE}="1"
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="2e8a", ATTR{idProduct}=="10c6", ENV{SWITCH2_PICO_WAKE}="1"
+# Xbox 360 mode (0.16.0 on) and the configuration-only device.
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="1209", ATTR{idProduct}=="0001", ATTR{product}=="Switch2-Pico*", ENV{SWITCH2_PICO_WAKE}="1"
+ACTION=="add", SUBSYSTEM=="usb", ENV{SWITCH2_PICO_WAKE}=="1", RUN+="/bin/sh -c 'd=/sys%p; while [ -d $$d ] && [ $$d != /sys/devices ]; do [ -f $$d/power/wakeup ] && echo enabled > $$d/power/wakeup; case $${d##*/} in ????:??:??.?) break;; esac; d=$${d%%/*}; done; :'"
+"""
 
 
 def system_env():
@@ -190,17 +225,12 @@ def system_env():
 
 
 def install_udev_rule():
-    """Best effort: add the hidraw rule unless a rule for the ID exists."""
+    """Best effort: install (or bring up to date) the udev rule."""
     try:
+        # Earlier versions installed only the SInput line under this name,
+        # which left out the wake-up lines: replace whatever is there.
         if _read(UDEV_RULE_PATH) == UDEV_RULE.strip():
             return
-        for d in UDEV_DIRS:
-            for path in glob.glob(os.path.join(d, "*.rules")):
-                if path == UDEV_RULE_PATH:
-                    continue
-                text = (_read(path) or "").lower()
-                if "2e8a" in text and "10c6" in text:
-                    return
         os.makedirs(os.path.dirname(UDEV_RULE_PATH), exist_ok=True)
         with open(UDEV_RULE_PATH, "w") as f:
             f.write(UDEV_RULE)
@@ -210,6 +240,36 @@ def install_udev_rule():
         decky.logger.info("installed %s", UDEV_RULE_PATH)
     except Exception as e:
         decky.logger.warning("udev rule not installed: %s", e)
+
+
+SYS_DEVICES = "/sys/devices/"
+
+
+def _is_pci(name):
+    """A PCI device name (0000:04:00.3): the USB controller."""
+    return re.fullmatch(r"[0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-7]", name) is not None
+
+
+def enable_wakeup(dev_dir):
+    """Let the dongle wake the PC: wake-up on the dongle, every hub above it
+    and the USB controller, as the udev rule does when the dongle is plugged
+    in (the rule doesn't run for a dongle already plugged in when it is
+    installed). Returns the devices changed."""
+    changed = []
+    d = os.path.realpath(dev_dir)
+    while d.startswith(SYS_DEVICES):
+        f = os.path.join(d, "power", "wakeup")
+        if _read(f) == "disabled":
+            try:
+                with open(f, "w") as fh:
+                    fh.write("enabled")
+                changed.append(os.path.basename(d))
+            except OSError as e:
+                decky.logger.warning("wake-up not enabled on %s: %s", d, e)
+        if _is_pci(os.path.basename(d)):
+            break
+        d = os.path.dirname(d)
+    return changed
 
 
 def vcmp(a, b):
@@ -469,6 +529,7 @@ class Plugin:
         self.plugin_notified = None
         self.updating = False
         self.decky_enabled = False  # turned the dongle's Decky options on (once per connection)
+        self.wakeup_for = None      # (sysfs path, device number) wake-up was enabled for
         loop = asyncio.get_event_loop()
         self.monitor = loop.create_task(self._monitor())
         self.events = loop.create_task(self._events())
@@ -773,6 +834,18 @@ class Plugin:
                 decky.logger.warning("events: %s", e)
                 await asyncio.sleep(1.0)
 
+    async def _enable_wakeup(self):
+        """Once per enumeration (the dongle re-enumerates on a mode change or
+        when a controller connects): let it wake the PC."""
+        info = self.dongle.info
+        key = info and (info["sys"], info["dev"])
+        if not key or key == self.wakeup_for:
+            return
+        self.wakeup_for = key
+        changed = await asyncio.to_thread(enable_wakeup, info["sys"])
+        if changed:
+            decky.logger.info("wake-up enabled on %s", ", ".join(changed))
+
     # ---- Background: notifications -----------------------------------------
     async def _monitor(self):
         """Profile switches and new firmware or plugin versions, as "notify"
@@ -790,6 +863,7 @@ class Plugin:
                     continue
                 s = st["status"]
                 await self._enable_decky_options()
+                await self._enable_wakeup()
                 # Profile switched (C + Home on the controller, or here).
                 cur = (s.get("profile"), s.get("usb_mode"))
                 if running and cur != running:
