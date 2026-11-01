@@ -26,10 +26,16 @@ menu (Decky Loader), on a Steam Deck or any SteamOS / Linux machine with Decky.
   for presses every 50 ms, and turns on the dongle's *Show additional Decky
   options* so the configuration page lists this output. Provisional.
 * **Mouse Mode** for Joy-Con 2 (Xbox 360 and SInput profiles): on / off, speed, scrolling.
-* **SInput mode**: on start the plugin adds a udev rule
-  (`/etc/udev/rules.d/70-switch2-pico.rules`) so Steam can read the dongle
-  through hidraw in SInput mode, unless a rule for its ID (2e8a:10c6) is
-  already there.
+* **udev rule and waking the PC**: on start the plugin installs the
+  repository's `tools/70-switch2-pico.rules` as
+  `/etc/udev/rules.d/70-switch2-pico.rules` (replacing an older copy), so
+  Steam can read the dongle through hidraw in SInput mode and a button press
+  on the controller can wake the PC from sleep. While the dongle's *Wake a
+  sleeping PC from the controller* setting is on, it also turns on USB wake-up
+  for the dongle that's plugged in, every hub above it and the USB controller,
+  so waking works without replugging the dongle. While the setting is off, it
+  turns the dongle's wake-up off (on some PCs an armed dongle wakes the PC as
+  soon as it goes to sleep).
 * **Test Microphone** (Pico 2 W, Pro Controller 2, SInput mode, supported
   firmware): a popup with live mic and playback levels. **Begin Recording**
   will record five seconds and play it through the controller’s headphones
@@ -63,8 +69,8 @@ menu (Decky Loader), on a Steam Deck or any SteamOS / Linux machine with Decky.
 Over USB, through the dongle's configuration interface ("Switch2-Pico
 Config", the one the configuration page uses with WebUSB) and the same API
 (`core/src/web_api.c`). The backend (`main.py`) uses Linux usbdevfs directly,
-so it needs no extra Python packages; it runs as root (Decky flag `_root`)
-for access to `/dev/bus/usb`. The interface is claimed only during each
+so it needs no extra Python packages; it runs as root (Decky flag `root`)
+to install the udev rule and turn on USB wake-up. The interface is claimed only during each
 request, so the configuration page in a browser can still be used (but not
 at the same moment).
 

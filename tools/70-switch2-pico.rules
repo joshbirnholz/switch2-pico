@@ -4,7 +4,7 @@
 #   sudo cp 70-switch2-pico.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules
 # then unplug and replug the dongle. Keep the 70- prefix: TAG+="uaccess" only
 # takes effect in rules that run before systemd's 73-seat-late.rules (as
-# 99-switch2-pico.rules it never did). The Decky plugin installs the same name.
+# 99-switch2-pico.rules it never did). The Decky plugin installs this same file.
 SUBSYSTEM=="usb", ATTRS{idVendor}=="057e", ATTRS{idProduct}=="2009", TAG+="uaccess"
 SUBSYSTEM=="usb", ATTRS{idVendor}=="054c", ATTRS{idProduct}=="0df2", TAG+="uaccess"
 SUBSYSTEM=="usb", ATTRS{idVendor}=="054c", ATTRS{idProduct}=="0ce6", TAG+="uaccess"
@@ -18,12 +18,16 @@ KERNEL=="hidraw*", ATTRS{idVendor}=="2e8a", ATTRS{idProduct}=="10c6", MODE="0660
 
 # Lets the dongle wake the PC from sleep when you press a button on the
 # controller. Linux only arms USB wake-up for keyboards by default, so without
-# these lines the dongle's wake request is ignored.
-ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="057e", ATTR{idProduct}=="2009", TEST=="power/wakeup", ATTR{power/wakeup}="enabled"
-ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="054c", ATTR{idProduct}=="0df2", TEST=="power/wakeup", ATTR{power/wakeup}="enabled"
-ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="054c", ATTR{idProduct}=="0ce6", TEST=="power/wakeup", ATTR{power/wakeup}="enabled"
-ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="045e", ATTR{idProduct}=="028e", TEST=="power/wakeup", ATTR{power/wakeup}="enabled"
-ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="057e", ATTR{idProduct}=="0337", TEST=="power/wakeup", ATTR{power/wakeup}="enabled"
-ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="2e8a", ATTR{idProduct}=="10c6", TEST=="power/wakeup", ATTR{power/wakeup}="enabled"
+# these lines the dongle's wake request is ignored. The request also has to get
+# through every hub between the dongle and the PC and through the USB
+# controller itself, so the last line enables wake-up on each of them too
+# (up to the first PCI device, the controller).
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="057e", ATTR{idProduct}=="2009", ENV{SWITCH2_PICO_WAKE}="1"
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="054c", ATTR{idProduct}=="0df2", ENV{SWITCH2_PICO_WAKE}="1"
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="054c", ATTR{idProduct}=="0ce6", ENV{SWITCH2_PICO_WAKE}="1"
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="045e", ATTR{idProduct}=="028e", ENV{SWITCH2_PICO_WAKE}="1"
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="057e", ATTR{idProduct}=="0337", ENV{SWITCH2_PICO_WAKE}="1"
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="2e8a", ATTR{idProduct}=="10c6", ENV{SWITCH2_PICO_WAKE}="1"
 # Xbox 360 mode (0.16.0 on) and the configuration-only device.
-ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="1209", ATTR{idProduct}=="0001", ATTR{product}=="Switch2-Pico*", TEST=="power/wakeup", ATTR{power/wakeup}="enabled"
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="1209", ATTR{idProduct}=="0001", ATTR{product}=="Switch2-Pico*", ENV{SWITCH2_PICO_WAKE}="1"
+ACTION=="add", SUBSYSTEM=="usb", ENV{SWITCH2_PICO_WAKE}=="1", RUN+="/bin/sh -c 'd=/sys%p; while [ -d $$d ] && [ $$d != /sys/devices ]; do [ -f $$d/power/wakeup ] && echo enabled > $$d/power/wakeup; case $${d##*/} in ????:??:??.?) break;; esac; d=$${d%%/*}; done; :'"
