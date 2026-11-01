@@ -196,7 +196,7 @@ static void profiles_from_legacy(settings_t *s, ctrl_type_t t) {
         const uint8_t *map = m == USB_MODE_SWITCH_PRO ? (gc ? g->button_map : s->button_map)
                                                       : (gc ? g->mode_map[m] : s->mode_map[m]);
         memcpy(p->map, map, IN_COUNT_V1);
-        p->stick_deadzone_pct = gc ? g->stick_deadzone_pct : s->stick_deadzone_pct;
+        p->stick_deadzone_pct = p->stick_deadzone_right_pct = gc ? g->stick_deadzone_pct : s->stick_deadzone_pct;
         p->stick_outer_pct = gc ? g->stick_outer_pct : s->stick_outer_pct;
         p->swap_sticks = gc ? g->swap_sticks : s->swap_sticks;
         p->rumble_enabled = gc ? g->rumble_enabled : s->rumble_enabled;
@@ -279,6 +279,19 @@ void settings_init(void) {
             g_settings.joycon_single = tail + 4u <= stored->size - 4u ? raw[tail] : 0;
             g_settings.decky_options = 0;
             g_settings.headset_low_latency = 0;
+            memset(g_settings.reserved_end, 0, sizeof g_settings.reserved_end);
+        }
+        if (rev >= 14 && rev < 17) {
+            const size_t at = offsetof(settings_t, prof);
+            size_t room = stored->size - 4u > at ? stored->size - 4u - at : 0;
+            int n = (int)(room / CTRL_PROFILES_V16_SIZE);
+            if (n > CTRL_TYPE_COUNT) n = CTRL_TYPE_COUNT;
+            for (int t = n; t < CTRL_TYPE_COUNT; t++) settings_default_profiles((ctrl_type_t)t, &g_settings.prof[t]);
+            settings_profiles_from_v16(raw + at, n, g_settings.prof);
+            size_t tail = at + (size_t)n * CTRL_PROFILES_V16_SIZE;
+            g_settings.joycon_single = tail < stored->size - 4u ? raw[tail] : 0;
+            g_settings.decky_options = tail + 1 < stored->size - 4u ? raw[tail + 1] : 0;
+            g_settings.headset_low_latency = tail + 2 < stored->size - 4u ? raw[tail + 2] : 0;
             memset(g_settings.reserved_end, 0, sizeof g_settings.reserved_end);
         }
         if (rev < 10) {

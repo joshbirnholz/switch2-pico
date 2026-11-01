@@ -330,8 +330,8 @@ void mapping_apply(const settings_t *s, const mapping_ctx_t *ctx, const s2_input
     const uint16_t *rraw = t.swap ? in->stick_l : in->stick_r;
     const s2_stick_cal_t *lcal = t.swap ? &ctx->cal_r : &ctx->cal_l;
     const s2_stick_cal_t *rcal = t.swap ? &ctx->cal_l : &ctx->cal_r;
-    stick_scaled(t.deadzone, t.outer, lcal, lraw, out->stick_l);
-    stick_scaled(t.deadzone, t.outer, rcal, rraw, out->stick_r);
+    stick_scaled(t.swap ? t.deadzone_right : t.deadzone, t.outer, lcal, lraw, out->stick_l);
+    stick_scaled(t.swap ? t.deadzone : t.deadzone_right, t.outer, rcal, rraw, out->stick_r);
     mapping_imu(s, ctx, in, out->accel, out->gyro);
 }
 

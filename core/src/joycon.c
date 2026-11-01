@@ -52,12 +52,12 @@ static uint32_t side_buttons(uint32_t b, bool pair) {
     return b & ~(S2_BTN_SL_R | S2_BTN_SR_R);
 }
 
-void joycon_merge(ctrl_type_t type, const joycon_side_t *l, const joycon_side_t *r, s2_input_t *out,
+void joycon_merge(ctrl_type_t type, joycon_gyro_side_t gyro_side, const joycon_side_t *l, const joycon_side_t *r, s2_input_t *out,
                   mapping_ctx_t *ctx) {
     bool hl = l && l->present, hr = r && r->present;
     if (type == CTRL_JOYCON_L) hr = false;
     if (type == CTRL_JOYCON_R) hl = false;
-    const joycon_side_t *imu = hr ? r : hl ? l : NULL;
+    const joycon_side_t *imu = gyro_side == JOYCON_GYRO_LEFT && hl ? l : hr ? r : hl ? l : NULL;
     memset(out, 0, sizeof *out);
     if (imu) {
         // Motion, counters and the rest from one side.
@@ -65,10 +65,9 @@ void joycon_merge(ctrl_type_t type, const joycon_side_t *l, const joycon_side_t 
         ctx->gyro_lsb_per_dps = imu->gyro_lsb_per_dps;
     }
     // Battery: the lower of the two.
-    if (hl && hr && l->in.battery_mv && l->in.battery_mv < r->in.battery_mv) {
-        out->battery_mv = l->in.battery_mv;
-        out->charge_state = l->in.charge_state;
-    }
+    const joycon_side_t *battery = hr ? r : hl ? l : NULL;
+    if (hl && hr && l->in.battery_mv && (!r->in.battery_mv || l->in.battery_mv < r->in.battery_mv)) battery = l;
+    if (battery) { out->battery_mv = battery->in.battery_mv; out->charge_state = battery->in.charge_state; }
     uint32_t b = (hl ? l->in.buttons & S2_BTNS_JOYCON_L : 0) | (hr ? r->in.buttons & S2_BTNS_JOYCON_R : 0);
     out->buttons = side_buttons(b, type == CTRL_JOYCON_PAIR);
     out->trigger_l = out->trigger_r = 0;

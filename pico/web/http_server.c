@@ -9,7 +9,8 @@
 #include "wifi_ap.h"
 
 #define HTTP_PORT 80
-#define RX_MAX 8192
+// Room for all 40 profile slots, extended options and URL-encoded names.
+#define RX_MAX 12288
 #define HDR_MAX 256
 
 typedef struct {

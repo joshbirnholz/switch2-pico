@@ -31,11 +31,11 @@ typedef struct {
 //    its SL / SR are GL / GR;
 //  * sticks: the (L)'s left, the (R)'s right; a single Joy-Con's stick turned
 //    a quarter (as it is held sideways) and made the left stick;
-//  * motion from the (R) when there is one (else the (L)), battery from the
-//    lower one.
+//  * motion from the preferred side (or the available side if it is absent);
+//    battery from the lower one, independently of the motion source.
 // `ctx` gets the matching stick calibrations and gyro scale (its other fields
 // are left as they are).
-void joycon_merge(ctrl_type_t type, const joycon_side_t *l, const joycon_side_t *r, s2_input_t *out,
+void joycon_merge(ctrl_type_t type, joycon_gyro_side_t gyro_side, const joycon_side_t *l, const joycon_side_t *r, s2_input_t *out,
                   mapping_ctx_t *ctx);
 
 // A stick held a quarter turn left (an (L) sideways: `left` true) or right,

@@ -129,7 +129,7 @@ nothing else connects meanwhile (not a second (L) or (R), not a Pro or
 GameCube Controller).
 
 * **Both connected: Joy-Con 2 (L/R).** One controller with the (L)'s left
-  stick and buttons and the (R)'s; motion comes from the (R). The battery
+  stick and buttons and the (R)'s; motion comes from the profile's selected side (the (R) by default). The battery
   shown is the lower one. Rumble goes to each side's own motor. Each
   Joy-Con's SL and SR are inputs of their own (four in all), mapped
   separately.
@@ -798,3 +798,32 @@ fixed frequency, and the fixed frequency level. Stop commands release over
 90 ms. This simulates feedback, not physical trigger resistance. Unknown effects
 clear their overlay. Xbox 360 USB emulation cannot receive Xbox One impulse
 trigger commands; native Xbox One emulation is not implemented.
+
+### Profile backups and independent controls
+
+On the web configuration page, **Export profile** downloads the selected
+profile as a versioned JSON file; **Export all profiles** backs up all five
+controller types, their profile slots and the active selections. **Import
+profiles…** accepts either file. For a single profile, select its controller
+type and destination slot first. Library imports replace the complete profile
+library after confirmation. Invalid files are rejected before any profiles
+change. Imported changes remain in the editor until **Save**; changing the
+active USB mode may require a dongle restart. Backups include mappings, sticks,
+rumble, mouse and gyro-side preferences, and exclude pairing keys, Wi-Fi
+credentials and device settings.
+
+**Sticks & triggers** now has independent left/right radial deadzones (main
+stick/C-stick for GameCube). These apply to the physical sticks even when their
+outputs are swapped. A single sideways Joy-Con has one deadzone control.
+Existing profiles start with their previous deadzone on both sticks.
+
+Joy-Con pair profiles also offer **Joy-Con gyro side** on that tab. The selected
+side supplies motion and the corresponding gyro scale, including during
+calibration. If it disconnects, the remaining side supplies motion until the
+preferred side reconnects. The default remains the right Joy-Con. Battery
+reporting continues to use the lower battery, independently of this choice.
+
+The host test suite (`make -C test`) requires a C compiler, Python 3 and Node.js.
+Optional browser coverage for profile downloads/imports and mobile layout is
+in `test/test_profiles_ui.mjs`; run it with Playwright installed, or set
+`PLAYWRIGHT_MODULE` and `PLAYWRIGHT_BROWSERS_PATH` to an existing installation.

@@ -231,7 +231,7 @@ static void api_settings_get(http_response_t *r) {
     // every mode's default map.
     // Profiles carry the Joy-Con 2 mouse fields (prof_ keys take them; see
     // parse_profile()).
-    jb_printf(&j, "],\"ctrl_type\":%u,\"last_ctrl\":%u,\"profile_max\":%d,\"profile_mouse\":true,\"types\":[",
+    jb_printf(&j, "],\"ctrl_type\":%u,\"last_ctrl\":%u,\"profile_max\":%d,\"profile_mouse\":true,\"profile_controls\":true,\"types\":[",
               s2_link_ctrl_type(), s->last_ctrl, PROFILE_MAX);
     for (int t = 0; t < CTRL_TYPE_COUNT; t++) {
         const ctrl_profiles_t *c = settings_profiles(s, (ctrl_type_t)t);
@@ -250,9 +250,9 @@ static void api_settings_get(http_response_t *r) {
             jb_printf(&j, "{\"name\":");
             jb_str(&j, p->name);
             jb_printf(&j, ",\"mode\":%u,\"deadzone\":%u,\"outer\":%u,\"swap\":%u,\"threshold\":%u,\"rumble\":%u,"
-                          "\"strength\":%u,\"mouse\":%u,\"mouse_speed\":%u,\"mouse_flags\":%u,\"rumble_style\":%u,\"rumble_frequency\":%u,\"impulse_flags\":%u,\"impulse_strength\":%u,\"impulse_frequency\":%u,\"map\":[",
+                          "\"deadzone_right\":%u,\"gyro_side\":%u,\"strength\":%u,\"mouse\":%u,\"mouse_speed\":%u,\"mouse_flags\":%u,\"rumble_style\":%u,\"rumble_frequency\":%u,\"impulse_flags\":%u,\"impulse_strength\":%u,\"impulse_frequency\":%u,\"map\":[",
                       p->usb_mode, p->stick_deadzone_pct, p->stick_outer_pct, p->swap_sticks, p->trigger_threshold,
-                      p->rumble_enabled, p->rumble_strength_pct, p->mouse_src, p->mouse_speed_pct, p->mouse_flags,
+                      p->rumble_enabled, p->stick_deadzone_right_pct, p->joycon_gyro_side, p->rumble_strength_pct, p->mouse_src, p->mouse_speed_pct, p->mouse_flags,
                       p->rumble_style, p->rumble_frequency, p->impulse_flags, p->impulse_strength, p->impulse_frequency);
             for (int k = 0; k < IN_COUNT; k++) jb_printf(&j, "%s%u", k ? "," : "", p->map[k]);
             jb_printf(&j, "]}");
@@ -327,7 +327,8 @@ typedef struct {
 // Profile keys (controller type t, profile i):
 //   prof_<t>_<i>=<mode>,<deadzone>,<outer>,<swap>,<threshold>,<rumble>,<strength>,<map x IN_COUNT>,
 //                m<mouse>,<mouse speed>,<mouse flags>,
-//                r<style>,<frequency>,<impulse flags>,<impulse strength>,<impulse frequency>,<name>
+//                r<style>,<frequency>,<impulse flags>,<impulse strength>,<impulse frequency>,
+//                d<right deadzone>,<gyro side>,<name>
 //                (empty: no profile there; the "m" group, Joy-Con 2 mouse, may be left out)
 //   active_<t>=<i>        (i: the button, mode_slot_t; a cleared profile in
 //                          use is replaced by another, see profiles.c)
@@ -421,6 +422,20 @@ static bool parse_profile(const char *v, profile_t *p) {
         p->impulse_flags = old->impulse_flags; p->impulse_strength = old->impulse_strength;
         p->impulse_frequency = old->impulse_frequency;
     } else { p->impulse_strength = 100; p->impulse_frequency = 10; }
+    uint8_t opt[2];
+    w = v; group = *w == 'd'; if (group) w++;
+    for (size_t k = 0; group && k < sizeof opt; k++) {
+        if (!isdigit((unsigned char)*w)) { group = false; break; }
+        long n = strtol(w, &end, 10);
+        if (*end != ',') { group = false; break; }
+        opt[k] = (uint8_t)(n > 255 ? 255 : n); w = end + 1;
+    }
+    if (group) {
+        p->stick_deadzone_right_pct = opt[0]; p->joycon_gyro_side = opt[1]; v = w;
+    } else {
+        p->stick_deadzone_right_pct = old->used ? old->stick_deadzone_right_pct : p->stick_deadzone_pct;
+        p->joycon_gyro_side = old->used ? old->joycon_gyro_side : JOYCON_GYRO_RIGHT;
+    }
     snprintf(p->name, sizeof p->name, "%s", v);
     return true;
 }

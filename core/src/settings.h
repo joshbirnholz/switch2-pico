@@ -93,12 +93,13 @@ typedef enum {
     MODE_SLOT_COUNT
 } mode_slot_t;
 #define MODE_SLOT_EMPTY 0
-#define SETTINGS_EXT_REV 16  // 1: mode_map; 2: mode_slot; 3: ble_tx_power; 4: idle_*; 5: pair_button;
+#define SETTINGS_EXT_REV 17  // 1: mode_map; 2: mode_slot; 3: ble_tx_power; 4: idle_*; 5: pair_button;
                              // 6: gc_profile; 7: gc_profile sticks / rumble; 8: bonds;
                              // 9: gc_usb_mode, last_ctrl; 10: profiles; 11: one profile per button;
                              // 12: Joy-Con 2 types; 13: single Joy-Con 2 profiles numbered;
                              // 14: maps include IN_SL_R / IN_SR_R; 15: mouse_flags (MOUSE_FLAG_*)
                              // 16: per-profile rumble style and impulse settings (formerly reserved)
+                             // 17: independent right deadzone and Joy-Con gyro side (larger profiles)
 
 // Remembered (paired) controllers. Any of them can connect, one at a time
 // (or a Joy-Con 2 (L) together with a Joy-Con 2 (R)); pairing one more when
@@ -148,6 +149,8 @@ typedef enum {
 // Each controller type has one per shortcut button (p[] is indexed by
 // mode_slot_t: A, B, X, Y, D-pad up / down / left / right); one is in use,
 // and C + Home, then a button, switches to that button's profile.
+typedef enum { JOYCON_GYRO_RIGHT = 0, JOYCON_GYRO_LEFT = 1 } joycon_gyro_side_t;
+
 #define PROFILE_MAX      MODE_SLOT_COUNT
 #define PROFILE_NAME_LEN 20
 typedef struct {
@@ -170,6 +173,8 @@ typedef struct {
     uint8_t impulse_flags;             // bit 0: disabled, bit 1: fixed frequency
     uint8_t impulse_strength;          // 0..200 percent
     uint8_t impulse_frequency;         // 1..10
+    uint8_t stick_deadzone_right_pct;   // independent right stick / C-stick, 0..40
+    uint8_t joycon_gyro_side;           // joycon_gyro_side_t; pair only, fallback to available side
 } profile_t;
 
 typedef struct {
@@ -325,6 +330,9 @@ void settings_sanitize_profiles(ctrl_type_t type, ctrl_profiles_t *c);
 // `raw` (`n` controller types), into the current layout (the new inputs
 // unassigned).
 void settings_profiles_from_v13(const uint8_t *raw, int n, ctrl_profiles_t *out);
+// ext_rev 14..16: profiles before independent deadzones / gyro-side selection.
+#define CTRL_PROFILES_V16_SIZE 484
+void settings_profiles_from_v16(const uint8_t *raw, int n, ctrl_profiles_t *out);
 #define CTRL_PROFILES_V13_SIZE 468   // sizeof the stored ctrl_profiles_t then
 // ext_rev 10 -> 11: put each profile on the button(s) that selected it,
 // the others on free buttons.
@@ -385,12 +393,12 @@ static inline bool settings_boot_mouse(const settings_t *s) {
 }
 // Sticks, triggers and rumble of a controller type's active profile.
 typedef struct {
-    uint8_t deadzone, outer, swap, trigger_threshold, rumble_enabled, rumble_strength;
+    uint8_t deadzone, outer, swap, trigger_threshold, rumble_enabled, rumble_strength, deadzone_right;
 } ctrl_tuning_t;
 static inline ctrl_tuning_t settings_tuning(const settings_t *s, ctrl_type_t t) {
     const profile_t *p = settings_active(s, t);
     ctrl_tuning_t r = {p->stick_deadzone_pct, p->stick_outer_pct, p->swap_sticks,
-                       p->trigger_threshold,  p->rumble_enabled,  p->rumble_strength_pct};
+                       p->trigger_threshold,  p->rumble_enabled,  p->rumble_strength_pct, p->stick_deadzone_right_pct};
     return r;
 }
 

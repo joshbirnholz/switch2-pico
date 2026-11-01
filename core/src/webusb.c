@@ -9,7 +9,8 @@
 #include "settings.h"
 #include "web_api.h"
 
-#define REQ_MAX 8192
+// Room for all 40 profile slots, extended options and URL-encoded names.
+#define REQ_MAX 12288
 
 static uint8_t s_rx[REQ_MAX + 1];
 static uint32_t s_rx_len;

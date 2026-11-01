@@ -271,6 +271,10 @@ body.offline #usb-help{display:flex}
         <button id="prof-use" onclick="profUse()">Use this profile</button>
         <button id="prof-dup" onclick="dupStart()">Duplicate…</button>
         <button id="prof-del" class="danger" onclick="profDel()">Delete</button>
+        <button id="prof-export" onclick="exportProfiles(false)">Export profile</button>
+        <button onclick="exportProfiles(true)">Export all profiles</button>
+        <button onclick="$('profile-file').click()">Import profiles…</button>
+        <input type="file" id="profile-file" accept=".json,application/json" hidden onchange="importProfiles(this)">
       </div>
       <p class="note" id="prof-note" style="flex:1 1 100%" hidden></p>
     </div>
@@ -296,8 +300,13 @@ body.offline #usb-help{display:flex}
         </div>
       </div>
       <div class="panel fields" data-panel="sticks" hidden>
-        <label>Inner deadzone <span class="hint">Ignore small movements near the center</span>
+        <label><span id="pf-deadzone-label">Left stick deadzone</span> <span class="hint">Ignore small movements near the stick’s center</span>
           <span class="slider"><input type="range" min="0" max="40" id="pf-deadzone"><b><span id="v-pf-deadzone"></span>%</b></span></label>
+        <label id="pf-right-deadzone-row"><span id="pf-deadzone-right-label">Right stick deadzone</span> <span class="hint">Tune the physical right stick or C-stick independently</span>
+          <span class="slider"><input type="range" min="0" max="40" id="pf-deadzone-right"><b><span id="v-pf-deadzone-right"></span>%</b></span></label>
+        <p id="profile-controls-update" class="note" hidden>Independent deadzones and gyro-side selection require firmware 0.20.0 or newer.</p>
+        <label id="pf-gyro-side-row">Joy-Con gyro side <span class="hint">The pair will use this side for motion. If it disconnects, the other side will supply motion until it reconnects.</span>
+          <select id="pf-gyro-side"><option value="0">Right Joy-Con</option><option value="1">Left Joy-Con</option></select></label>
         <label>Full deflection at <span class="hint">Reach 100% before the edge</span>
           <span class="slider"><input type="range" min="50" max="100" id="pf-outer"><b><span id="v-pf-outer"></span>%</b></span></label>
         <label class="check"><input type="checkbox" id="pf-swap"><span id="pf-swap-label">Swap left and right sticks</span></label>
@@ -910,6 +919,7 @@ function stashProfile(){
   if(!S||!prof())return;   // an empty button: the editor shows nothing of its own
   stashMap();
   const P=prof();
+  P.deadzone_right=+$('pf-deadzone-right').value;P.gyro_side=+$('pf-gyro-side').value;
   P.deadzone=+$('pf-deadzone').value;P.outer=+$('pf-outer').value;P.swap=$('pf-swap').checked?1:0;
   P.rumble_style=+$('pf-rumble-style').value;P.rumble_frequency=+$('pf-rumble-frequency').value;
   P.impulse_flags=($('pf-impulse-enabled').checked?0:1)|($('pf-impulse-dynamic').checked?0:2);
@@ -987,7 +997,7 @@ function renderProfile(){
   $('pf-mode').value=P?P.mode:-1;
   const nm=$('pf-name');nm.value=P?P.name:'';nm.disabled=!P;
   const pu=$('prof-use'),inUse=P&&cur===T.active;pu.disabled=!P||inUse;pu.textContent=inUse?'In use':'Use this profile';
-  $('prof-dup').disabled=!P;$('prof-del').disabled=!P;
+  $('prof-dup').disabled=!P;$('prof-del').disabled=!P;$('prof-export').disabled=!P;
   const note=PNOTE;
   $('prof-note').hidden=!note;$('prof-note').textContent=note;
   $('prof-settings').classList.toggle('off',!P);
@@ -1009,6 +1019,12 @@ function renderProfile(){
   set('pf-rumble-style',P.rumble_style||0);set('pf-rumble-frequency',P.rumble_frequency||5);
   $('pf-impulse-enabled').checked=!(P.impulse_flags&1);$('pf-impulse-dynamic').checked=!(P.impulse_flags&2);
   set('pf-impulse-strength',P.impulse_strength??100);set('pf-impulse-frequency',P.impulse_frequency||10);
+  set('pf-deadzone-right',P.deadzone_right??P.deadzone);set('pf-gyro-side',P.gyro_side||0);
+  $('profile-controls-update').hidden=!!S.profile_controls;
+  $('pf-deadzone-right').disabled=!S.profile_controls;$('pf-gyro-side').disabled=!S.profile_controls;
+  $('pf-deadzone-label').textContent=isSingle()?'Stick deadzone':isGC()?'Main stick deadzone':'Left stick deadzone';
+  $('pf-deadzone-right-label').textContent=isGC()?'C-stick deadzone':'Right stick deadzone';
+  $('pf-right-deadzone-row').hidden=isSingle();$('pf-gyro-side-row').hidden=MAP_CTRL!==2;
   set('pf-deadzone',P.deadzone);set('pf-outer',P.outer);set('pf-threshold',P.threshold);set('pf-strength',P.strength);
   $('pf-swap').checked=!!P.swap;$('pf-rumble').checked=!!P.rumble;
   $('pf-swap-label').textContent=isGC()?'Swap main stick and C-stick':'Swap left and right sticks';
@@ -1030,7 +1046,89 @@ function profName(v){
   const P=prof();if(!P)return;P.name=v.slice(0,19);setDirty(true);
   const t=document.querySelector(`.ptile[data-i="${CUR[MAP_CTRL]}"] .pname`);if(t)t.textContent=P.name||' ';
 }
-function newProfile(m){return {name:SHORT[m],mode:m,deadzone:6,outer:95,swap:0,threshold:120,rumble:1,strength:100,rumble_style:m===3?1:0,rumble_frequency:5,impulse_flags:0,impulse_strength:100,impulse_frequency:10,mouse:0,mouse_speed:100,mouse_flags:0,map:TYPE().defaults[m].slice()}}
+// PROFILE_FILES_BEGIN: pure versioned file format and validation.
+const PROFILE_FILE_FORMAT='switch2-pico-profiles';
+function profileNumber(p,k,min,max,fallback){
+  const v=p[k]===undefined?fallback:p[k];
+  if(!Number.isInteger(v)||v<min||v>max)throw Error(`Invalid ${k}: expected ${min}–${max}.`);
+  return v;
+}
+function cleanImportedProfile(p,t,settings){
+  if(!p||typeof p!=='object'||Array.isArray(p))throw Error('Invalid profile.');
+  if(typeof p.name!=='string'||!p.name.trim()||new TextEncoder().encode(p.name).length>19||/[\u0000-\u001f]/.test(p.name))throw Error('Profile names must contain 1–19 UTF-8 bytes without control characters.');
+  const mode=profileNumber(p,'mode',0,settings.modes.length-1);
+  if(!Array.isArray(p.map)||p.map.length!==IN.length)throw Error(`A profile must map exactly ${IN.length} buttons.`);
+  const outputs=settings.modes[mode].outputs;
+  const map=p.map.map(v=>{
+    if(!Number.isInteger(v)||v<0||v>=outputs.length||(v!==0&&outputs[v]==null))throw Error('The button map contains an unsupported output.');
+    return v;
+  });
+  const n=(key,lo,hi,def)=>profileNumber(p,key,lo,hi,def);
+  const deadzone=n('deadzone',0,40);
+  const mouse=n('mouse',0,1,0),gyro=n('gyro_side',0,1,0);
+  if((t<2&&mouse)||(t!==2&&gyro))throw Error('This profile has Joy-Con options for a different controller type.');
+  return {name:p.name,mode,map,deadzone,deadzone_right:n('deadzone_right',0,40,deadzone),gyro_side:gyro,
+    outer:n('outer',50,100),swap:n('swap',0,1),threshold:n('threshold',0,255),rumble:n('rumble',0,1),strength:n('strength',0,200),
+    rumble_style:n('rumble_style',0,3,0),rumble_frequency:n('rumble_frequency',0,10,5),
+    impulse_flags:n('impulse_flags',0,3,0),impulse_strength:n('impulse_strength',0,200,100),impulse_frequency:n('impulse_frequency',1,10,10),
+    mouse,mouse_speed:n('mouse_speed',t>=2?10:0,250,t>=2?100:0),mouse_flags:n('mouse_flags',0,7,0)};
+}
+function validateProfileFile(doc,settings){
+  if(!doc||doc.format!==PROFILE_FILE_FORMAT||doc.version!==1)throw Error('This is not a supported Switch2-Pico profile file (version 1).');
+  if(doc.kind==='profile'){
+    const type=profileNumber(doc,'controller_type',0,settings.types.length-1);
+    return {kind:'profile',type,profile:cleanImportedProfile(doc.profile,type,settings)};
+  }
+  if(doc.kind!=='library'||!Array.isArray(doc.controllers)||doc.controllers.length!==settings.types.length)throw Error('The profile library must include every controller type.');
+  const seen=new Set();
+  const controllers=doc.controllers.map(c=>{
+    if(!c||typeof c!=='object')throw Error('Invalid controller entry.');
+    const type=profileNumber(c,'type',0,settings.types.length-1);
+    if(seen.has(type))throw Error('Duplicate controller type in profile library.');seen.add(type);
+    if(!Array.isArray(c.profiles)||c.profiles.length!==settings.profile_max)throw Error(`Expected ${settings.profile_max} profile slots per controller type.`);
+    const profiles=c.profiles.map(p=>p===null?null:cleanImportedProfile(p,type,settings));
+    const active=profileNumber(c,'active',0,settings.profile_max-1);
+    if(!profiles[active])throw Error('The active profile slot must contain a profile.');
+    return {type,active,profiles};
+  });
+  return {kind:'library',controllers};
+}
+function makeProfileFile(settings,all,type,index){
+  const base={format:PROFILE_FILE_FORMAT,version:1};
+  if(all)return {...base,kind:'library',controllers:settings.types.map((T,t)=>({type:t,active:T.active,profiles:T.profiles.map(p=>p?cleanImportedProfile(p,t,settings):null)}))};
+  return {...base,kind:'profile',controller_type:type,profile:cleanImportedProfile(settings.types[type].profiles[index],type,settings)};
+}
+// PROFILE_FILES_END
+function exportProfiles(all){
+  if(!S)return;
+  try{
+    stashProfile();const data=makeProfileFile(S,all,MAP_CTRL,CUR[MAP_CTRL]);
+    const name=all?'switch2-pico-profiles':data.profile.name.replace(/[^a-zA-Z0-9_-]/g,'_');
+    const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)+'\n'],{type:'application/json'}));
+    const a=document.createElement('a');a.href=url;a.download=name+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }catch(e){toast('Export failed: '+e.message)}
+}
+async function importProfiles(input){
+  const file=input.files?.[0];input.value='';if(!file||!S)return;
+  if(!S.profile_controls){toast('Update to firmware 0.20.0 or newer before importing profiles.');return}
+  const type=MAP_CTRL,index=CUR[MAP_CTRL];
+  try{
+    if(file.size>262144)throw Error('Profile files must be smaller than 256 KiB.');
+    const data=validateProfileFile(JSON.parse(await file.text()),S);
+    if(data.kind==='profile'){
+      if(data.type!==type)throw Error('Select the '+S.types[data.type].name+' tab before importing this profile.');
+      if(S.types[type].profiles[index]&&!confirm('Replace “'+S.types[type].profiles[index].name+'” with “'+data.profile.name+'”? The changes will remain unsaved until you choose Save.'))return;
+      stashProfile();S.types[type].profiles[index]=data.profile;MAP_CTRL=type;CUR[type]=index;
+    }else{
+      if(!confirm('Replace all controller profiles with this library? The changes will remain unsaved until you choose Save.'))return;
+      data.controllers.forEach(c=>{S.types[c.type].profiles=c.profiles;S.types[c.type].active=c.active;CUR[c.type]=c.active});
+    }
+    DUP=OVR=-1;PNOTE='Imported. Choose Save to apply these profiles to the dongle.';
+    showTab(MAP_CTRL);renderProfile();setDirty(true);toast('Profiles imported — choose Save to apply');
+  }catch(e){toast('Import failed: '+e.message)}
+}
+
+function newProfile(m){return {name:SHORT[m],mode:m,deadzone:6,deadzone_right:6,gyro_side:0,outer:95,swap:0,threshold:120,rumble:1,strength:100,rumble_style:m===3?1:0,rumble_frequency:5,impulse_flags:0,impulse_strength:100,impulse_frequency:10,mouse:0,mouse_speed:100,mouse_flags:0,map:TYPE().defaults[m].slice()}}
 // Emulated Controller: None clears the button; on an empty button a mode makes
 // a profile; another mode starts the mapping over from that mode's defaults.
 function profMode(m){
@@ -1155,7 +1253,7 @@ async function save(){
   const prof=[];
   S.types.forEach((T,t)=>{
     T.profiles.forEach((P,i)=>prof.push(`prof_${t}_${i}=`+(P?[P.mode,P.deadzone,P.outer,P.swap,P.threshold,P.rumble,P.strength,...P.map].join(',')+
-      (S.profile_mouse?`,m${P.mouse?1:0},${P.mouse_speed||100},${(P.mouse_flags|0)&7}`:'')+`,r${P.rumble_style||0},${P.rumble_frequency||5},${P.impulse_flags||0},${P.impulse_strength??100},${P.impulse_frequency||10},`+encodeURIComponent(P.name):'')));
+      (S.profile_mouse?`,m${P.mouse?1:0},${P.mouse_speed||100},${(P.mouse_flags|0)&7}`:'')+`,r${P.rumble_style||0},${P.rumble_frequency||5},${P.impulse_flags||0},${P.impulse_strength??100},${P.impulse_frequency||10},`+(S.profile_controls?`d${P.deadzone_right??P.deadzone},${P.gyro_side||0},`:'')+encodeURIComponent(P.name):'')));
     p.append(`active_${t}`,T.active);
   });
   document.querySelectorAll('[data-k]').forEach(el=>p.append(el.dataset.k,el.type==='checkbox'?(el.checked?1:0):el.value));

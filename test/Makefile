@@ -4,7 +4,7 @@ CFLAGS ?= -std=c11 -Wall -Wextra -Wno-unused-parameter -O1 -g
 SRC = ../core/src
 OBJS = test_main.c $(SRC)/hd_rumble.c $(SRC)/s2_proto.c $(SRC)/mapping.c $(SRC)/ds5.c $(SRC)/x360.c $(SRC)/gc_adapter.c $(SRC)/sinput.c $(SRC)/mode_select.c $(SRC)/battery.c $(SRC)/bonds.c $(SRC)/profiles.c $(SRC)/joycon.c
 
-run: test_runner test_usb_lifecycle test_usb_audio2 test_usb_audio2_speaker test_headset_jack test_pause_wake test_mic_test test_mic_api
+run: test_runner test_usb_lifecycle test_usb_audio2 test_usb_audio2_speaker test_headset_jack test_pause_wake test_mic_test test_mic_api test_settings_storage
 	./test_runner
 	./test_usb_lifecycle
 	./test_usb_audio2
@@ -13,6 +13,8 @@ run: test_runner test_usb_lifecycle test_usb_audio2 test_usb_audio2_speaker test
 	./test_pause_wake
 	./test_mic_test
 	./test_mic_api
+	./test_settings_storage
+	node test_profile_files.mjs
 	python3 test_audio_preflight.py
 	python3 test_decky_update.py
 	python3 test_decky_mic.py
@@ -43,6 +45,9 @@ test_mic_api: test_mic_api.c $(SRC)/web_api.c $(SRC)/mic_test.c $(wildcard $(SRC
 	$(CC) $(CFLAGS) -D_DEFAULT_SOURCE -DS2_HEADSET_MIC=1 -ffunction-sections -fdata-sections -I$(SRC) -Wl,--gc-sections -o $@ test_mic_api.c $(SRC)/mic_test.c
 
 clean:
-	rm -f test_runner test_usb_lifecycle test_usb_audio2 test_usb_audio2_speaker test_headset_jack test_pause_wake test_mic_test test_mic_api
+	rm -f test_runner test_usb_lifecycle test_usb_audio2 test_usb_audio2_speaker test_headset_jack test_pause_wake test_mic_test test_mic_api test_settings_storage
 
 .PHONY: run clean
+
+test_settings_storage: test_settings_storage.c $(SRC)/settings.c $(SRC)/profiles.c $(SRC)/mapping.c $(SRC)/mode_select.c $(SRC)/bonds.c $(wildcard $(SRC)/*.h)
+	$(CC) $(CFLAGS) -ffunction-sections -fdata-sections -I$(SRC) -Wl,--gc-sections -o $@ $< $(SRC)/profiles.c $(SRC)/mapping.c $(SRC)/mode_select.c $(SRC)/bonds.c -lm

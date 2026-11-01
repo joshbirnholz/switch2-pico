@@ -22,6 +22,7 @@ static void profile_compatibility(void) {
     for(int i=0;i<IN_COUNT;i++) pos+=snprintf(form+pos,sizeof form-pos,"0,");
     char *suffix=form+pos;
     profile_t *old=&g_settings.prof[0].p[0], parsed;
+    old->stick_deadzone_right_pct=17;old->joycon_gyro_side=1;
     old->used=1;old->rumble_style=1;old->impulse_strength=130;old->impulse_frequency=7;
     s_parse_type=0;s_parse_index=0;
     strcpy(suffix,"m0,100,0,Old client");
@@ -31,6 +32,10 @@ static void profile_compatibility(void) {
     assert(parse_profile(form,&parsed));
     assert(parsed.rumble_style==3 && parsed.rumble_frequency==5 && parsed.impulse_flags==2);
     assert(parsed.impulse_strength==80 && parsed.impulse_frequency==9 && !strcmp(parsed.name,"Audio profile"));
+    assert(parsed.stick_deadzone_right_pct==17 && parsed.joycon_gyro_side==1);
+    strcpy(suffix,"m0,100,0,r3,5,2,80,9,d0,0,New options");
+    assert(parse_profile(form,&parsed));
+    assert(parsed.stick_deadzone_right_pct==0 && parsed.joycon_gyro_side==0 && !strcmp(parsed.name,"New options"));
     strcpy(suffix,"m0,100,0,racing");
     assert(parse_profile(form,&parsed) && !strcmp(parsed.name,"racing") && parsed.rumble_style==1);
 }

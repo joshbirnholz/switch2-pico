@@ -1061,15 +1061,28 @@ static void test_joycon(void) {
     r.in.battery_mv = 3900;
     r.in.gyro[0] = 77;
     l.in.gyro[0] = 11;
-    joycon_merge(CTRL_JOYCON_PAIR, &l, &r, &out, &ctx);
+    joycon_merge(CTRL_JOYCON_PAIR, JOYCON_GYRO_RIGHT, &l, &r, &out, &ctx);
     CHECK(out.buttons == (S2_BTN_UP | S2_BTN_SL_L | S2_BTN_A | S2_BTN_SR_R | S2_BTN_GL));
     CHECK(out.stick_l[0] == c + 500 && out.stick_r[1] == c - 400);
     CHECK(out.gyro[0] == 77);
     CHECK(out.battery_mv == 3600);
+    l.gyro_lsb_per_dps = 14.3f; r.gyro_lsb_per_dps = 16.4f;
+    l.in.accel[0] = 101; r.in.accel[0] = 202;
+    joycon_merge(CTRL_JOYCON_PAIR, JOYCON_GYRO_LEFT, &l, &r, &out, &ctx);
+    CHECK(out.gyro[0] == 11 && out.accel[0] == 101 && ctx.gyro_lsb_per_dps == 14.3f);
+    l.in.battery_mv = 4000;
+    joycon_merge(CTRL_JOYCON_PAIR, JOYCON_GYRO_LEFT, &l, &r, &out, &ctx);
+    CHECK(out.battery_mv == 3900 && out.gyro[0] == 11);
+    l.present = false;
+    joycon_merge(CTRL_JOYCON_PAIR, JOYCON_GYRO_LEFT, &l, &r, &out, &ctx);
+    CHECK(out.gyro[0] == 77 && out.accel[0] == 202 && ctx.gyro_lsb_per_dps == 16.4f);
+    l.present = true;
+    joycon_merge(CTRL_JOYCON_PAIR, JOYCON_GYRO_LEFT, &l, &r, &out, &ctx);
+    CHECK(out.gyro[0] == 11);
 
     // Pair with only the (L): its half, motion from it, the right stick centered.
     r.present = false;
-    joycon_merge(CTRL_JOYCON_PAIR, &l, &r, &out, &ctx);
+    joycon_merge(CTRL_JOYCON_PAIR, JOYCON_GYRO_RIGHT, &l, &r, &out, &ctx);
     CHECK(out.buttons == (S2_BTN_UP | S2_BTN_SL_L | S2_BTN_GL));
     CHECK(out.gyro[0] == 11);
     CHECK(out.stick_r[0] == c && out.stick_r[1] == c);
@@ -1077,27 +1090,27 @@ static void test_joycon(void) {
     // (L) sideways: pushing toward the rail (its right) is up; toward its
     // bottom (its down) is right.
     joycon_side_t sl = jc_side(S2_BTN_SR_L, c + 600, c, 0, 0);
-    joycon_merge(CTRL_JOYCON_L, &sl, NULL, &out, &ctx);
+    joycon_merge(CTRL_JOYCON_L, JOYCON_GYRO_RIGHT, &sl, NULL, &out, &ctx);
     CHECK(out.stick_l[0] == c && out.stick_l[1] == c + 600);
     CHECK(out.buttons == (S2_BTN_SR_L | S2_BTN_GR));
     sl.in.stick_l[0] = c;
     sl.in.stick_l[1] = c - 300;   // its down
-    joycon_merge(CTRL_JOYCON_L, &sl, NULL, &out, &ctx);
+    joycon_merge(CTRL_JOYCON_L, JOYCON_GYRO_RIGHT, &sl, NULL, &out, &ctx);
     CHECK(out.stick_l[0] == c + 300 && out.stick_l[1] == c);
 
     // (R) sideways: toward its left (the rail) is up, its up is right; its
     // stick becomes the left stick.
     joycon_side_t sr = jc_side(0, 0, 0, c - 500, c);
-    joycon_merge(CTRL_JOYCON_R, NULL, &sr, &out, &ctx);
+    joycon_merge(CTRL_JOYCON_R, JOYCON_GYRO_RIGHT, NULL, &sr, &out, &ctx);
     CHECK(out.stick_l[0] == c && out.stick_l[1] == c + 500);
     // ... its SL / SR are GL / GR (not the pair's (R) inputs).
     sr.in.buttons = S2_BTN_SL_R | S2_BTN_SR_R;
-    joycon_merge(CTRL_JOYCON_R, NULL, &sr, &out, &ctx);
+    joycon_merge(CTRL_JOYCON_R, JOYCON_GYRO_RIGHT, NULL, &sr, &out, &ctx);
     CHECK(out.buttons == (S2_BTN_GL | S2_BTN_GR));
     sr.in.buttons = 0;
     sr.in.stick_r[0] = c;
     sr.in.stick_r[1] = c + 200;
-    joycon_merge(CTRL_JOYCON_R, NULL, &sr, &out, &ctx);
+    joycon_merge(CTRL_JOYCON_R, JOYCON_GYRO_RIGHT, NULL, &sr, &out, &ctx);
     CHECK(out.stick_l[0] == c + 200 && out.stick_l[1] == c);
     CHECK(out.stick_r[0] == c && out.stick_r[1] == c);
 
@@ -1415,6 +1428,23 @@ static void test_rumble_options(void) {
     test_now=0;
 }
 
+static void test_separate_deadzones(void) {
+    settings_t s; test_defaults(&s);
+    profile_t *p = settings_active(&s, CTRL_PRO);
+    p->stick_deadzone_pct = 20; p->stick_deadzone_right_pct = 0;
+    mapping_ctx_t ctx = {0}; s2_default_stick_cal(&ctx.cal_l); s2_default_stick_cal(&ctx.cal_r);
+    s2_input_t in = {0}; procon_input_t out;
+    in.stick_l[0] = in.stick_r[0] = 2148;
+    in.stick_l[1] = in.stick_r[1] = 2048;
+    mapping_apply(&s, &ctx, &in, &out);
+    CHECK(out.stick_l[0] == S1_STICK_CENTER && out.stick_r[0] > S1_STICK_CENTER);
+    p->swap_sticks = 1; mapping_apply(&s, &ctx, &in, &out);
+    CHECK(out.stick_l[0] > S1_STICK_CENTER && out.stick_r[0] == S1_STICK_CENTER);
+    p->swap_sticks = 0; p->stick_deadzone_pct = 0; p->stick_deadzone_right_pct = 40;
+    mapping_apply(&s, &ctx, &in, &out);
+    CHECK(out.stick_l[0] > S1_STICK_CENTER && out.stick_r[0] == S1_STICK_CENTER);
+}
+
 int main(void) {
     test_s1_rumble_classic();
     test_s1_rumble_packed();
@@ -1425,6 +1455,7 @@ int main(void) {
     test_audio_in();
     test_motion();
     test_mapping();
+    test_separate_deadzones();
     test_quick_remap();
     test_macro();
     test_ds5();

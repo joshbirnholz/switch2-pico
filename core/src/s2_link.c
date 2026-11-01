@@ -288,13 +288,14 @@ static link_t *first_ready(void) {
     return NULL;
 }
 
-// The link whose motion the controller reports: a Joy-Con pair's (R) when
-// it is there.
+// Keep calibration/status on the same preferred motion source as joycon_merge().
 static link_t *imu_link(void) {
     if (ctrl_is_joycon(s_type)) {
+        link_t *l = link_by_pid(S2_PID_JOYCON2_L);
+        if (s_type == CTRL_JOYCON_PAIR && settings_active(&g_settings, s_type)->joycon_gyro_side == JOYCON_GYRO_LEFT &&
+            l && l->state == S2_LINK_READY) return l;
         link_t *r = link_by_pid(S2_PID_JOYCON2_R);
         if (r && r->state == S2_LINK_READY && s_type != CTRL_JOYCON_L) return r;
-        link_t *l = link_by_pid(S2_PID_JOYCON2_L);
         if (l && l->state == S2_LINK_READY && s_type != CTRL_JOYCON_R) return l;
         return NULL;
     }
@@ -2104,7 +2105,7 @@ static void refresh_merged(void) {
             r.cal = kr->cal_r;
             r.gyro_lsb_per_dps = kr->gyro_lsb_per_dps;
         }
-        joycon_merge(s_type, &l, &r, &s_merged, &s_map);
+        joycon_merge(s_type, (joycon_gyro_side_t)settings_active(&g_settings, s_type)->joycon_gyro_side, &l, &r, &s_merged, &s_map);
     } else if (one) {
         s_merged = one->input;
         s_map.cal_l = one->cal_l;

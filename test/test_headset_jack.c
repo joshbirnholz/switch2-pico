@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include "../core/src/s2_link.c"
+settings_t g_settings;
 static uint32_t test_now;
 static unsigned switches;
 static bool switch_on;
@@ -62,5 +63,14 @@ int main(void) {
     // Keep the host request: insertion resumes capture without reopening USB.
     k->mic=MIC_OFF; k->headset=true;
     mic_task(k); assert(switches==6 && switch_on);
-    puts("Headset jack state/probe: passed");
+    s_type = CTRL_JOYCON_PAIR;
+    link_t *l = &s_links[0], *r = &s_links[1];
+    l->pid=S2_PID_JOYCON2_L; l->state=S2_LINK_READY;
+    r->pid=S2_PID_JOYCON2_R; r->state=S2_LINK_READY;
+    assert(imu_link()==r);
+    settings_active(&g_settings,s_type)->joycon_gyro_side=JOYCON_GYRO_LEFT;
+    assert(imu_link()==l); // calibration follows the selected output side
+    l->state=S2_LINK_SCANNING; assert(imu_link()==r);
+    l->state=S2_LINK_READY; assert(imu_link()==l);
+    puts("Headset jack state/probe and Joy-Con motion source: passed");
 }

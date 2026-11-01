@@ -2,6 +2,7 @@
 // covered by test/test_main.c.
 
 #include <stdio.h>
+#include <stddef.h>
 #include <string.h>
 
 #include "settings.h"
@@ -30,7 +31,7 @@ void settings_default_profile_for(ctrl_type_t type, usb_mode_t mode, profile_t *
     p->usb_mode = (uint8_t)mode;
     snprintf(p->name, sizeof p->name, "%s", settings_mode_profile_name(mode));
     default_map(type, mode, p->map);
-    p->stick_deadzone_pct = 6;
+    p->stick_deadzone_pct = p->stick_deadzone_right_pct = 6;
     p->stick_outer_pct = 95;
     p->swap_sticks = 0;
     p->trigger_threshold = 120;
@@ -98,7 +99,7 @@ void settings_profiles_from_v13(const uint8_t *raw, int n, ctrl_profiles_t *out)
             p->usb_mode = o->usb_mode;
             memcpy(p->name, o->name, sizeof p->name);
             memcpy(p->map, o->map, IN_COUNT_V1);   // the inputs added since: unassigned (0)
-            p->stick_deadzone_pct = o->stick_deadzone_pct;
+            p->stick_deadzone_pct = p->stick_deadzone_right_pct = o->stick_deadzone_pct;
             p->stick_outer_pct = o->stick_outer_pct;
             p->swap_sticks = o->swap_sticks;
             p->trigger_threshold = o->trigger_threshold;
@@ -110,6 +111,24 @@ void settings_profiles_from_v13(const uint8_t *raw, int n, ctrl_profiles_t *out)
         }
         memcpy(c->slot, old.slot, sizeof c->slot);
         c->active = old.active;
+    }
+}
+
+// Stored v14..16 profiles are a 59-byte prefix of today's profile. Keep
+// every byte (including rumble settings), then initialize the new fields.
+_Static_assert(offsetof(profile_t, stick_deadzone_right_pct) == 59, "v16 prefix");
+_Static_assert(CTRL_PROFILES_V16_SIZE == 59 * PROFILE_MAX + 12, "v16 profiles");
+void settings_profiles_from_v16(const uint8_t *raw, int n, ctrl_profiles_t *out) {
+    for (int t = 0; t < n; t++) {
+        const uint8_t *old = raw + (size_t)t * CTRL_PROFILES_V16_SIZE;
+        ctrl_profiles_t *c = &out[t];
+        memset(c, 0, sizeof *c);
+        for (int i = 0; i < PROFILE_MAX; i++) {
+            memcpy(&c->p[i], old + i * 59, 59);
+            c->p[i].stick_deadzone_right_pct = c->p[i].stick_deadzone_pct;
+        }
+        memcpy(c->slot, old + 59 * PROFILE_MAX, MODE_SLOT_COUNT);
+        c->active = old[59 * PROFILE_MAX + MODE_SLOT_COUNT];
     }
 }
 
@@ -190,6 +209,8 @@ void settings_sanitize_profiles(ctrl_type_t type, ctrl_profiles_t *c) {
         if (!p->name[0]) snprintf(p->name, sizeof p->name, "Profile %d", i + 1);
         if (!map_valid(p)) default_map(type, (usb_mode_t)p->usb_mode, p->map);
         p->stick_deadzone_pct = clamp(p->stick_deadzone_pct, 0, 40);
+        p->stick_deadzone_right_pct = clamp(p->stick_deadzone_right_pct, 0, 40);
+        if (type != CTRL_JOYCON_PAIR || p->joycon_gyro_side > JOYCON_GYRO_LEFT) p->joycon_gyro_side = JOYCON_GYRO_RIGHT;
         p->stick_outer_pct = clamp(p->stick_outer_pct, 50, 100);
         p->swap_sticks = p->swap_sticks ? 1 : 0;
         p->rumble_enabled = p->rumble_enabled ? 1 : 0;
