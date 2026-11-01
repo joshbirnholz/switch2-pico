@@ -40,12 +40,14 @@ const char *out_button_name(out_button_t b) { (void)b; return "?"; }
 // Stubs for ds5.c's runtime half (only its pure helpers are tested).
 #include "platform.h"
 #include "usb_hid.h"
-uint32_t platform_millis(void) { return 0; }
+static uint32_t test_now;
+uint32_t platform_millis(void) { return test_now; }
 void platform_unique_id(uint8_t out[PLATFORM_UNIQUE_ID_LEN]) { memset(out, 0x11, PLATFORM_UNIQUE_ID_LEN); }
 bool usb_hid_mounted(void) { return false; }
 bool usb_hid_ready(void) { return false; }
 bool usb_hid_send(uint8_t id, const uint8_t *d, uint16_t n) { (void)id; (void)d; (void)n; return false; }
-void procon_hook_rumble(const rumble_sample_t *l, int nl, const rumble_sample_t *r, int nr) { (void)l; (void)nl; (void)r; (void)nr; }
+static rumble_sample_t test_rumble_l, test_rumble_r;
+void procon_hook_rumble(const rumble_sample_t *l, int nl, const rumble_sample_t *r, int nr) { if(nl) test_rumble_l=*l; if(nr) test_rumble_r=*r; }
 void procon_hook_player_lights(uint8_t lights) { (void)lights; }
 void log_printf(const char *fmt, ...) { (void)fmt; }
 usb_mode_t usb_mode_active(void) { return USB_MODE_DUALSENSE_EDGE; }
@@ -1358,6 +1360,61 @@ static void test_sinput(void) {
     CHECK(!settings_profile_mouse(&pr, CTRL_JOYCON_PAIR) && !settings_mouse_interfaces(&pr, CTRL_JOYCON_PAIR));
 }
 
+static void test_rumble_options(void) {
+    profile_t p = {.rumble_style=1, .impulse_strength=100, .impulse_frequency=10};
+    rumble_sample_t l, r, weak;
+    rumble_motors_profile(255, 0, &p, &l, &r);
+    CHECK(l.lo_amp > 1 && l.hi_amp == 0 && l.lo_amp == r.lo_amp);
+    CHECK(l.lo_freq_hz >= 90 && l.lo_freq_hz <= 130);
+    rumble_motors_profile(0, 255, &p, &weak, &r);
+    CHECK(weak.lo_amp == 0 && weak.hi_amp > 0 && weak.hi_amp < l.lo_amp * .3f);
+    CHECK(weak.hi_freq_hz > l.lo_freq_hz);
+    float previous = 0;
+    for (int i=0; i<=255; i++) {
+        rumble_motors_profile(i, i, &p, &l, &r);
+        CHECK(l.lo_amp >= previous && l.lo_amp == r.lo_amp && l.hi_amp == r.hi_amp);
+        previous=l.lo_amp;
+    }
+    p.rumble_frequency=1; rumble_motors_profile(0,255,&p,&l,&r);
+    p.rumble_frequency=10; rumble_motors_profile(0,255,&p,&weak,&r);
+    CHECK(l.hi_freq_hz < weak.hi_freq_hz);
+    rumble_motors_profile(0,0,&p,&l,&r); CHECK(l.lo_amp==0 && l.hi_amp==0);
+    rumble_impulse_t impulse={0};
+    rumble_impulse_set(&impulse,255,100);
+    rumble_impulse_mix(&impulse,100,&p,&l); CHECK(l.hi_amp==1);
+    rumble_impulse_set(&impulse,0,110);
+    l=(rumble_sample_t){0}; rumble_impulse_mix(&impulse,155,&p,&l);
+    CHECK(fabsf(l.hi_amp-.5f)<.001f && fabsf(l.hi_freq_hz-400)<.001f);
+    rumble_impulse_set(&impulse,0,160); // repeated stops do not restart release
+    l=(rumble_sample_t){0}; rumble_impulse_mix(&impulse,200,&p,&l); CHECK(l.hi_amp==0);
+    rumble_impulse_set(&impulse,128,210); p.impulse_flags=2;
+    l=(rumble_sample_t){0}; rumble_impulse_mix(&impulse,210,&p,&l); CHECK(l.hi_freq_hz==640);
+    p.impulse_flags=1; l=(rumble_sample_t){0}; rumble_impulse_mix(&impulse,220,&p,&l); CHECK(l.hi_amp==0);
+    // Only flagged, complete adaptive effect blocks change a trigger.
+    uint8_t report[48]={2}; ds5_output_t out;
+    report[1]=4; report[11]=0x21; report[12]=1; report[14]=7;
+    CHECK(ds5_parse_output(report,sizeof report,&out) && out.trigger_right && out.impulse_right==255 && !out.trigger_left);
+    CHECK(ds5_parse_output(report,20,&out) && !out.trigger_right);
+    report[1]=8; report[22]=0x05;
+    CHECK(ds5_parse_output(report,sizeof report,&out) && out.trigger_left && out.impulse_left==0);
+    // Real PCM through the IRQ queue / main-loop DSP: left audio cannot leak
+    // to the right actuator, and silence / stream close explicitly stop it.
+    memset(&g_settings,0,sizeof g_settings);
+    profile_t *active=&g_settings.prof[0].p[0]; active->rumble_style=3; active->impulse_flags=1;
+    ds5_audio_reset(); test_now=1000; ds5_task();
+    uint32_t pcm[240];
+    for(int i=0;i<240;i++) pcm[i]=(uint16_t)(int16_t)(16000*sinf(2*3.14159265f*200*i/48000));
+    ds5_audio_push(pcm,240,1); test_now+=8; ds5_task();
+    CHECK(test_rumble_l.lo_amp>0 || test_rumble_l.hi_amp>0);
+    CHECK(test_rumble_r.lo_amp==0 && test_rumble_r.hi_amp==0);
+    memset(pcm,0,sizeof pcm);
+    for(int i=0;i<8;i++) { ds5_audio_push(pcm,240,1); test_now+=8; ds5_task(); }
+    CHECK(test_rumble_l.lo_amp<.001f && test_rumble_l.hi_amp<.001f);
+    ds5_audio_reset(); test_now+=8; ds5_task();
+    CHECK(test_rumble_l.lo_amp==0 && test_rumble_l.hi_amp==0);
+    test_now=0;
+}
+
 int main(void) {
     test_s1_rumble_classic();
     test_s1_rumble_packed();
@@ -1384,6 +1441,7 @@ int main(void) {
     test_joycon();
     test_joycon_profiles();
     test_sinput();
+    test_rumble_options();
     printf("%d passed, %d failed\n", g_pass, g_fail);
     return g_fail ? 1 : 0;
 }

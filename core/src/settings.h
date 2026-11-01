@@ -93,11 +93,12 @@ typedef enum {
     MODE_SLOT_COUNT
 } mode_slot_t;
 #define MODE_SLOT_EMPTY 0
-#define SETTINGS_EXT_REV 15  // 1: mode_map; 2: mode_slot; 3: ble_tx_power; 4: idle_*; 5: pair_button;
+#define SETTINGS_EXT_REV 16  // 1: mode_map; 2: mode_slot; 3: ble_tx_power; 4: idle_*; 5: pair_button;
                              // 6: gc_profile; 7: gc_profile sticks / rumble; 8: bonds;
                              // 9: gc_usb_mode, last_ctrl; 10: profiles; 11: one profile per button;
                              // 12: Joy-Con 2 types; 13: single Joy-Con 2 profiles numbered;
                              // 14: maps include IN_SL_R / IN_SR_R; 15: mouse_flags (MOUSE_FLAG_*)
+                             // 16: per-profile rumble style and impulse settings (formerly reserved)
 
 // Remembered (paired) controllers. Any of them can connect, one at a time
 // (or a Joy-Con 2 (L) together with a Joy-Con 2 (R)); pairing one more when
@@ -164,7 +165,11 @@ typedef struct {
     uint8_t mouse_src;                  // mouse_src_t
     uint8_t mouse_speed_pct;            // 10..250
     uint8_t mouse_flags;                // MOUSE_FLAG_* (before ext_rev 15: older options, cleared)
-    uint8_t reserved[5];
+    uint8_t rumble_style;              // 0: legacy stereo, 1: Xbox mono, 2: Switch, 3: DualSense audio
+    uint8_t rumble_frequency;          // 0: default (5), otherwise 1..10; Xbox style
+    uint8_t impulse_flags;             // bit 0: disabled, bit 1: fixed frequency
+    uint8_t impulse_strength;          // 0..200 percent
+    uint8_t impulse_frequency;         // 1..10
 } profile_t;
 
 typedef struct {

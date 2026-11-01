@@ -931,7 +931,7 @@ static uint32_t s_test_until;
 static bool s_test_on;
 
 void s2_link_test_motors(uint8_t left_strong, uint8_t right_weak, uint16_t ms) {
-    rumble_from_motors(left_strong, right_weak, &s_test_l, &s_test_r);
+    rumble_motors_active(left_strong, right_weak, &s_test_l, &s_test_r);
     s_test_until = now_ms() + ms;
     s_test_on = true;
 }

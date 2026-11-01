@@ -31,8 +31,12 @@
 #include "settings.h"
 #include "usb_mode.h"
 #include "s2_link.h"
+#include "ds5.h"
 
-#define CHANNELS      2
+#define CHANNELS      (dual_audio() ? 4u : 2u)
+static bool dual_audio(void) {
+    return usb_mode_active() == USB_MODE_DUALSENSE || usb_mode_active() == USB_MODE_DUALSENSE_EDGE;
+}
 #define SAMPLE_BYTES  2
 #define RATE          48000
 // One more sample per channel than 1 ms holds: an adaptive endpoint's host
@@ -44,9 +48,9 @@
 
 // Buffer 1 starts 256 bytes after buffer 0 (the ISO offset field of the
 // buffer control register); allocate room for both.
-#define BUF1_OFFSET   256u
-#define ISO_OFFSET_256 (1u << 27)
-#define EP_ALLOC      512u
+#define BUF1_OFFSET   (dual_audio() ? 512u : 256u)
+#define ISO_OFFSET_256 ((dual_audio() ? 2u : 1u) << 27)
+#define EP_ALLOC      (dual_audio() ? 1024u : 512u)
 
 static struct {
     uint8_t itf_ac;   // AudioStreaming is itf_ac + 1
@@ -98,7 +102,15 @@ static void __not_in_flash_func(take)(uint32_t bc, int b) {
     uint32_t len = (bc >> shift) & USB_BUF_CTRL_LEN_MASK;
     // A stereo sample is one word of the buffer (L, then R, little-endian).
     if (s_audio.alt == 1) {
-        headset_audio_pcm(s_audio.buf + (b ? BUF1_OFFSET / 4 : 0), len / (CHANNELS * SAMPLE_BYTES));
+        const volatile uint32_t *pcm = s_audio.buf + (b ? BUF1_OFFSET / 4 : 0);
+        uint32_t frames = len / (CHANNELS * SAMPLE_BYTES);
+        if (dual_audio()) {
+            uint32_t stereo[49];
+            if (frames > 49) frames = 49;
+            for (uint32_t i = 0; i < frames; i++) stereo[i] = pcm[i * 2];
+            ds5_audio_push(pcm + 1, frames, 2);
+            headset_audio_pcm(stereo, frames);
+        } else headset_audio_pcm(pcm, frames);
     }
     uint32_t other = bc & (0xffffu << (16u - shift)) & ~ISO_OFFSET_256 & ~USB_BUF_CTRL_SEL;
     buf_ctrl_set(s_audio.buf_ctrl, other | ISO_OFFSET_256 | (uint32_t)EP_SIZE << shift, USB_BUF_CTRL_AVAIL << shift);
@@ -115,7 +127,7 @@ static void __not_in_flash_func(mic_fill)(int b) {
     uint32_t n = headset_mic_read(pcm, MIC_EP_SIZE / 2);
     if (s_audio.mic_alt != 1) memset(pcm, 0, n * sizeof pcm[0]);
     pcm[n] = 0;
-    volatile uint32_t *dst = s_audio.mic_buf + (b ? BUF1_OFFSET / 4 : 0);
+    volatile uint32_t *dst = s_audio.mic_buf + (b ? 256u / 4 : 0);
     for (uint32_t i = 0; i < (n + 1) / 2; i++) dst[i] = (uint16_t)pcm[2 * i] | (uint32_t)(uint16_t)pcm[2 * i + 1] << 16;
     // DPRAM supports independent 16-bit accesses. A whole-word read/modify/
     // write can resurrect the other bank's AVAIL/FULL bits after hardware
@@ -123,7 +135,7 @@ static void __not_in_flash_func(mic_fill)(int b) {
     // offset in bank 1 without touching bank 0 (or vice versa).
     volatile uint16_t *ctrl = (volatile uint16_t *)s_audio.mic_buf_ctrl + b;
     uint16_t half = (uint16_t)((n * SAMPLE_BYTES) | USB_BUF_CTRL_FULL |
-                               (b ? ISO_OFFSET_256 >> 16 : 0));
+                               (b ? (1u << 27) >> 16 : 0));
     *ctrl = half;
     busy_wait_at_least_cycles(12);
     *ctrl = (uint16_t)(half | USB_BUF_CTRL_AVAIL);
@@ -187,14 +199,15 @@ bool usb_audio_present(void) {
     static int present = -1;
     if (usb_mode_config_only()) return false;
     if (present < 0) {
-        present = usb_mode_active() == USB_MODE_SINPUT && settings_boot_ctrl(&g_settings) == CTRL_PRO;
+        present = dual_audio() || (usb_mode_active() == USB_MODE_SINPUT && settings_boot_ctrl(&g_settings) == CTRL_PRO);
     }
     return present == 1;
 }
 
 uint16_t usb_audio_desc(uint8_t *buf, uint16_t cap, uint8_t itf, uint8_t ep_out,
                         uint8_t ep_in, uint8_t ep_notify, uint8_t str_idx) {
-    return audio2_descriptor(buf, cap, itf, ep_out, ep_in, ep_notify, str_idx);
+    return dual_audio() ? audio2_haptic_descriptor(buf, cap, itf, ep_out, ep_in, ep_notify, str_idx) :
+                          audio2_descriptor(buf, cap, itf, ep_out, ep_in, ep_notify, str_idx);
 }
 
 // Main loop only: retain changes while an interrupt transfer is outstanding.
@@ -202,6 +215,7 @@ void usb_audio_task(void) {
     if (!s_audio.ep_notify || !tud_mounted() || tud_suspended()) return;
     uint8_t jack = s2_link_headset_jack();
     uint8_t changed = jack ^ s_audio.jack_last;
+    if (dual_audio()) changed &= ~1u; // the actuator channels are always connected
     if (changed & 1) s_audio.notify_pending |= 1;
 #if S2_HEADSET_MIC
     if (changed & 2) s_audio.notify_pending |= 2;
@@ -247,6 +261,7 @@ static void audio_reset(uint8_t rhport) {
     memset(&s_audio, 0, sizeof s_audio);
     // A bus reset need not be preceded by SET_INTERFACE(0). Clear the codec
     // side's open flags too, or the old mic session can survive a USB reset.
+    ds5_audio_reset();
     headset_audio_usb_stream(false);
 #if S2_HEADSET_MIC
     headset_audio_usb_mic(false);
@@ -292,7 +307,7 @@ static uint16_t audio_open(uint8_t rhport, tusb_desc_interface_t const *desc_itf
     TU_ASSERT(s_audio.mic_ep_desc, 0);
     s_audio.mic_alt = 0;
     s_audio.mic_running = false;
-    TU_ASSERT(usbd_edpt_iso_alloc(rhport, s_audio.mic_ep_desc->bEndpointAddress, EP_ALLOC), 0);
+    TU_ASSERT(usbd_edpt_iso_alloc(rhport, s_audio.mic_ep_desc->bEndpointAddress, 512u), 0);
 #endif
     return len;
 }
@@ -314,6 +329,7 @@ static bool set_alt(uint8_t rhport, uint8_t alt) {
         s_audio.running = true;
         usbd_sof_enable(rhport, SOF_CONSUMER_AUDIO, true);
     }
+    if (!alt) ds5_audio_reset();
     headset_audio_usb_stream(alt == 1);
     return true;
 }
@@ -330,7 +346,7 @@ static bool set_mic_alt(uint8_t rhport, uint8_t alt) {
                    EP_CTRL_DOUBLE_BUFFERED_BITS;
         s_audio.mic_buf = (volatile uint32_t *)((uintptr_t)usb_dpram + (*ep_ctrl & 0xffc0u));
         s_audio.mic_buf_ctrl = &usb_dpram->ep_buf_ctrl[num].in;
-        *s_audio.mic_buf_ctrl = ISO_OFFSET_256 | USB_BUF_CTRL_SEL;
+        *s_audio.mic_buf_ctrl = (1u << 27) | USB_BUF_CTRL_SEL;
         s_audio.mic_next = 0;
         s_audio.mic_running = true;
         usbd_sof_enable(rhport, SOF_CONSUMER_AUDIO, true);
@@ -342,7 +358,7 @@ static bool set_mic_alt(uint8_t rhport, uint8_t alt) {
         // also use silence until the host opens this interface again.
         for (uint32_t i = 0; i < (MIC_EP_SIZE + 3) / 4; i++) {
             s_audio.mic_buf[i] = 0;
-            s_audio.mic_buf[BUF1_OFFSET / 4 + i] = 0;
+            s_audio.mic_buf[256u / 4 + i] = 0;
         }
     }
     return true;
@@ -389,6 +405,10 @@ static bool audio_control_xfer_cb(uint8_t rhport, uint8_t stage, tusb_control_re
     uint16_t n = audio2_get(tu_u16_high(request->wIndex), tu_u16_high(request->wValue),
                            tu_u16_low(request->wValue), request->bRequest,
                            (jack & 1) != 0, (jack & 2) != 0, s_ctrl, sizeof s_ctrl);
+    if (dual_audio() && tu_u16_high(request->wIndex) == AUDIO2_TERMINAL_HEADPHONES &&
+        tu_u16_high(request->wValue) == AUDIO2_CONNECTOR_CONTROL && n == 6) {
+        s_ctrl[0] = 4; s_ctrl[1] = 0x33; // always expose the haptic channels without a headset
+    }
     if (!n) return false;
     return tud_control_xfer(rhport, request, s_ctrl, tu_min16(n, request->wLength));
 }

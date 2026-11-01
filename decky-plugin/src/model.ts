@@ -29,6 +29,11 @@ export interface Profile {
   threshold: number;
   rumble: number;
   strength: number;
+  rumble_style?: number;
+  rumble_frequency?: number;
+  impulse_flags?: number;
+  impulse_strength?: number;
+  impulse_frequency?: number;
   mouse: number;
   mouse_speed: number;
   mouse_flags: number;
@@ -166,7 +171,7 @@ export const MF_UP_DOWN_ONLY = 1, MF_INVERT_V = 2, MF_INVERT_H = 4;
 export function profileForm(t: number, i: number, P: Profile): string {
   const nums = [P.mode, P.deadzone, P.outer, P.swap, P.threshold, P.rumble, P.strength, ...P.map].join(",");
   const mouse = `m${P.mouse ? 1 : 0},${P.mouse_speed || 100},${P.mouse_flags & 7}`;
-  return `prof_${t}_${i}=${nums},${mouse},${encodeURIComponent(P.name)}`;
+  return `prof_${t}_${i}=${nums},${mouse},r${P.rumble_style || 0},${P.rumble_frequency || 5},${P.impulse_flags || 0},${P.impulse_strength ?? 100},${P.impulse_frequency || 10},${encodeURIComponent(P.name)}`;
 }
 
 // An output's name split into a title and, for shortcuts and the like

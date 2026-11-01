@@ -3,6 +3,7 @@
 // change is saved right away, as in the panel.
 import { DialogButton, Focusable, ModalRoot, showModal, SliderField, TextField, ToggleField } from "@decky/ui";
 import { useEffect, useRef, useState } from "react";
+import { RumbleOptions } from "./rumble";
 import { OutputIcon, SlotIcon } from "./icons";
 import { AllButtonsModal, confirm, PickerModal, SOFT_CSS, SoftButton } from "./modals";
 import {
@@ -68,7 +69,7 @@ export function pickOutput(S: Settings, P: Profile, e: Extra, current: number[],
 // A new profile in mode `mode`, with that mode's defaults (as the page makes one).
 function newProfile(S: Settings, t: number, mode: number): Profile {
   return {
-    name: MODE_SHORT[mode], mode, deadzone: 6, outer: 95, swap: 0, threshold: 120, rumble: 1, strength: 100,
+    name: MODE_SHORT[mode], mode, deadzone: 6, outer: 95, swap: 0, threshold: 120, rumble: 1, strength: 100, rumble_style: mode === 3 ? 1 : 0,
     mouse: 0, mouse_speed: 100, mouse_flags: 0, map: S.types[t].defaults[mode].slice(),
   };
 }
@@ -312,6 +313,7 @@ export function ProfileEditModal(props: { S: Settings; t: number; i: number; sav
           <SliderField label="Rumble strength" value={P.strength} min={0} max={200} step={10} showValue valueSuffix="%"
             onChange={(v) => slide({ ...P, strength: v })} />
         )}
+        {!!P.rumble && <RumbleOptions p={P} save={commit} />}
         {isJoyCon(t) && mouseMode(P.mode) && (
           <>
             <ToggleField label="Mouse Mode" description="Lay a Joy-Con on its side to use it as a mouse."

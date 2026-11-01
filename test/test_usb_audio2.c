@@ -73,5 +73,15 @@ int main(void) {
     audio2_notification(r,2,3);
     const uint8_t notification[]={0,1,0,2,2,3};
     assert(!memcmp(r,notification,6));
+    n = audio2_haptic_descriptor(b, sizeof b, 2, 5, 0x86, 0x87, 5);
+    unsigned haptic_streams = 0;
+    for (pos=0;pos<n;pos+=b[pos]) {
+        const uint8_t *d=b+pos;
+        if(d[1]==0x24 && d[2]==1 && d[0]==16 && d[3]==AUDIO2_TERMINAL_USB_OUT) {
+            assert(d[10]==4 && rd32(d+11)==0x33); haptic_streams++;
+        }
+        if(d[1]==5 && d[2]==5) assert(rd16(d+4)==392);
+    }
+    assert(haptic_streams==1);
     puts("USB Audio 2 descriptors/controls: passed");
 }

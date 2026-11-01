@@ -13,6 +13,7 @@ extern "C" {
 
 #include <stdbool.h>
 #include <stdint.h>
+#include "settings.h"
 
 // One time-sample for one actuator.
 typedef struct {
@@ -46,6 +47,17 @@ float s1_amp_code_to_linear(int code);
 // side only, so games that signal left vs right (e.g. Fez's L2/R2 hints)
 // stay readable.
 void rumble_from_motors(uint8_t left_strong, uint8_t right_weak, rumble_sample_t *left, rumble_sample_t *right);
+
+// Profile-aware motor synthesis. Xbox combines both bands on both sides;
+// Switch keeps the independent bands at their reference frequencies.
+void rumble_motors_profile(uint8_t strong, uint8_t weak, const profile_t *p,
+                           rumble_sample_t *left, rumble_sample_t *right);
+void rumble_motors_active(uint8_t strong, uint8_t weak, rumble_sample_t *left, rumble_sample_t *right);
+typedef struct { float level; uint32_t released_ms; bool releasing; } rumble_impulse_t;
+void rumble_impulse_set(rumble_impulse_t *s, uint8_t strength, uint32_t now);
+void rumble_impulse_mix(rumble_impulse_t *s, uint32_t now, const profile_t *p, rumble_sample_t *out);
+// Adaptive trigger effects are approximated as HD rumble, not physical resistance.
+uint8_t rumble_trigger_strength(const uint8_t effect[11]);
 
 // ---- Switch 2 ----
 #define S2_RUMBLE_NEUTRAL_HI_FREQ 0x187   // what the console sends while idle

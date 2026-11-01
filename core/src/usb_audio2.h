@@ -20,6 +20,8 @@
 
 uint16_t audio2_descriptor(uint8_t *buf, uint16_t cap, uint8_t itf,
                           uint8_t ep_out, uint8_t ep_in, uint8_t ep_notify, uint8_t str);
+uint16_t audio2_haptic_descriptor(uint8_t *buf, uint16_t cap, uint8_t itf,
+                          uint8_t ep_out, uint8_t ep_in, uint8_t ep_notify, uint8_t str);
 // Read-only UAC2 entity controls. Zero means unsupported; caller stalls EP0.
 uint16_t audio2_get(uint8_t entity, uint8_t selector, uint8_t channel, uint8_t request,
                     bool headphones, bool microphone, uint8_t *out, uint16_t cap);

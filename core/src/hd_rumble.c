@@ -38,6 +38,73 @@ void rumble_from_motors(uint8_t left_strong, uint8_t right_weak, rumble_sample_t
     *right = (rumble_sample_t){.hi_freq_hz = 320.0f, .hi_amp = 0.70f * r, .lo_freq_hz = 200.0f, .lo_amp = 0.15f * r};
 }
 
+void rumble_motors_profile(uint8_t strong, uint8_t weak, const profile_t *p,
+                           rumble_sample_t *left, rumble_sample_t *right) {
+    if (!p->rumble_style) { rumble_from_motors(strong, weak, left, right); return; }
+    float l = strong / 255.0f, h = weak / 255.0f;
+    float f = p->rumble_frequency ? p->rumble_frequency : 5;
+    *left = (rumble_sample_t){.lo_freq_hz = 160, .lo_amp = l, .hi_freq_hz = 320, .hi_amp = h};
+    if (p->rumble_style == 1) {
+        // Switch2Connect's useful cues: duplicate the motor mix to both
+        // actuators, anchor the heavy band low, and attenuate the small motor
+        // around the actuator's strongest response. These are our own Hz /
+        // linear-amplitude curves (its raw BLE gains cannot be used directly
+        // with our 450-at-unity encoder).
+        float position = (f - 1) / 9;
+        float small_hz = 130 + 120 * position;
+        float small_gain = f <= 5 ? 0.40f - 0.055f * (f - 1) : 0.18f + 0.034f * (f - 5);
+        // ERM motors turn more slowly at low drive. Keep amplitude proportional
+        // to the game, with a modest speed change rather than a fixed sine buzz.
+        left->lo_freq_hz = 120 * (0.80f + 0.20f * sqrtf(l));
+        left->hi_freq_hz = small_hz * (0.85f + 0.15f * sqrtf(h));
+        left->lo_amp = 1.45f * l;
+        left->hi_amp = small_gain * h;
+    }
+    *right = *left;
+}
+void rumble_motors_active(uint8_t strong, uint8_t weak, rumble_sample_t *left, rumble_sample_t *right) {
+    rumble_motors_profile(strong, weak, settings_active(&g_settings, settings_boot_ctrl(&g_settings)), left, right);
+}
+void rumble_impulse_set(rumble_impulse_t *s, uint8_t strength, uint32_t now) {
+    if (strength) {
+        s->level = strength / 255.0f;
+        s->releasing = false;
+    } else if (s->level > 0 && !s->releasing) {
+        s->released_ms = now;
+        s->releasing = true;
+    }
+}
+void rumble_impulse_mix(rumble_impulse_t *s, uint32_t now, const profile_t *p, rumble_sample_t *out) {
+    float v = s->level;
+    if (s->releasing) {
+        uint32_t elapsed = now - s->released_ms;
+        if (elapsed >= 90) { s->level = v = 0; s->releasing = false; }
+        else v *= 1 - elapsed / 90.0f;
+    }
+    if ((p->impulse_flags & 1) || !v || !p->impulse_strength) return;
+    float f = (p->impulse_flags & 2) ? (p->impulse_frequency - 1) / 9.0f : v;
+    float amp = fminf(1, v * p->impulse_strength / 100.0f);
+    // Trigger overlays own the high band; retain the body's low band.
+    out->hi_amp = fminf(1.5f, out->hi_amp + amp);
+    out->hi_freq_hz = 160 + 480 * f;
+}
+uint8_t rumble_trigger_strength(const uint8_t e[11]) {
+    unsigned strength = 0;
+    switch (e[0]) {
+    case 1: case 2: return e[2]; // simple resistance / bow effects
+    case 0x21: case 0x25: case 0x26: {
+        unsigned zones = e[1] | (unsigned)e[2] << 8;
+        unsigned packed = e[3] | (unsigned)e[4] << 8 | (unsigned)e[5] << 16 | (unsigned)e[6] << 24;
+        for (unsigned i = 0; i < 10; i++) if (zones & (1u << i)) {
+            unsigned v = ((packed >> (3 * i)) & 7) + 1;
+            if (v > strength) strength = v;
+        }
+        return (uint8_t)(strength * 255 / 8);
+    }
+    default: return 0; // off and unsupported effects clear the overlay
+    }
+}
+
 float s1_amp_code_to_linear(int code) {
     if (code <= 0) return 0.0f;
     if (code > 127) code = 127;

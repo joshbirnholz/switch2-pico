@@ -4,6 +4,7 @@
 
 #include <math.h>
 #include <string.h>
+#include <math.h>
 
 #include "log.h"
 #include "platform.h"
@@ -202,6 +203,14 @@ bool ds5_parse_output(const uint8_t *buf, uint16_t len, ds5_output_t *o) {
         o->motor_right = c[2];
         o->motor_left = c[3];
     }
+    if ((c[0] & 0x04) && len >= 22) {
+        o->trigger_right = true;
+        o->impulse_right = rumble_trigger_strength(c + 10);
+    }
+    if ((c[0] & 0x08) && len >= 33) {
+        o->trigger_left = true;
+        o->impulse_left = rumble_trigger_strength(c + 21);
+    }
     if ((c[1] & 0x10) && len > 44) {
         o->player_leds = true;
         o->player_pattern = c[43] & 0x1F;
@@ -219,6 +228,67 @@ static uint32_t s_next_report;
 static uint8_t s_seq;
 static uint8_t s_motor_l, s_motor_r;
 static uint32_t s_rumble_refresh;
+static rumble_impulse_t s_impulse[2];
+#define PCM_RING 2048u
+static uint32_t s_pcm[PCM_RING];
+static uint32_t s_pcm_head, s_pcm_tail;
+static bool s_pcm_reset;
+static rumble_sample_t s_audio_haptic[2];
+static uint32_t s_audio_time;
+static bool s_audio_valid, s_audio_stop;
+static int32_t s_low[2]; // Q8 filter state: avoid a nonzero integer tail on silence
+static uint64_t s_energy[2][2];
+static uint32_t s_crossings[2], s_pcm_count;
+static int16_t s_previous[2];
+
+void ds5_audio_push(const volatile uint32_t *pcm, uint32_t frames, uint32_t stride) {
+    uint32_t head = __atomic_load_n(&s_pcm_head, __ATOMIC_RELAXED);
+    uint32_t tail = __atomic_load_n(&s_pcm_tail, __ATOMIC_ACQUIRE);
+    if (frames > PCM_RING - (head - tail)) return; // drop whole packet on overrun
+    for (uint32_t i = 0; i < frames; i++) s_pcm[(head + i) & (PCM_RING - 1)] = pcm[i * stride];
+    __atomic_store_n(&s_pcm_head, head + frames, __ATOMIC_RELEASE);
+}
+void ds5_audio_reset(void) {
+    // IRQ producer stops publishing; the main loop owns all DSP state.
+    __atomic_store_n(&s_pcm_reset, true, __ATOMIC_RELEASE);
+}
+static void audio_haptics_task(void) {
+    if (__atomic_exchange_n(&s_pcm_reset, false, __ATOMIC_ACQ_REL)) {
+        __atomic_store_n(&s_pcm_tail, __atomic_load_n(&s_pcm_head, __ATOMIC_ACQUIRE), __ATOMIC_RELEASE);
+        memset(s_energy, 0, sizeof s_energy); memset(s_low, 0, sizeof s_low);
+        memset(s_crossings, 0, sizeof s_crossings); memset(s_previous, 0, sizeof s_previous);
+        s_pcm_count = 0;
+        if (s_audio_valid) { s_audio_valid = false; s_audio_stop = true; s_rumble_refresh = platform_millis(); }
+    }
+    uint32_t tail = __atomic_load_n(&s_pcm_tail, __ATOMIC_RELAXED);
+    uint32_t head = __atomic_load_n(&s_pcm_head, __ATOMIC_ACQUIRE);
+    while (tail != head) {
+        uint32_t pair = s_pcm[tail++ & (PCM_RING - 1)];
+        for (int side = 0; side < 2; side++) {
+            int32_t x = (int16_t)(pair >> (16 * side));
+            s_low[side] += (x * 256 - s_low[side]) / 32;
+            int32_t lo = s_low[side] / 256, hi = x - lo;
+            s_energy[side][0] += (int64_t)lo * lo;
+            s_energy[side][1] += (int64_t)hi * hi;
+            if (x >= 0 && s_previous[side] < 0) s_crossings[side]++;
+            s_previous[side] = (int16_t)x;
+        }
+        if (++s_pcm_count == 240) { // 5 ms windows at 48 kHz
+            for (int side = 0; side < 2; side++) {
+                float hz = s_crossings[side] * 200.0f;
+                s_audio_haptic[side] = (rumble_sample_t){
+                    .lo_freq_hz = fmaxf(40, fminf(320, hz)),
+                    .hi_freq_hz = fmaxf(80, fminf(1250, hz)),
+                    .lo_amp = fminf(1, sqrtf(s_energy[side][0] / 240.0f) / 16384),
+                    .hi_amp = fminf(1, sqrtf(s_energy[side][1] / 240.0f) / 16384)};
+                s_energy[side][0] = s_energy[side][1] = 0;
+                s_crossings[side] = 0;
+            }
+            s_pcm_count = 0; s_audio_time = platform_millis(); s_audio_valid = true;
+        }
+    }
+    __atomic_store_n(&s_pcm_tail, tail, __ATOMIC_RELEASE);
+}
 
 #define RUMBLE_REFRESH_MS 40
 
@@ -268,7 +338,16 @@ void ds5_set_input(const s2_input_t *in, const mapping_ctx_t *ctx, uint32_t gp, 
 
 static void send_rumble(void) {
     rumble_sample_t l, r;
-    rumble_from_motors(s_motor_l, s_motor_r, &l, &r);
+    const profile_t *p = settings_active(&g_settings, settings_boot_ctrl(&g_settings));
+    rumble_motors_active(s_motor_l, s_motor_r, &l, &r);
+    uint32_t now = platform_millis();
+    // Audio owns the body while recent, including silent packets. Traditional
+    // motor reports must not erase audio; triggers remain independent overlays.
+    if (p->rumble_style == 3 && s_audio_valid && now - s_audio_time < 40) {
+        l = s_audio_haptic[0]; r = s_audio_haptic[1];
+    }
+    rumble_impulse_mix(&s_impulse[0], now, p, &l);
+    rumble_impulse_mix(&s_impulse[1], now, p, &r);
     procon_hook_rumble(&l, 1, &r, 1);
     s_status.rumble_frames++;
 }
@@ -286,6 +365,11 @@ void ds5_on_output(const uint8_t *buf, uint16_t len, bool via_control, uint8_t c
     ds5_output_t o;
     if (!ds5_parse_output(buf, len, &o)) return;
     s_status.handshake_done = true;
+    if (o.trigger_left) rumble_impulse_set(&s_impulse[0], o.impulse_left, platform_millis());
+    if (o.trigger_right) rumble_impulse_set(&s_impulse[1], o.impulse_right, platform_millis());
+    if (o.trigger_left || o.trigger_right) {
+        send_rumble(); s_rumble_refresh = platform_deadline_ms(8);
+    }
     if (o.rumble && (o.motor_left != s_motor_l || o.motor_right != s_motor_r)) {
         s_motor_l = o.motor_left;
         s_motor_r = o.motor_right;
@@ -305,13 +389,22 @@ void ds5_task(void) {
     if (mounted != s_was_mounted) {
         s_was_mounted = mounted;
         s_motor_l = s_motor_r = 0;
+        memset(s_impulse, 0, sizeof s_impulse);
+        ds5_audio_reset();
+        memset(s_energy, 0, sizeof s_energy); memset(s_low, 0, sizeof s_low);
+        memset(s_crossings, 0, sizeof s_crossings); memset(s_previous, 0, sizeof s_previous);
+        s_pcm_count = 0; s_audio_valid = false;
+        send_rumble();
         s_status.handshake_done = false;
         LOG("ds5: USB %s", mounted ? "mounted" : "unmounted");
     }
+    audio_haptics_task();
     // The host sets rumble once and expects it to hold; keep it alive.
-    if ((s_motor_l || s_motor_r) && platform_time_reached(s_rumble_refresh)) {
+    if ((s_motor_l || s_motor_r || s_impulse[0].level || s_impulse[1].level || s_audio_valid || s_audio_stop) && platform_time_reached(s_rumble_refresh)) {
         send_rumble();
-        s_rumble_refresh = platform_deadline_ms(RUMBLE_REFRESH_MS);
+        s_rumble_refresh = platform_deadline_ms(8);
+        s_audio_stop = false;
+        if (s_audio_valid && platform_millis() - s_audio_time >= 40) s_audio_valid = false;
     }
     if (!mounted || !usb_hid_ready() || !platform_time_reached(s_next_report)) return;
     uint8_t interval = g_settings.usb_report_interval_ms ? g_settings.usb_report_interval_ms : 4;

@@ -26,6 +26,10 @@ extern "C" {
 
 void ds5_init(void);
 void ds5_task(void);
+// Called by USB SOF with interleaved haptic channels 3/4 (one word per frame).
+// SPSC ring: IRQ producer, main-loop consumer; never sends BLE from IRQ.
+void ds5_audio_push(const volatile uint32_t *pcm, uint32_t frames, uint32_t stride);
+void ds5_audio_reset(void);
 
 // Latest controller state; `gp` holds the mapped GP_BIT() buttons. `in` NULL
 // (or connected false) sends neutral input.
@@ -58,6 +62,8 @@ typedef struct {
     bool rumble;                // the report carries motor values
     uint8_t motor_left;         // strong / low frequency
     uint8_t motor_right;        // weak / high frequency
+    bool trigger_left, trigger_right;
+    uint8_t impulse_left, impulse_right;
     bool player_leds;           // the report carries a player LED pattern
     uint8_t player_pattern;     // 5 bits, DualSense layout
 } ds5_output_t;

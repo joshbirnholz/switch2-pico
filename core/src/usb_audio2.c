@@ -93,3 +93,21 @@ void audio2_notification(uint8_t out[6], uint8_t itf, uint8_t terminal) {
     const uint8_t msg[] = {0, 1, 0, AUDIO2_CONNECTOR_CONTROL, itf, terminal};
     memcpy(out, msg, sizeof msg);
 }
+
+// Four channels: front L/R headphones, rear L/R actuators. Same controls and
+// sample format as the stereo function, with a 392-byte maximum packet.
+uint16_t audio2_haptic_descriptor(uint8_t *buf, uint16_t cap, uint8_t itf,
+                          uint8_t ep_out, uint8_t ep_in, uint8_t ep_notify, uint8_t str) {
+    uint16_t n = audio2_descriptor(buf, cap, itf, ep_out, ep_in, ep_notify, str);
+    for (uint16_t off = 0; off < n; off += buf[off]) {
+        uint8_t *d = buf + off;
+        if (d[1] == 0x24 && d[2] == 2 && d[0] == 17 && d[3] == AUDIO2_TERMINAL_USB_OUT) {
+            d[8] = 4; d[9] = 0x33;
+        }
+        if (d[1] == 0x24 && d[2] == 1 && d[0] == 16 && d[3] == AUDIO2_TERMINAL_USB_OUT) {
+            d[10] = 4; d[11] = 0x33;
+        }
+        if (d[1] == 5 && d[2] == ep_out) { d[4] = 0x88; d[5] = 1; }
+    }
+    return n;
+}

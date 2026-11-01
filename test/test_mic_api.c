@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "../core/src/web_api.c"
+settings_t g_settings;
 static uint32_t now;
 static bool host_busy;
 static uint8_t jack=3;
@@ -15,7 +16,26 @@ static http_response_t request(const char *query,bool post) {
     http_request_t req={.query=query};http_response_t r={0};api_mic_test(&req,&r,post);return r;
 }
 static void release(http_response_t *r) {if(r->body_owned)free((void *)r->body);}
+static void profile_compatibility(void) {
+    char form[256]; size_t pos=0;
+    pos += snprintf(form+pos,sizeof form-pos,"3,6,95,0,120,1,100,");
+    for(int i=0;i<IN_COUNT;i++) pos+=snprintf(form+pos,sizeof form-pos,"0,");
+    char *suffix=form+pos;
+    profile_t *old=&g_settings.prof[0].p[0], parsed;
+    old->used=1;old->rumble_style=1;old->impulse_strength=130;old->impulse_frequency=7;
+    s_parse_type=0;s_parse_index=0;
+    strcpy(suffix,"m0,100,0,Old client");
+    assert(parse_profile(form,&parsed));
+    assert(parsed.rumble_style==1 && parsed.impulse_strength==130 && !strcmp(parsed.name,"Old client"));
+    strcpy(suffix,"m0,100,0,r3,5,2,80,9,Audio profile");
+    assert(parse_profile(form,&parsed));
+    assert(parsed.rumble_style==3 && parsed.rumble_frequency==5 && parsed.impulse_flags==2);
+    assert(parsed.impulse_strength==80 && parsed.impulse_frequency==9 && !strcmp(parsed.name,"Audio profile"));
+    strcpy(suffix,"m0,100,0,racing");
+    assert(parse_profile(form,&parsed) && !strcmp(parsed.name,"racing") && parsed.rumble_style==1);
+}
 int main(void) {
+    profile_compatibility();
     host_busy=true;http_response_t r=request("do=open",true);
     assert(r.status==409 && !mic_test_active());release(&r);
     host_busy=false;jack=0;r=request("do=open",true);

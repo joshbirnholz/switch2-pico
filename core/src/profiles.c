@@ -36,6 +36,9 @@ void settings_default_profile_for(ctrl_type_t type, usb_mode_t mode, profile_t *
     p->trigger_threshold = 120;
     p->rumble_enabled = 1;
     p->rumble_strength_pct = 100;
+    p->rumble_style = mode == USB_MODE_XBOX360 ? 1 : 0;
+    p->impulse_strength = 100;
+    p->impulse_frequency = 10;
     if (ctrl_is_joycon(type)) {
         // The mouse stays off until chosen; these are its starting options.
         p->mouse_speed_pct = 100;
@@ -191,6 +194,11 @@ void settings_sanitize_profiles(ctrl_type_t type, ctrl_profiles_t *c) {
         p->swap_sticks = p->swap_sticks ? 1 : 0;
         p->rumble_enabled = p->rumble_enabled ? 1 : 0;
         p->rumble_strength_pct = clamp(p->rumble_strength_pct, 0, 200);
+        if (p->rumble_style > 3) p->rumble_style = 0;
+        p->rumble_frequency = clamp(p->rumble_frequency, 0, 10);
+        p->impulse_flags &= 3;
+        p->impulse_strength = clamp(p->impulse_strength, 0, 200);
+        p->impulse_frequency = clamp(p->impulse_frequency, 1, 10);
         if (ctrl_is_joycon(type)) {
             // On or off (earlier versions named a side: either is on).
             p->mouse_src = p->mouse_src ? MOUSE_ON : MOUSE_OFF;

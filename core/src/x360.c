@@ -111,7 +111,7 @@ void x360_set_input(const s2_input_t *in, const mapping_ctx_t *ctx, uint32_t gp,
 
 static void send_rumble(void) {
     rumble_sample_t l, r;
-    rumble_from_motors(s_motor_l, s_motor_r, &l, &r);
+    rumble_motors_active(s_motor_l, s_motor_r, &l, &r);
     procon_hook_rumble(&l, 1, &r, 1);
     s_status.rumble_frames++;
 }

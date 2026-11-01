@@ -308,6 +308,14 @@ void settings_init(void) {
             for (int t = 0; t < CTRL_TYPE_COUNT; t++)
                 for (int i = 0; i < PROFILE_MAX; i++) g_settings.prof[t].p[i].mouse_flags = 0;
         }
+        if (rev < 16) {
+            for (int t = 0; t < CTRL_TYPE_COUNT; t++) for (int i = 0; i < PROFILE_MAX; i++) {
+                profile_t *p = &g_settings.prof[t].p[i];
+                p->rumble_style = p->rumble_frequency = p->impulse_flags = 0;
+                p->impulse_strength = 100;
+                p->impulse_frequency = 10;
+            }
+        }
         g_settings.ext_rev = SETTINGS_EXT_REV;
         settings_sanitize(&g_settings);
         LOG("settings: loaded from flash (bonded=%d%s)", g_settings.bonded,

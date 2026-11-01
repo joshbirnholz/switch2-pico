@@ -308,7 +308,13 @@ body.offline #usb-help{display:flex}
         <label class="check"><input type="checkbox" id="pf-rumble">Rumble on</label>
         <label>Strength <span class="hint" data-tab="1">One classic motor: strength is how much of the time it runs</span>
           <span class="slider"><input type="range" min="0" max="200" id="pf-strength"><b><span id="v-pf-strength"></span>%</b></span></label>
-        <p class="note" style="grid-column:1/-1">Try it under Tools → Haptics test.</p>
+        <label>Rumble style<select id="pf-rumble-style"><option value="0">Stereo motors (original)</option><option value="1">Xbox (traditional motors)</option><option value="2">Switch HD Rumble</option><option value="3">DualSense audio haptics</option></select></label>
+        <label>Xbox frequency (1–10)<input type="number" min="1" max="10" id="pf-rumble-frequency"></label>
+        <label class="check"><input type="checkbox" id="pf-impulse-enabled">Trigger feedback</label>
+        <label class="check"><input type="checkbox" id="pf-impulse-dynamic">Dynamic trigger frequency</label>
+        <label>Trigger strength (%)<input type="number" min="0" max="200" id="pf-impulse-strength"></label>
+        <label>Fixed trigger frequency (1–10)<input type="number" min="1" max="10" id="pf-impulse-frequency"></label>
+        <p class="note" style="grid-column:1/-1">DualSense audio haptics will use channels 3/4 of the four-channel USB playback device on Pico 2 W builds with audio enabled. Games must support DualSense audio haptics. Trigger feedback will translate supported DualSense adaptive effects into vibration; Xbox 360 cannot receive Xbox One impulse commands. Native Switch HD rumble will keep its frequencies and separate sides. Try effects under Tools → Haptics test.</p>
       </div>
       <div class="panel fields" data-panel="mouse" hidden>
         <p class="note warn-note" id="mouse-x360" style="grid-column:1/-1" hidden>Mouse Mode is only available for emulated Xbox 360 and SInput controllers.</p>
@@ -905,6 +911,9 @@ function stashProfile(){
   stashMap();
   const P=prof();
   P.deadzone=+$('pf-deadzone').value;P.outer=+$('pf-outer').value;P.swap=$('pf-swap').checked?1:0;
+  P.rumble_style=+$('pf-rumble-style').value;P.rumble_frequency=+$('pf-rumble-frequency').value;
+  P.impulse_flags=($('pf-impulse-enabled').checked?0:1)|($('pf-impulse-dynamic').checked?0:2);
+  P.impulse_strength=+$('pf-impulse-strength').value;P.impulse_frequency=+$('pf-impulse-frequency').value;
   P.threshold=+$('pf-threshold').value;P.rumble=$('pf-rumble').checked?1:0;P.strength=+$('pf-strength').value;
   if(isJC()){
     P.mouse=$('pf-mouse').checked?1:0;P.mouse_speed=+$('pf-mouse-speed').value;P.mouse_flags=($('pf-mouse-hscroll').checked?0:1)|($('pf-mouse-inv-v').checked?2:0)|($('pf-mouse-inv-h').checked?4:0);
@@ -997,6 +1006,9 @@ function renderProfile(){
   if(!isJC()&&SUB==='mouse')showSub('buttons');
   if(!P)return;
   const set=(id,v)=>{$(id).value=v;const l=$('v-'+id);if(l)l.textContent=v;$(id).oninput=()=>{if(l)l.textContent=$(id).value}};
+  set('pf-rumble-style',P.rumble_style||0);set('pf-rumble-frequency',P.rumble_frequency||5);
+  $('pf-impulse-enabled').checked=!(P.impulse_flags&1);$('pf-impulse-dynamic').checked=!(P.impulse_flags&2);
+  set('pf-impulse-strength',P.impulse_strength??100);set('pf-impulse-frequency',P.impulse_frequency||10);
   set('pf-deadzone',P.deadzone);set('pf-outer',P.outer);set('pf-threshold',P.threshold);set('pf-strength',P.strength);
   $('pf-swap').checked=!!P.swap;$('pf-rumble').checked=!!P.rumble;
   $('pf-swap-label').textContent=isGC()?'Swap main stick and C-stick':'Swap left and right sticks';
@@ -1018,7 +1030,7 @@ function profName(v){
   const P=prof();if(!P)return;P.name=v.slice(0,19);setDirty(true);
   const t=document.querySelector(`.ptile[data-i="${CUR[MAP_CTRL]}"] .pname`);if(t)t.textContent=P.name||' ';
 }
-function newProfile(m){return {name:SHORT[m],mode:m,deadzone:6,outer:95,swap:0,threshold:120,rumble:1,strength:100,mouse:0,mouse_speed:100,mouse_flags:0,map:TYPE().defaults[m].slice()}}
+function newProfile(m){return {name:SHORT[m],mode:m,deadzone:6,outer:95,swap:0,threshold:120,rumble:1,strength:100,rumble_style:m===3?1:0,rumble_frequency:5,impulse_flags:0,impulse_strength:100,impulse_frequency:10,mouse:0,mouse_speed:100,mouse_flags:0,map:TYPE().defaults[m].slice()}}
 // Emulated Controller: None clears the button; on an empty button a mode makes
 // a profile; another mode starts the mapping over from that mode's defaults.
 function profMode(m){
@@ -1143,7 +1155,7 @@ async function save(){
   const prof=[];
   S.types.forEach((T,t)=>{
     T.profiles.forEach((P,i)=>prof.push(`prof_${t}_${i}=`+(P?[P.mode,P.deadzone,P.outer,P.swap,P.threshold,P.rumble,P.strength,...P.map].join(',')+
-      (S.profile_mouse?`,m${P.mouse?1:0},${P.mouse_speed||100},${(P.mouse_flags|0)&7}`:'')+','+encodeURIComponent(P.name):'')));
+      (S.profile_mouse?`,m${P.mouse?1:0},${P.mouse_speed||100},${(P.mouse_flags|0)&7}`:'')+`,r${P.rumble_style||0},${P.rumble_frequency||5},${P.impulse_flags||0},${P.impulse_strength??100},${P.impulse_frequency||10},`+encodeURIComponent(P.name):'')));
     p.append(`active_${t}`,T.active);
   });
   document.querySelectorAll('[data-k]').forEach(el=>p.append(el.dataset.k,el.type==='checkbox'?(el.checked?1:0):el.value));

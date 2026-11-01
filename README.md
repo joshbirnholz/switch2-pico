@@ -757,3 +757,33 @@ captures (`research/headset-audio.md`).
 ## License
 
 MIT
+
+### Rumble styles and trigger feedback
+
+Each profile has rumble settings in the web page and Decky plugin. Existing
+profiles keep the original stereo motor translation. New Xbox 360 profiles
+use **Xbox (traditional motors)**: a heavy low band around 120 Hz and a lighter
+high band, mixed onto both grips. Motor drive affects frequency as well as
+amplitude to approximate spinning eccentric motors. The frequency control tunes
+the small motor; strength scales the complete output. These are original curves
+informed by [Switch2Connect](https://github.com/TommyWabg/Switch2Connect)'s mono
+mix, low-frequency emphasis and frequency-dependent small-motor attenuation.
+They require physical comparison for final tuning; HD actuators cannot reproduce
+the mechanics of an Xbox motor exactly.
+
+**Switch HD Rumble** preserves native Switch reports, including independent
+sides and frequencies. With classic motor input it uses a 160/320 Hz band mix.
+**DualSense audio haptics** consumes channels 3/4 of the four-channel 48 kHz,
+16-bit USB playback endpoint in DualSense and Edge modes on Pico 2 W builds
+with `S2_HEADSET_AUDIO=ON`. Channels 1/2 remain headphone playback. The firmware
+approximates the audio using 5 ms band-energy windows; it does not reproduce
+arbitrary PCM waveforms. Audio takes priority over compatibility motor feedback
+while packets are recent; trigger feedback remains an independent overlay.
+The UAC2 endpoint and game compatibility still need hardware testing.
+
+Supported DualSense adaptive trigger effect commands become independent left /
+right high-band vibration. Profiles control enablement, strength, dynamic or
+fixed frequency, and the fixed frequency level. Stop commands release over
+90 ms. This simulates feedback, not physical trigger resistance. Unknown effects
+clear their overlay. Xbox 360 USB emulation cannot receive Xbox One impulse
+trigger commands; native Xbox One emulation is not implemented.

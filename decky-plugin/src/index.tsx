@@ -9,6 +9,7 @@ import {
   action, checkPluginUpdate, checkUpdate, DsuStatus, getDsuStatus, getPrefs, getSettings, getStatus, installPluginUpdate, PluginUpdate, Prefs, setPref,
   setSettings, UpdateInfo,
 } from "./api";
+import { RumbleOptions } from "./rumble";
 import { InputIcon, OutputIcon, SlotIcon } from "./icons";
 import {
   allButtons, CTRL_GC, CtrlType, Extra, extraButtons, headsetAudio, isJoyCon, MF_INVERT_H, MF_INVERT_V, MF_UP_DOWN_ONLY, MODE_NAMES, mouseMode, PIDS,
@@ -383,6 +384,7 @@ function Content() {
               onChange={(v) => saveProfile({ ...P, rumble: v ? 1 : 0 }).then((s) => s && v && testRumble())}
             />
           </PanelSectionRow>
+          {!!P.rumble && <PanelSectionRow><RumbleOptions p={P} save={(p) => { void saveProfile(p); }} /></PanelSectionRow>}
           {!!P.rumble && (
             <PanelSectionRow>
               <SliderField

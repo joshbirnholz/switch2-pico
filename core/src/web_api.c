@@ -250,9 +250,10 @@ static void api_settings_get(http_response_t *r) {
             jb_printf(&j, "{\"name\":");
             jb_str(&j, p->name);
             jb_printf(&j, ",\"mode\":%u,\"deadzone\":%u,\"outer\":%u,\"swap\":%u,\"threshold\":%u,\"rumble\":%u,"
-                          "\"strength\":%u,\"mouse\":%u,\"mouse_speed\":%u,\"mouse_flags\":%u,\"map\":[",
+                          "\"strength\":%u,\"mouse\":%u,\"mouse_speed\":%u,\"mouse_flags\":%u,\"rumble_style\":%u,\"rumble_frequency\":%u,\"impulse_flags\":%u,\"impulse_strength\":%u,\"impulse_frequency\":%u,\"map\":[",
                       p->usb_mode, p->stick_deadzone_pct, p->stick_outer_pct, p->swap_sticks, p->trigger_threshold,
-                      p->rumble_enabled, p->rumble_strength_pct, p->mouse_src, p->mouse_speed_pct, p->mouse_flags);
+                      p->rumble_enabled, p->rumble_strength_pct, p->mouse_src, p->mouse_speed_pct, p->mouse_flags,
+                      p->rumble_style, p->rumble_frequency, p->impulse_flags, p->impulse_strength, p->impulse_frequency);
             for (int k = 0; k < IN_COUNT; k++) jb_printf(&j, "%s%u", k ? "," : "", p->map[k]);
             jb_printf(&j, "]}");
         }
@@ -325,7 +326,8 @@ typedef struct {
 
 // Profile keys (controller type t, profile i):
 //   prof_<t>_<i>=<mode>,<deadzone>,<outer>,<swap>,<threshold>,<rumble>,<strength>,<map x IN_COUNT>,
-//                m<mouse>,<mouse speed>,<mouse flags>,<name>
+//                m<mouse>,<mouse speed>,<mouse flags>,
+//                r<style>,<frequency>,<impulse flags>,<impulse strength>,<impulse frequency>,<name>
 //                (empty: no profile there; the "m" group, Joy-Con 2 mouse, may be left out)
 //   active_<t>=<i>        (i: the button, mode_slot_t; a cleared profile in
 //                          use is replaced by another, see profiles.c)
@@ -399,6 +401,26 @@ static bool parse_profile(const char *v, profile_t *p) {
             p->mouse_flags = old->mouse_flags;
         }
     }
+    // Optional r<style>,<frequency>,<flags>,<strength>,<impulse frequency>,.
+    uint8_t ru[5];
+    w = v;
+    group = *w == 'r';
+    if (group) w++;
+    for (size_t k = 0; group && k < sizeof ru; k++) {
+        if (!isdigit((unsigned char)*w)) { group = false; break; }
+        long n = strtol(w, &end, 10);
+        if (*end != ',') { group = false; break; }
+        ru[k] = (uint8_t)(n > 255 ? 255 : n);
+        w = end + 1;
+    }
+    if (group) {
+        p->rumble_style = ru[0]; p->rumble_frequency = ru[1]; p->impulse_flags = ru[2];
+        p->impulse_strength = ru[3]; p->impulse_frequency = ru[4]; v = w;
+    } else if (old->used) {
+        p->rumble_style = old->rumble_style; p->rumble_frequency = old->rumble_frequency;
+        p->impulse_flags = old->impulse_flags; p->impulse_strength = old->impulse_strength;
+        p->impulse_frequency = old->impulse_frequency;
+    } else { p->impulse_strength = 100; p->impulse_frequency = 10; }
     snprintf(p->name, sizeof p->name, "%s", v);
     return true;
 }
