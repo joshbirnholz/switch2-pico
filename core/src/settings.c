@@ -293,7 +293,7 @@ void settings_init(void) {
             g_settings.joycon_single = tail < stored->size - 4u ? raw[tail] : 0;
             g_settings.decky_options = tail + 1 < stored->size - 4u ? raw[tail + 1] : 0;
             g_settings.headset_low_latency = tail + 2 < stored->size - 4u ? raw[tail + 2] : 0;
-            memset(g_settings.reserved_end, 0, sizeof g_settings.reserved_end);
+            g_settings.headset_audio_off = 0;   // came later: headphones on
         }
         if (rev < 10) {
             // Profiles: one per mode from that mode's map (after the steps
