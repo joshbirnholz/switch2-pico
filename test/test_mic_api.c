@@ -7,6 +7,7 @@ settings_t g_settings;
 static uint32_t now;
 static bool host_busy;
 static uint8_t jack=3;
+settings_t g_settings;
 uint32_t platform_millis(void) {return now;}
 bool platform_audio_active(void) {return host_busy || mic_test_active();}
 bool platform_has_headset_audio(void) {return true;}
@@ -43,7 +44,9 @@ int main(void) {
     profile_compatibility();
     host_busy=true;http_response_t r=request("do=open",true);
     assert(r.status==409 && !mic_test_active());release(&r);
-    host_busy=false;jack=0;r=request("do=open",true);
+    host_busy=false;g_settings.headset_audio_off=1;r=request("do=open",true);   // headphone audio turned off
+    assert(r.status==409 && !mic_test_active());release(&r);
+    g_settings.headset_audio_off=0;jack=0;r=request("do=open",true);
     assert(r.status==409 && !mic_test_active());release(&r);
     jack=1;r=request("do=open",true); // provisional mic status must not reject a connected headset
     assert(r.status==200 && strstr((const char *)r.body,"\"phase\":\"ready\""));release(&r);
