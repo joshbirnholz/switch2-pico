@@ -24,7 +24,7 @@ export function RumbleOptions({ p, save }: { p: Profile; save(p: Profile): void 
         {!!(flags & 2) && <SliderField label="Trigger frequency" value={p.impulse_frequency || 10} min={1} max={10} step={1} showValue
           onChange={(v) => save({ ...p, impulse_frequency: v })} />}
       </>}
-      {p.rumble_style === 3 && <div style={{ fontSize: 13 }}>Audio haptics require a Pico 2 W build with audio enabled and a compatible game using playback channels 3/4.</div>}
+      {p.rumble_style === 3 && <div style={{ fontSize: 13 }}>Audio haptics need a Pico 2 W build with audio enabled, and a game that supports them.</div>}
     </>}
   </>;
 }

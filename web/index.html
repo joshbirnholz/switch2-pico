@@ -239,7 +239,7 @@ body.offline #usb-help{display:flex}
   <h2>Connect your Switch2-Pico</h2>
   <p class="note" style="color:var(--fg)">Plug in the dongle, click <b>Connect over USB</b> and choose it. Its name follows its mode: "Pro Controller", "DualSense Edge Wireless Controller", "DualSense Wireless Controller", "Switch2-Pico Xbox 360 Controller", "WUP-028" (GameCube adapter), "Switch2-Pico SInput" or "Switch2-Pico (no controller)".</p>
   <button id="usb-connect" class="primary" onclick="usbConnect()">Connect over USB</button>
-  <p class="note">Each mode is a separate USB device to the browser, so pick it once per mode; after that the page connects by itself. Needs Chrome, Edge or another Chromium browser. Linux: install the udev rule from the README first. If the dongle is set to appear only while a controller is connected, connect a controller first.</p>
+  <p class="note">You'll pick it once for each mode. Linux: install the udev rule from the README first. If the dongle is set to appear only while a controller is connected, connect a controller first.</p>
 </div>
 </div>
 <main class="wrap">
@@ -255,7 +255,7 @@ body.offline #usb-help{display:flex}
   </div>
 
   <section class="card stack" aria-label="Profiles">
-    <div class="row" style="align-items:baseline;gap:6px 12px"><h2>Profiles</h2><span class="note" id="prof-hint-buttons">Hold C + Home until you hear a click, then press a button to activate its profile. Drag a profile onto another button to swap them.</span><span class="note" id="prof-hint-numbered" hidden>A single Joy-Con 2 has no shortcut: choose the profile in use here.</span></div>
+    <div class="row" style="align-items:baseline;gap:6px 12px"><h2>Profiles</h2><span class="note" id="prof-hint-buttons">Hold C + Home until you hear a click, then press a button to activate its profile. Drag a profile onto another button to swap them.</span></div>
     <div class="pbar" id="dup-bar" role="status" hidden><span>Click the <span id="dup-where">button</span> to copy <b id="dup-name"></b> to.</span><button onclick="dupCancel()">Cancel</button></div>
     <div class="pbar danger" id="ovr-bar" role="alertdialog" aria-label="Overwrite profile" hidden><span id="ovr-text"></span><button class="ovr" onclick="dupOverwrite()">Overwrite</button><button onclick="dupCancel()">Cancel</button></div>
     <div class="pgrid">
@@ -300,30 +300,30 @@ body.offline #usb-help{display:flex}
         </div>
       </div>
       <div class="panel fields" data-panel="sticks" hidden>
-        <label><span id="pf-deadzone-label">Left stick deadzone</span> <span class="hint">Ignore small movements near the stick’s center</span>
+        <label><span id="pf-deadzone-label">Left stick deadzone</span>
           <span class="slider"><input type="range" min="0" max="40" id="pf-deadzone"><b><span id="v-pf-deadzone"></span>%</b></span></label>
-        <label id="pf-right-deadzone-row"><span id="pf-deadzone-right-label">Right stick deadzone</span> <span class="hint">Tune the physical right stick or C-stick independently</span>
+        <label id="pf-right-deadzone-row"><span id="pf-deadzone-right-label">Right stick deadzone</span>
           <span class="slider"><input type="range" min="0" max="40" id="pf-deadzone-right"><b><span id="v-pf-deadzone-right"></span>%</b></span></label>
         <p id="profile-controls-update" class="note" hidden>Independent deadzones and gyro-side selection require firmware 0.20.0 or newer.</p>
-        <label id="pf-gyro-side-row">Joy-Con gyro side <span class="hint">The pair will use this side for motion. If it disconnects, the other side will supply motion until it reconnects.</span>
+        <label id="pf-gyro-side-row">Joy-Con gyro side
           <select id="pf-gyro-side"><option value="0">Right Joy-Con</option><option value="1">Left Joy-Con</option></select></label>
         <label>Full deflection at <span class="hint">Reach 100% before the edge</span>
           <span class="slider"><input type="range" min="50" max="100" id="pf-outer"><b><span id="v-pf-outer"></span>%</b></span></label>
         <label class="check"><input type="checkbox" id="pf-swap"><span id="pf-swap-label">Swap left and right sticks</span></label>
-        <label data-tab="1">Trigger threshold <span class="hint">Analog L / R count as pressed past this (0–255). The analog values still go to modes with analog triggers.</span>
+        <label data-tab="1">Trigger threshold <span class="hint">Analog L / R count as pressed past this (0–255).</span>
           <input type="number" min="0" max="255" id="pf-threshold" style="max-width:120px"></label>
       </div>
       <div class="panel fields" data-panel="rumble" hidden>
         <label class="check"><input type="checkbox" id="pf-rumble">Rumble on</label>
-        <label>Strength <span class="hint" data-tab="1">One classic motor: strength is how much of the time it runs</span>
+        <label>Strength
           <span class="slider"><input type="range" min="0" max="200" id="pf-strength"><b><span id="v-pf-strength"></span>%</b></span></label>
         <label>Rumble style<select id="pf-rumble-style"><option value="0">Stereo motors (original)</option><option value="1">Xbox (traditional motors)</option><option value="2">Switch HD Rumble</option><option value="3">DualSense audio haptics</option></select></label>
         <label>Xbox frequency (1–10)<input type="number" min="1" max="10" id="pf-rumble-frequency"></label>
-        <label class="check"><input type="checkbox" id="pf-impulse-enabled">Trigger feedback</label>
+        <label class="check top"><input type="checkbox" id="pf-impulse-enabled"><span>Trigger feedback<span class="hint" style="display:block">Supported DualSense adaptive trigger effects will become vibration.</span></span></label>
         <label class="check"><input type="checkbox" id="pf-impulse-dynamic">Dynamic trigger frequency</label>
         <label>Trigger strength (%)<input type="number" min="0" max="200" id="pf-impulse-strength"></label>
         <label>Fixed trigger frequency (1–10)<input type="number" min="1" max="10" id="pf-impulse-frequency"></label>
-        <p class="note" style="grid-column:1/-1">DualSense audio haptics will use channels 3/4 of the four-channel USB playback device on Pico 2 W builds with audio enabled. Games must support DualSense audio haptics. Trigger feedback will translate supported DualSense adaptive effects into vibration; Xbox 360 cannot receive Xbox One impulse commands. Native Switch HD rumble will keep its frequencies and separate sides. Try effects under Tools → Haptics test.</p>
+        <p class="note" style="grid-column:1/-1">DualSense audio haptics need a Pico 2 W build with audio enabled, and a game that supports them. Try effects under Tools → Haptics test.</p>
       </div>
       <div class="panel fields" data-panel="mouse" hidden>
         <p class="note warn-note" id="mouse-x360" style="grid-column:1/-1" hidden>Mouse Mode is only available for emulated Xbox 360 and SInput controllers.</p>
@@ -333,7 +333,7 @@ body.offline #usb-help{display:flex}
         <label class="check top" style="grid-column:1/-1"><input type="checkbox" id="pf-mouse-hscroll"><span>Scroll sideways with left / right<span class="hint" style="display:block">Off: left scrolls up and right scrolls down, as on a Switch 2.</span></span></label>
         <label class="check" style="grid-column:1/-1"><input type="checkbox" id="pf-mouse-inv-v"><span>Invert up / down scrolling</span></label>
         <label class="check" style="grid-column:1/-1"><input type="checkbox" id="pf-mouse-inv-h"><span>Invert left / right scrolling</span></label>
-        <p class="note" style="grid-column:1/-1">Lay a Joy-Con 2 on its side on a surface and move it: it's a mouse while it lies there, and each Joy-Con is its own mouse. Its shoulder button clicks, its trigger right-clicks, its stick click middle-clicks and its stick scrolls; picked up, they're the controller's again. In Xbox 360 and SInput profiles of the Joy-Con 2 the dongle has two USB mice next to the controller, so turning Mouse Mode on or off takes effect right away.</p>
+        <p class="note" style="grid-column:1/-1">Lay a Joy-Con 2 on its side on a surface and move it: it's a mouse while it lies there, and each Joy-Con is its own mouse. Its shoulder button clicks, its trigger right-clicks, its stick click middle-clicks and its stick scrolls.</p>
       </div>
     </section>
 
@@ -376,14 +376,14 @@ body.offline #usb-help{display:flex}
         <span>minutes without use</span>
       </div>
       <label class="kvrow" style="max-width:460px">Bluetooth transmit power<select data-k="ble_tx_power"><option value="0">+8 dBm (strongest)</option><option value="1">+4 dBm</option><option value="2">0 dBm</option><option value="3">−4 dBm (lowest current)</option></select></label>
-      <p class="note">Lower power helps on a weak USB supply; it applies from the next connection.</p>
+      <p class="note">It will take effect the next time the controller connects.</p>
     </section>
 
     <section class="card stack wifi-only" aria-label="Configuration Wi-Fi" hidden>
       <h2>Configuration Wi-Fi</h2>
       <div class="fields">
         <label>Network name<input type="text" maxlength="32" data-k="wifi_ssid"></label>
-        <label>Password <span class="hint">8+ characters; blank keeps it</span><input type="password" maxlength="63" id="wifi_pass" placeholder="unchanged"></label>
+        <label>Password <span class="hint">8+ characters</span><input type="password" maxlength="63" id="wifi_pass" placeholder="unchanged"></label>
         <label>Channel<input type="number" min="1" max="11" data-k="wifi_channel"></label>
       </div>
       <label class="check"><input type="checkbox" data-k="wifi_autostart">Start automatically while no controller is paired</label>
@@ -403,13 +403,13 @@ body.offline #usb-help{display:flex}
       <h2>Headphones</h2>
       <div class="row"><button id="mic-test-open" onclick="openMicTest()" hidden>Test Microphone</button></div>
       <label class="kvrow">Audio mode<select data-k="audio_mode"><option value="0">Stable</option><option value="1">Low Latency</option></select></label>
-      <p class="note">For headphones plugged into a Switch 2 Pro Controller, in SInput mode. Low Latency will reduce the delay (about 70 ms in the controller instead of 155 ms), but the sound may cut out more often, as on the Switch 2. It will take effect as soon as it's saved, even during playback.</p>
+      <p class="note">For headphones plugged into a Switch 2 Pro Controller, in SInput mode. Low Latency will cut the delay from about 155 ms to 70 ms, but the sound may cut out more often.</p>
     </section>
     <section class="card stack" aria-label="Decky plugin" data-live>
       <h2>Decky plugin</h2>
       <div class="row" style="gap:6px">
         <label class="check"><input type="checkbox" data-k="decky_options" id="decky-options" onchange="deckyOptionsChanged()"><span>Show additional Decky options</span></label>
-        <span class="help"><button type="button" aria-label="About the Decky options">?</button><span class="tipbox" role="tooltip">These options (such as mapping a button to the <b>Quick Access Menu</b>) need the Switch2-Pico plugin for <b>Decky Loader</b>, and only work on a Steam Deck or other SteamOS device in Game Mode. To get it, install Decky Loader from <b>decky.xyz</b>, then in Decky’s settings turn on <b>Developer mode</b> and choose <b>Install Plugin from URL</b> with <b>https://joshbirnholz.github.io/switch2-pico/decky/Switch2-Pico.zip</b>. Once you use the plugin, this will be turned on for you.</span></span>
+        <span class="help"><button type="button" aria-label="About the Decky options">?</button><span class="tipbox" role="tooltip">These options (such as mapping a button to the <b>Quick Access Menu</b>) need the Switch2-Pico plugin for <b>Decky Loader</b>, and only work on a Steam Deck or other SteamOS device in Game Mode. To get it, install Decky Loader from <b>decky.xyz</b>, then in Decky’s settings turn on <b>Developer mode</b> and choose <b>Install Plugin from URL</b> with <b>https://joshbirnholz.github.io/switch2-pico/decky/Switch2-Pico.zip</b>.</span></span>
       </div>
     </section>
     <details class="card" open>
@@ -448,19 +448,18 @@ body.offline #usb-help{display:flex}
         <button onclick="if(confirm('Restart into the USB bootloader to install a .uf2 by hand?'))act('bootloader')">Firmware update mode</button>
       </div>
       <div class="danger-zone">
-        <span>Factory reset erases every profile, pairing and setting.</span>
         <button onclick="if(confirm('Erase every profile, pairing and setting?'))act('factory')">Factory reset…</button>
       </div>
     </section>
 
     <section class="card stack" aria-label="Haptics test">
-      <div><h2>Haptics test</h2><p class="note" style="margin-top:2px">Plays on the connected controller.</p></div>
+      <h2>Haptics test</h2>
       <div class="stack" style="gap:6px">
         <span class="caps">Rumble</span>
         <div class="row">
           <button class="dark" onclick="act('rumble')">Test rumble</button>
-          <button onclick="act('motors&l=255&r=0')" title="Classic rumble's strong motor, on its own side">Left motor (strong)</button>
-          <button onclick="act('motors&l=0&r=255')" title="Classic rumble's weak motor, on its own side">Right motor (weak)</button>
+          <button onclick="act('motors&l=255&r=0')">Left motor (strong)</button>
+          <button onclick="act('motors&l=0&r=255')">Right motor (weak)</button>
         </div>
       </div>
       <div class="stack" style="gap:6px">
@@ -500,7 +499,7 @@ body.offline #usb-help{display:flex}
   <div class="mic-body">
     <h2>Test Microphone</h2>
     <p id="mic-test-title" class="mic-title" aria-live="polite">Connecting to the microphone…</p>
-    <p id="mic-test-description" class="note mic-description">Playback will come through your controller’s headphones at a reduced volume.</p>
+    <p id="mic-test-description" class="note mic-description">Playback will come through your controller’s headphones.</p>
     <div id="mic-test-level-row" class="mic-level-row ready">
       <svg class="mic-level-symbol" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <g id="mic-test-input-symbol"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></g>
@@ -602,10 +601,10 @@ function toast(t){const e=$('toast');e.textContent=t;e.classList.add('show');cle
 // without browser media permissions. Only level/status data crosses the link.
 let micTestView=null;
 const micTestText={
-  ready:['Record yourself using your microphone and then listen back.','Once recording starts, speak into the mic.'],
-  preparing:['Preparing microphone','The five-second recording will begin when the microphone is ready.'],
+  ready:['Record yourself using your microphone and then listen back.',''],
+  preparing:['Preparing microphone',''],
   recording:['Recording...','Speak toward the mic. (Recording for five seconds.)'],
-  playback:['Now playing back...','Make sure you can hear the recorded voice audio.']
+  playback:['Now playing back...','']
 };
 async function micTestRequest(operation,session=0){
   const path='/api/mic-test?session='+session+(operation==='status'?'':'&do='+operation);
@@ -615,9 +614,9 @@ async function micTestRequest(operation,session=0){
 }
 function renderMicTest(state,error=''){
   const phase=state?.phase, failure=error||(phase==='error'?state.error:'');
-  const text=micTestText[phase]||['Connecting to the microphone…','Playback will come through your controller’s headphones at a reduced volume.'];
+  const text=micTestText[phase]||['Connecting to the microphone…','Playback will come through your controller’s headphones.'];
   $('mic-test-title').textContent=failure?'Microphone test unavailable':text[0];
-  $('mic-test-description').textContent=failure||text[1];
+  $('mic-test-description').textContent=failure||text[1];$('mic-test-description').hidden=!(failure||text[1]);
   const playing=phase==='playback';
   $('mic-test-input-symbol').toggleAttribute('hidden',playing);
   $('mic-test-output-symbol').toggleAttribute('hidden',!playing);
@@ -680,7 +679,7 @@ function renderBonds(s){
   const cur=s.links?s.links.filter(k=>k.state==='ready').map(k=>k.addr):(L.state==='ready'?[L.addr]:[]);
   $('disc-btn').hidden=!cur.length;
   const key=JSON.stringify(list)+cur.join();if(key===BONDS_KEY)return;BONDS_KEY=key;
-  $('bond-count').textContent=list.length?`${list.length} of ${s.bond.max||list.length} · any of them reconnects with a button press, one at a time (or a Joy-Con 2 (L) and (R) together)`:'';
+  $('bond-count').textContent=list.length?`${list.length} of ${s.bond.max||list.length}`:'';
   const el=$('bonds');el.innerHTML='';
   if(!list.length){el.innerHTML='<div class="empty">None yet. Hold the Sync button on a controller to pair it.</div>';return}
   list.forEach((b,i)=>{
@@ -987,7 +986,7 @@ function renderProfile(){
   // A single Joy-Con 2: numbered profiles, chosen here.
   const num=numbered();
   document.querySelector('.pgrid').hidden=num;$('plist').hidden=!num;
-  $('prof-hint-buttons').hidden=num;$('prof-hint-numbered').hidden=!num;
+  $('prof-hint-buttons').hidden=num;
   if(num)$('plist').innerHTML=T.profiles.map((_,i)=>numTileHTML(i)).join('');
   $('dup-where').textContent=num?'profile slot':'button';
   $('dup-bar').hidden=DUP<0||OVR>=0;
@@ -1117,10 +1116,10 @@ async function importProfiles(input){
     const data=validateProfileFile(JSON.parse(await file.text()),S);
     if(data.kind==='profile'){
       if(data.type!==type)throw Error('Select the '+S.types[data.type].name+' tab before importing this profile.');
-      if(S.types[type].profiles[index]&&!confirm('Replace “'+S.types[type].profiles[index].name+'” with “'+data.profile.name+'”? The changes will remain unsaved until you choose Save.'))return;
+      if(S.types[type].profiles[index]&&!confirm('Replace “'+S.types[type].profiles[index].name+'” with “'+data.profile.name+'”?'))return;
       stashProfile();S.types[type].profiles[index]=data.profile;MAP_CTRL=type;CUR[type]=index;
     }else{
-      if(!confirm('Replace all controller profiles with this library? The changes will remain unsaved until you choose Save.'))return;
+      if(!confirm('Replace all controller profiles with this library?'))return;
       data.controllers.forEach(c=>{S.types[c.type].profiles=c.profiles;S.types[c.type].active=c.active;CUR[c.type]=c.active});
     }
     DUP=OVR=-1;PNOTE='Imported. Choose Save to apply these profiles to the dongle.';
@@ -1136,7 +1135,7 @@ function profMode(m){
   if(m<0){if(P)profDel();return}
   if(!P){T.profiles[i]=newProfile(m);PNOTE='';renderProfile();setDirty(true);$('pf-name').focus();return}
   if(P.mode===m)return;
-  if(!confirm('Change this profile to '+EMU[m]+'? Its button mapping starts over from that mode\'s defaults.')){$('pf-mode').value=P.mode;return}
+  if(!confirm('Change this profile to '+EMU[m]+'? Its button mapping will start over from that mode\'s defaults.')){$('pf-mode').value=P.mode;return}
   P.mode=m;P.map=T.defaults[m].slice();renderProfile();setDirty(true);
 }
 // Delete (or None): the button is empty. If it held the profile in use,
@@ -1148,7 +1147,7 @@ function profDel(){
   if(T.active===i){
     const order=numbered()?T.profiles.map((_,j)=>j):FALLBACK.map(b=>BTN.indexOf(b));
     const k=order.find(j=>T.profiles[j]);
-    if(k!==undefined){T.active=k;PNOTE=`That was the profile in use: when you save, “${T.profiles[k].name}” (${slotLabel(k)}) takes over.`}
+    if(k!==undefined){T.active=k;PNOTE=`That was the profile in use: when you save, “${T.profiles[k].name}” (${slotLabel(k)}) will take over.`}
   }
   renderProfile();setDirty(true);
 }
@@ -1221,7 +1220,7 @@ function render(){
   const pb=document.querySelector('[data-k="pair_button"]');
   pb.disabled=!S.sync_button;
   $('pair-button-row').classList.toggle('off',!S.sync_button);
-  $('pair-button-note').textContent=S.sync_button?'A short BOOTSEL press or Pair a controller opens a 60 s window (the LED blinks fast); a 1–5 s hold toggles the configuration Wi-Fi.':'Pico 2 W only (BOOTSEL). Not available on this board.';
+  $('pair-button-note').textContent=S.sync_button?'A short BOOTSEL press or Pair a controller opens a 60 s window (the LED blinks fast); a 1–5 s hold toggles the configuration Wi-Fi.':'Only available on a Pico 2 W.';
   // What runs now: the active profiles as saved (a restart is needed when
   // the in-use type's profile changes mode).
   S.saved_active=S.types.map(T=>T.active);
