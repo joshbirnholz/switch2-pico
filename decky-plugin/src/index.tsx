@@ -389,7 +389,6 @@ function Content() {
             <PanelSectionRow>
               <SliderField
                 label="Strength"
-                description="The controller will give a short buzz at the new strength."
                 value={strength ?? P.strength}
                 min={0}
                 max={200}
@@ -555,14 +554,14 @@ function DsuSection(props: { prefs: Prefs; setPrefs(p: Prefs): void; runMode: nu
       line = `Port ${ds.port} · motion from the ${MODE_NAMES[props.runMode] ?? MOTION_NAMES[ds.mode]} · ` +
         (ds.clients === 1 ? "1 emulator connected" : `${ds.clients} emulators connected`);
     } else if (ds.error) line = `Port ${ds.port} · ${ds.error}`;
-    else line = `Port ${ds.port} · no motion in this mode (Xbox 360 and GameCube adapter have none)`;
+    else line = `Port ${ds.port} · no motion in this mode`;
   }
   return (
     <PanelSection title="Motion server (DSU)">
       <PanelSectionRow>
         <ToggleField
           label="Motion server"
-          description="The controller's gyro and accelerometer for emulators (Cemu, Dolphin, Ryujinx…), which Steam Input doesn't pass on."
+          description="Sends the controller's gyro and accelerometer to emulators (Cemu, Dolphin, Ryujinx…)."
           checked={on}
           onChange={(v) => setPref("dsu_enabled", v).then(props.setPrefs)}
         />

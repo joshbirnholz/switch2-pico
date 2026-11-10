@@ -4,11 +4,11 @@ import { micTest, MicTestState } from "./api";
 
 const words = (phase?: string): [string, string] => {
   switch (phase) {
-    case "ready": return ["Record yourself using your microphone and then listen back.", "Once recording starts, speak into the mic."];
-    case "preparing": return ["Preparing microphone", "The five-second recording will begin when the microphone is ready."];
+    case "ready": return ["Record yourself using your microphone and then listen back.", ""];
+    case "preparing": return ["Preparing microphone", ""];
     case "recording": return ["Recording...", "Speak toward the mic. (Recording for five seconds.)"];
-    case "playback": return ["Now playing back...", "Make sure you can hear the recorded voice audio."];
-    default: return ["Connecting to the microphone…", "Playback will come through your controller’s headphones at a reduced volume."];
+    case "playback": return ["Now playing back...", ""];
+    default: return ["Connecting to the microphone…", "Playback will come through your controller’s headphones."];
   }
 };
 function AudioLevelIcon({ playback }: { playback: boolean }) {
@@ -90,12 +90,12 @@ export function MicTestModal(props: { closeModal?(): void }) {
   const playing = phase === "playback";
   return <ModalRoot closeModal={close}>
     <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 16 }}>Test Microphone</div>
-    <div style={{ fontWeight: 600, marginBottom: 8 }} aria-live="polite">
+    <div style={{ fontWeight: 600, marginBottom: failure || description ? 8 : 20 }} aria-live="polite">
       {failure ? "Microphone test unavailable" : title}
     </div>
-    <div style={{ fontSize: 14, lineHeight: 1.5, color: failure ? "#ffb4b4" : "#a3adba", marginBottom: 20 }}>
+    {(failure || description) && <div style={{ fontSize: 14, lineHeight: 1.5, color: failure ? "#ffb4b4" : "#a3adba", marginBottom: 20 }}>
       {failure || description}
-    </div>
+    </div>}
     {!failure && <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
       <AudioLevelIcon playback={playing} />
       <div style={{ flex: 1, minWidth: 0 }} role="meter" aria-label={playing ? "Playback audio level" : "Microphone audio level"}

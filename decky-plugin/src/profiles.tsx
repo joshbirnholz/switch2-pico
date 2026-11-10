@@ -111,7 +111,7 @@ export function ProfilesModal(props: { S: Settings; t: number; save: SaveFn; clo
       showModal(
         <PickerModal
           title="New profile"
-          subtitle="Its button (hold C + Home on the controller, then press it)"
+          subtitle="Choose its button"
           items={free.map((i) => ({ key: i, icon: <SlotIcon label={slotLabel(T, i)} gamecube={t === CTRL_GC} />, title: slotLabel(T, i) }))}
           onPick={create}
         />,
@@ -225,7 +225,7 @@ export function ProfileEditModal(props: { S: Settings; t: number; i: number; sav
     showModal(
       <PickerModal
         title="Button"
-        subtitle={`${P.name} · on the controller: hold C + Home, then press it`}
+        subtitle={P.name}
         items={T.profiles.map((p, j) => ({
           key: j,
           icon: <SlotIcon label={slotLabel(T, j)} gamecube={t === CTRL_GC} />,

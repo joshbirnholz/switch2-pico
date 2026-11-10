@@ -113,7 +113,7 @@ export function AllButtonsModal(props: {
   };
   const cancel = () => {
     if (!changed) return props.closeModal?.();
-    confirm("Discard your changes?", "The buttons you changed here will keep their earlier mapping.", "Discard", () =>
+    confirm("Discard your changes?", "", "Discard", () =>
       props.closeModal?.(), true);
   };
   const small: React.CSSProperties = { width: "auto", minWidth: 0, padding: "0 16px", height: 34 };
@@ -170,7 +170,7 @@ export function PairedModal(props: { closeModal?(): void; onChange(): void }) {
   const forget = (addr: string | null) =>
     confirm(
       addr ? "Forget this controller?" : "Forget all controllers?",
-      "It still remembers the dongle but won't reconnect until you pair it again (hold its Sync button while pairing).",
+      "It won't reconnect until you pair it again.",
       addr ? "Forget" : "Forget all",
       async () => {
         await action(addr ? "forget&addr=" + addr : "forget");
@@ -273,7 +273,7 @@ export function UpdateModal(props: { version: string; closeModal?(): void; onDon
             indeterminate={stage === "download" || stage === "check"}
           />
           <div style={{ ...sub, marginTop: 12, textAlign: "center" }}>
-            Keep the dongle plugged in. If the update stops partway, the dongle will keep its current firmware.
+            Keep the dongle plugged in.
           </div>
         </>
       )}
