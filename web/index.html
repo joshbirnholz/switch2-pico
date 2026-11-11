@@ -1414,6 +1414,7 @@ function uf2Image(buf, family, base, max){
     const flags=dv.getUint32(o+8,true);if(flags&1)continue;                 // not for main flash
     if((flags&0x2000)&&dv.getUint32(o+28,true)!==family)continue;          // other family
     const addr=dv.getUint32(o+12,true),len=dv.getUint32(o+16,true);
+    if(len<=476&&addr+len<=base)continue;                                  // the SoftDevice in a full .uf2: already on the board
     if(len>476||addr<base||addr+len-base>max)throw new Error('image doesn\'t fit this board');
     blocks.push([addr-base,o+32,len]);end=Math.max(end,addr+len-base);
   }

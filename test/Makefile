@@ -17,6 +17,7 @@ run: test_runner test_usb_lifecycle test_usb_audio2 test_usb_audio2_speaker test
 	node test_profile_files.mjs
 	python3 test_audio_preflight.py
 	python3 test_decky_update.py
+	python3 test_softdevice_uf2.py
 	python3 test_decky_mic.py
 	python3 test_decky_udev.py
 

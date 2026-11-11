@@ -53,9 +53,13 @@ Two boards are supported; they share all of the controller logic.
 | Firmware file | `switch2_pico.uf2` | `switch2_nrf52840.uf2` |
 
 A Pico W (RP2040) build also works: configure with `-DPICO_BOARD=pico_w`.
-The nRF52840 build needs a board with the Adafruit nRF52 UF2 bootloader and
-S140 v6.1.1 SoftDevice. That is the bootloader Pro Micro nRF52840 and
-nice!nano boards ship with, the same as for openpuck.
+The nRF52840 build needs a board with the Adafruit nRF52 UF2 bootloader
+(Pro Micro nRF52840, nice!nano, Feather nRF52840, ...). It runs on Nordic's
+S140 v6.1.1 SoftDevice, which the release's `…-nrf52840.uf2` file includes,
+so it also works on boards that don't have the SoftDevice: some ship without
+it, and firmware such as Nordic's nRF Sniffer overwrites it (the board's
+`INFO_UF2.TXT` then says `SoftDevice: not found`). There's no need for a
+serial bootloader update.
 
 ## Installing
 
@@ -69,7 +73,9 @@ offers the one for the connected board. Then:
   appears. Copy the `.uf2` file onto it.
 * **nRF52840:** double-tap reset (on a Pro Micro without a reset button,
   short RST to GND twice quickly); a drive such as `NICENANO` or
-  `FTHR840BOOT` appears. Copy the `…-nrf52840.uf2` file onto it.
+  `FTHR840BOOT` appears. Copy the `…-nrf52840.uf2` file onto it. It
+  will also install the SoftDevice the firmware needs, if the board doesn't
+  have it.
 
 The board reboots into the firmware.
 

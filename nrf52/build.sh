@@ -29,3 +29,16 @@ if [ -z "$UF2CONV" ]; then
 fi
 python3 "$UF2CONV" -f 0xADA52840 -c -o "$OUT/switch2_nrf52840.uf2" "$OUT/switch2_nrf.ino.hex"
 echo "Firmware: $OUT/switch2_nrf52840.uf2"
+
+# The same firmware with the S140 v6.1.1 SoftDevice in front of it: the file
+# to copy onto the board's drive, since it also works on boards without the
+# SoftDevice. The configuration page's Update keeps using the smaller file
+# above. The SoftDevice comes from the core's bootloader images.
+CORE_DIR=$(dirname "$UF2CONV")/../..
+SD_HEX=$(find "$CORE_DIR" -path '*bootloader*' -name '*feather_nrf52840_express*s140_6.1.1.hex' 2>/dev/null | sort | tail -n 1)
+[ -n "$SD_HEX" ] || SD_HEX=$(find "$CORE_DIR" -path '*bootloader*' -name '*nrf52840*s140_6.1.1.hex' 2>/dev/null | sort | tail -n 1)
+if [ -z "$SD_HEX" ]; then
+    echo "S140 v6.1.1 .hex not found in the core; only the application .uf2 was made" >&2
+    exit 1
+fi
+python3 tools/add_softdevice_uf2.py "$SD_HEX" "$OUT/switch2_nrf52840.uf2" "$OUT/switch2_nrf52840_full.uf2"
