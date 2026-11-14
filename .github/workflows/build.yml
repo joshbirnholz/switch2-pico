@@ -73,6 +73,7 @@ jobs:
           name: switch2-nrf52840-firmware
           path: |
             build-nrf/switch2_nrf52840.uf2
+            build-nrf/switch2_nrf52840_full.uf2
             build-nrf/switch2_nrf.ino.hex
 
   # The Decky plugin (decky-plugin/): its installable zip.
@@ -125,7 +126,8 @@ jobs:
         run: |
           ver=$(head -n1 VERSION)
           short=${GITHUB_SHA::7}
-          cp dist/switch2-nrf52840-firmware/switch2_nrf52840.uf2 "switch2-pico-v$ver-nrf52840.uf2"
+          # The one with the SoftDevice: it works on every nRF52840 board.
+          cp dist/switch2-nrf52840-firmware/switch2_nrf52840_full.uf2 "switch2-pico-v$ver-nrf52840.uf2"
           if [ -f dist/switch2-pico2w-firmware/switch2_pico.uf2 ]; then
             cp dist/switch2-pico2w-firmware/switch2_pico.uf2 "switch2-pico-v$ver-pico2w.uf2"
           fi

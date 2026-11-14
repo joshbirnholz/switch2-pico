@@ -161,6 +161,8 @@ def uf2_image(data, family, base, max_len):
             continue
         if flags & 0x2000 and struct.unpack_from("<I", data, o + 28)[0] != family:
             continue
+        if length <= 476 and addr + length <= base:
+            continue  # the SoftDevice in a full .uf2: already on the board
         if length > 476 or addr < base or addr + length - base > max_len:
             raise DongleError("the firmware doesn't fit this board")
         blocks.append((addr - base, o + 32, length))
