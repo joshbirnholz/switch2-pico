@@ -650,6 +650,15 @@ don't charge the controller from the same hub. **Device → Power and radio →
 Bluetooth transmit power** lowers the dongle's peak current; 0 dBm still reaches
 across a room.
 
+**SInput mode on SteamOS / Linux: Steam shows a generic gamepad (wrong
+button labels, Home does nothing).** Steam opened the dongle a moment before
+udev gave it access, couldn't read it, and didn't try again. Steam's log
+(`~/.local/share/Steam/logs/console_log.txt`) then has `couldn't open
+/dev/hidrawN … Permission denied` and `driver = NONE (DISABLED)` for
+`Switch2-Pico SInput`. The Decky plugin fixes this by itself. Without it,
+restart Steam. Since a Steam client update in November 2026 this happens on a
+large share of connections.
+
 **The Wi-Fi network shows up but http://192.168.4.1 doesn't load.** Make sure
 your phone or computer stays on the `Switch2-Pico` network even though it has
 no internet (phones may switch back to mobile data; turn mobile data off

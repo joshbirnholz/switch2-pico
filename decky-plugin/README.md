@@ -36,6 +36,12 @@ menu (Decky Loader), on a Steam Deck or any SteamOS / Linux machine with Decky.
   so waking works without replugging the dongle. While the setting is off, it
   turns the dongle's wake-up off (on some PCs an armed dongle wakes the PC as
   soon as it goes to sleep).
+* **Steam missing the SInput controller**: when a controller connects, the
+  dongle comes back on USB, and Steam sometimes opens the new device a moment
+  before udev has given it access. Steam then can't open it and treats it as
+  a generic gamepad (wrong button labels, Home doesn't work) until it
+  restarts. The plugin watches Steam's log for this and makes the dongle's
+  USB interface disappear and reappear, so Steam tries again, up to 5 times.
 * **Test Microphone** (Pico 2 W, Pro Controller 2, SInput mode, supported
   firmware): a popup with live mic and playback levels. **Begin Recording**
   will record five seconds and play it through the controller’s headphones

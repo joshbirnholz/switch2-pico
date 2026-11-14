@@ -319,6 +319,124 @@ def http_get(url, timeout=20):
         return r.read()
 
 # ---------------------------------------------------------------------------
+# SInput mode: Steam losing the race for the hidraw node
+#
+# Steam's SDL watches /dev itself and opens a new /dev/hidrawN as soon as the
+# kernel creates it, before udev's "uaccess" rule has given the user access.
+# When it is that quick, the open fails ("Permission denied") and SDL never
+# tries again: the controller is left on Steam's generic gamepad fallback
+# (wrong button labels, no Home button) until Steam restarts. The dongle
+# re-enumerates whenever a controller connects, so this can happen on any
+# connection. Steam logs both lines; on seeing them the plugin unbinds the
+# HID interface, waits for Steam to drop it, and binds it again: the node is
+# created anew and Steam gets another try, which a few attempts win.
+# ---------------------------------------------------------------------------
+SINPUT_HID_PREFIX = "0003:2E8A:10C6."   # bus USB, VID, PID, instance
+SINPUT_FIX_TRIES = 5
+SINPUT_LOG_S = 1.0          # Steam log poll
+SINPUT_REMOVE_WAIT_S = 3.0  # for Steam to drop the unbound device
+SINPUT_ADD_WAIT_S = 5.0     # for Steam to open the bound one again
+STEAM_LOG_GLOB = "/home/*/.local/share/Steam/logs/console_log.txt"
+_HIDAPI_LINE = re.compile(
+    r"(Added|Removing) HIDAPI device '[^']*' VID 0x2e8a, PID 0x10c6\b.*"
+    r"path = (/dev/hidraw\d+), driver = (.+?)\s*$")
+_DENIED_LINE = re.compile(r"couldn't open (/dev/hidraw\d+)\b.*Permission denied")
+
+
+def steam_log_path():
+    """Steam's console log (the most recently written one if several users have one)."""
+    home = getattr(decky, "DECKY_USER_HOME", None)
+    if home:
+        p = os.path.join(home, ".local/share/Steam/logs/console_log.txt")
+        if os.path.exists(p):
+            return p
+    paths = glob.glob(STEAM_LOG_GLOB)
+    return max(paths, key=os.path.getmtime) if paths else None
+
+
+class LogTail:
+    """New complete lines of a log file; starts over when Steam replaces it."""
+
+    def __init__(self, path):
+        self.path, self.pos, self.ino, self.rest = path, 0, None, b""
+        self.gen = 0   # bumped each time the file is a new one (Steam restarted)
+
+    def read(self):
+        try:
+            st = os.stat(self.path)
+        except OSError:
+            return []
+        if st.st_ino != self.ino or st.st_size < self.pos:
+            self.pos, self.ino, self.rest = 0, st.st_ino, b""
+            self.gen += 1
+        if st.st_size == self.pos:
+            return []
+        with open(self.path, "rb") as f:
+            f.seek(self.pos)
+            data = f.read()
+        self.pos += len(data)
+        *lines, self.rest = (self.rest + data).split(b"\n")
+        return [l.decode("utf-8", "replace") for l in lines]
+
+
+class SteamSinput:
+    """What Steam's SDL did with each of the dongle's SInput hidraw nodes,
+    from its log: "ok" (its SInput driver has it), "lost" (couldn't open it:
+    the permission race) or "off" (left it alone for another reason, such as
+    SInput support turned off: not ours to undo)."""
+
+    def __init__(self):
+        self.state = {}
+        self.denied = set()
+
+    def feed(self, line):
+        """("added", node, state) or ("removed", node, None) for a line about the dongle, else None."""
+        m = _DENIED_LINE.search(line)
+        if m:
+            self.denied.add(m.group(1))
+            return None
+        m = _HIDAPI_LINE.search(line)
+        if not m:
+            return None
+        what, node, driver = m.groups()
+        if what == "Removing":
+            self.state.pop(node, None)
+            self.denied.discard(node)
+            return ("removed", node, None)
+        if "(ENABLED)" in driver:
+            st = "ok"
+        elif node in self.denied:
+            st = "lost"
+        else:
+            st = "off"
+        self.denied.discard(node)
+        self.state[node] = st
+        return ("added", node, st)
+
+    def lost(self):
+        return [n for n, s in self.state.items() if s == "lost"]
+
+
+def sinput_hid_device(node):
+    """(HID device name, its driver's sysfs directory) behind /dev/hidrawN, if it is the dongle's SInput one."""
+    dev = os.path.realpath(os.path.join("/sys/class/hidraw", os.path.basename(node), "device"))
+    name = os.path.basename(dev)
+    drv = os.path.realpath(os.path.join(dev, "driver"))
+    if not name.startswith(SINPUT_HID_PREFIX) or not os.path.isdir(drv):
+        return None
+    return name, drv
+
+
+def sysfs_write(path, value):
+    with open(path, "w") as f:
+        f.write(value)
+
+
+def udev_settle():
+    subprocess.run(["udevadm", "settle", "--timeout=5"], timeout=10, check=False, env=system_env())
+
+
+# ---------------------------------------------------------------------------
 # Motion (DSU / cemuhook) server: the connected controller's gyro and
 # accelerometer for emulators (Cemu, Dolphin, Ryujinx, ...), which under
 # Steam Input only see Steam's virtual controller. The motion comes from the
@@ -548,6 +666,7 @@ class Plugin:
         loop = asyncio.get_event_loop()
         self.monitor = loop.create_task(self._monitor())
         self.events = loop.create_task(self._events())
+        self.sinput = loop.create_task(self._sinput_watch())
         self.dsu = None
         await self._dsu_apply()
         await asyncio.to_thread(install_udev_rule)
@@ -556,6 +675,7 @@ class Plugin:
     async def _unload(self):
         self.monitor.cancel()
         self.events.cancel()
+        self.sinput.cancel()
         if self.dsu:
             self.dsu.close()
 
@@ -866,6 +986,84 @@ class Plugin:
         changed = await asyncio.to_thread(enable_wakeup if want else disable_wakeup, info["sys"])
         if changed:
             decky.logger.info("wake-up %s on %s", "enabled" if want else "disabled", ", ".join(changed))
+
+    # ---- Background: Steam's SInput driver ---------------------------------
+    async def _steam_events(self, tail, steam):
+        """Steam's new log lines, fed to steam: the events about the dongle."""
+        gen = tail.gen
+        lines = await asyncio.to_thread(tail.read)
+        if tail.gen != gen:
+            steam.__init__()   # a new log: Steam restarted and looks at every device again
+        return [ev for ev in map(steam.feed, lines) if ev]
+
+    async def _steam_wait(self, tail, steam, want, timeout):
+        """The first new event from Steam's log that want() accepts, or None after timeout seconds."""
+        end = time.monotonic() + timeout
+        while True:
+            for ev in await self._steam_events(tail, steam):
+                if want(ev):
+                    return ev
+            if time.monotonic() >= end:
+                return None
+            await asyncio.sleep(0.2)
+
+    async def _sinput_fix(self, node, tail, steam):
+        """Rebind the HID interface behind node until Steam's SInput driver
+        opens it. False when it still hasn't after SINPUT_FIX_TRIES tries."""
+        for attempt in range(1, SINPUT_FIX_TRIES + 1):
+            dev = await asyncio.to_thread(sinput_hid_device, node)
+            if not dev:
+                return True   # unplugged, or no longer SInput
+            name, drv = dev
+            # udev done with the node: access as it will be for the next one.
+            await asyncio.to_thread(udev_settle)
+            decky.logger.info("Steam couldn't open %s (SInput mode), rebinding %s (try %d of %d)",
+                              node, name, attempt, SINPUT_FIX_TRIES)
+            try:
+                await asyncio.to_thread(sysfs_write, os.path.join(drv, "unbind"), name)
+            except OSError as e:
+                decky.logger.warning("couldn't unbind %s: %s", name, e)
+                return False
+            try:
+                # Bound again before Steam had dropped it, Steam would keep the old entry.
+                await self._steam_wait(tail, steam, lambda ev: ev[:2] == ("removed", node), SINPUT_REMOVE_WAIT_S)
+            finally:
+                await asyncio.to_thread(sysfs_write, os.path.join(drv, "bind"), name)
+            ev = await self._steam_wait(tail, steam, lambda ev: ev[0] == "added", SINPUT_ADD_WAIT_S)
+            if not ev:
+                decky.logger.warning("Steam didn't pick %s up again", name)
+                return True
+            if ev[2] != "lost":
+                if ev[2] == "ok":
+                    decky.logger.info("Steam opened %s with its SInput driver", ev[1])
+                return True
+            node = ev[1]
+        decky.logger.warning("Steam still couldn't open the SInput controller after %d tries", SINPUT_FIX_TRIES)
+        return False
+
+    async def _sinput_watch(self):
+        """Gives Steam another try at the dongle's SInput node when it lost
+        the permission race for it (see SteamSinput)."""
+        tail, steam = None, SteamSinput()
+        gave_up = set()   # nodes left alone until Steam adds or removes them again
+        while True:
+            try:
+                await asyncio.sleep(SINPUT_LOG_S)
+                path = await asyncio.to_thread(steam_log_path)
+                if not path:
+                    continue
+                if not tail or tail.path != path:
+                    tail, steam = LogTail(path), SteamSinput()
+                for ev in await self._steam_events(tail, steam):
+                    gave_up.discard(ev[1])
+                lost = [n for n in steam.lost() if n not in gave_up]
+                if lost and not self.updating and not await self._sinput_fix(lost[0], tail, steam):
+                    gave_up.update(steam.lost())
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                decky.logger.warning("SInput watch: %s", e)
+                await asyncio.sleep(5.0)
 
     # ---- Background: notifications -----------------------------------------
     async def _monitor(self):
