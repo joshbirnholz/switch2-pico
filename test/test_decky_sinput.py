@@ -141,7 +141,7 @@ class WatchTests(unittest.TestCase):
     def tearDown(self):
         self.dir.cleanup()
 
-    def run_watch(self, steam, seconds):
+    def run_watch(self, steam, seconds, dongle_nodes=("/dev/hidraw2",)):
         plugin = self.b.Plugin()
         plugin.updating = False
 
@@ -156,7 +156,8 @@ class WatchTests(unittest.TestCase):
 
         with patch.multiple(self.b, steam_log_path=lambda: self.path, SINPUT_LOG_S=0.01,
                             SINPUT_REMOVE_WAIT_S=0.5, SINPUT_ADD_WAIT_S=0.5,
-                            sinput_hid_device=lambda node: ("0003:2E8A:10C6.0012", "/sys/bus/hid/drivers/hid-generic"),
+                            sinput_hid_device=lambda node: ("0003:2E8A:10C6.0012", "/sys/bus/hid/drivers/hid-generic")
+                            if node in dongle_nodes else None,
                             udev_settle=lambda: None, sysfs_write=steam.sysfs_write):
             asyncio.run(go())
 
@@ -179,6 +180,17 @@ class WatchTests(unittest.TestCase):
         steam.log(removed("/dev/hidraw2"), denied("/dev/hidraw2"), added("/dev/hidraw2", False))
         self.run_watch(steam, 0.5)
         self.assertEqual(len(steam.ops), 2)
+
+    def test_stale_node_from_before_a_restart(self):
+        # Lost before Steam (or the PC) restarted, which logs no removal; the
+        # node is another device's now. It comes first and mustn't block the
+        # dongle's current one.
+        steam = FakeSteam(self.path, fails=0)
+        steam.log(added("/dev/hidraw2", True), denied("/dev/hidraw11"), added("/dev/hidraw11", False),
+                  removed("/dev/hidraw2"), denied("/dev/hidraw2"), added("/dev/hidraw2", False))
+        self.run_watch(steam, 0.5)
+        dev = "0003:2E8A:10C6.0012"
+        self.assertEqual(steam.ops, [("unbind", dev), ("bind", dev)])
 
     def test_leaves_working_and_disabled_alone(self):
         steam = FakeSteam(self.path, fails=0)

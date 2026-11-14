@@ -418,6 +418,10 @@ class SteamSinput:
     def lost(self):
         return [n for n, s in self.state.items() if s == "lost"]
 
+    def forget(self, node):
+        self.state.pop(node, None)
+        self.denied.discard(node)
+
 
 def sinput_hid_device(node):
     """(HID device name, its driver's sysfs directory) behind /dev/hidrawN, if it is the dongle's SInput one."""
@@ -1058,9 +1062,20 @@ class Plugin:
                     tail, steam = LogTail(path), SteamSinput()
                 for ev in await self._steam_events(tail, steam):
                     gave_up.discard(ev[1])
-                lost = [n for n in steam.lost() if n not in gave_up]
-                if lost and not self.updating and not await self._sinput_fix(lost[0], tail, steam):
-                    gave_up.update(steam.lost())
+                if self.updating:
+                    continue
+                for node in steam.lost():
+                    if node in gave_up:
+                        continue
+                    # The log carries on across Steam restarts and reboots,
+                    # which log no removals: a node lost back then may be
+                    # another device's now.
+                    if not await asyncio.to_thread(sinput_hid_device, node):
+                        steam.forget(node)
+                        continue
+                    if not await self._sinput_fix(node, tail, steam):
+                        gave_up.update(steam.lost())
+                    break
             except asyncio.CancelledError:
                 raise
             except Exception as e:
