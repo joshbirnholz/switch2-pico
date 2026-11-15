@@ -43,7 +43,59 @@ static void legacy_image(uint8_t rev) {
     flash_size = tail_at + sizeof tail + 4;
     checksum();
 }
+// A v17 image: profiles of 61 bytes (everything before the gyro mouse).
+static void v17_image(void) {
+    settings_t s; settings_defaults(&s);
+    s.ext_rev = 17;
+    s.joycon_single = s.decky_options = s.headset_low_latency = 1;
+    s.bonds[0].used = 1; s.bonds[0].addr[5] = 42;
+    const size_t at = offsetof(settings_t, prof);
+    memcpy(flash_image, &s, at);
+    for (int t = 0; t < CTRL_TYPE_COUNT; t++) {
+        uint8_t *c = flash_image + at + t * CTRL_PROFILES_V17_SIZE;
+        memset(c, 0, CTRL_PROFILES_V17_SIZE);
+        for (int i = 0; i < PROFILE_MAX; i++) {
+            profile_t p; settings_default_profile_for((ctrl_type_t)t, USB_MODE_XBOX360, &p);
+            p.stick_deadzone_pct = (uint8_t)(t * 8 + i);
+            p.stick_deadzone_right_pct = 33;
+            if (t == CTRL_JOYCON_PAIR) p.joycon_gyro_side = JOYCON_GYRO_LEFT;
+            memcpy(c + 61 * i, &p, 61);
+        }
+        c[61 * PROFILE_MAX + MODE_SLOT_COUNT] = 3;
+    }
+    const uint8_t tail[4] = {1, 1, 1, 1};
+    size_t tail_at = at + CTRL_TYPE_COUNT * CTRL_PROFILES_V17_SIZE;
+    memcpy(flash_image + tail_at, tail, sizeof tail);
+    flash_size = tail_at + sizeof tail + 4;
+    checksum();
+}
 int main(void) {
+    v17_image(); settings_init();
+    assert(g_settings.ext_rev == SETTINGS_EXT_REV && g_settings.size == sizeof(settings_t));
+    assert(g_settings.joycon_single && g_settings.decky_options && g_settings.headset_low_latency && g_settings.headset_audio_off);
+    assert(g_settings.bonded && g_settings.ctrl_addr[5] == 42);
+    for (int t = 0; t < CTRL_TYPE_COUNT; t++) {
+        assert(g_settings.prof[t].active == 3);
+        for (int i = 0; i < PROFILE_MAX; i++) {
+            profile_t *p = &g_settings.prof[t].p[i];
+            assert(p->stick_deadzone_pct == t * 8 + i && p->stick_deadzone_right_pct == 33);
+            assert(p->joycon_gyro_side == (t == CTRL_JOYCON_PAIR ? JOYCON_GYRO_LEFT : JOYCON_GYRO_RIGHT));
+            assert(p->usb_mode == USB_MODE_XBOX360 && !p->gyro_mouse);
+            profile_t expected; settings_default_profile_for((ctrl_type_t)t, USB_MODE_XBOX360, &expected);
+            assert(p->gyro_mouse_speed_pct == expected.gyro_mouse_speed_pct);
+            assert(!memcmp(p->gyro_mouse_toggle, expected.gyro_mouse_toggle, BUTTON_COMBO_LEN));
+            assert(!memcmp(p->gyro_mouse_recenter, expected.gyro_mouse_recenter, BUTTON_COMBO_LEN));
+        }
+    }
+    // The gyro mouse survives a save.
+    profile_t *g = &g_settings.prof[CTRL_JOYCON_R].p[1];
+    g->gyro_mouse = 1; g->gyro_mouse_speed_pct = 170; g->gyro_mouse_flags = GYRO_MOUSE_FLAG_INVERT_Y;
+    settings_combo_set(g->gyro_mouse_recenter, 1u << IN_ZR);
+    settings_save_now(); memset(&g_settings, 0, sizeof g_settings); settings_init();
+    g = &g_settings.prof[CTRL_JOYCON_R].p[1];
+    assert(g->gyro_mouse == 1 && g->gyro_mouse_speed_pct == 170 && g->gyro_mouse_flags == GYRO_MOUSE_FLAG_INVERT_Y);
+    assert(settings_combo_get(g->gyro_mouse_recenter) == (1u << IN_ZR));
+
     for (uint8_t rev = 14; rev <= 16; rev++) {
         legacy_image(rev); settings_init();
         assert(g_settings.ext_rev == SETTINGS_EXT_REV && g_settings.size == sizeof(settings_t));
@@ -71,5 +123,5 @@ int main(void) {
     flash_image[flash_size - 1] ^= 1; settings_init(); // corrupt image falls back to defaults
     p = settings_active(&g_settings, CTRL_JOYCON_PAIR);
     assert(p->stick_deadzone_pct == 6 && p->stick_deadzone_right_pct == 6 && !p->joycon_gyro_side);
-    puts("Settings storage: v14..16 migration, paired controllers, tail fields, new options and CRC passed");
+    puts("Settings storage: v14..17 migration, paired controllers, tail fields, new options and CRC passed");
 }

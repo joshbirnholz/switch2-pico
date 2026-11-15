@@ -1,9 +1,10 @@
 // The profile list (pick, add) and the profile editor (name, emulated
-// controller, button mapping, sticks, rumble, Mouse Mode, delete). Every
+// controller, button mapping, sticks, rumble, Mouse Mode, gyro mouse, delete). Every
 // change is saved right away, as in the panel.
 import { DialogButton, Focusable, ModalRoot, showModal, SliderField, TextField, ToggleField } from "@decky/ui";
 import { useEffect, useRef, useState } from "react";
 import { RumbleOptions } from "./rumble";
+import { GyroMouseOptions } from "./gyro";
 import { OutputIcon, SlotIcon } from "./icons";
 import { AllButtonsModal, confirm, PickerModal, SOFT_CSS, SoftButton } from "./modals";
 import {
@@ -324,6 +325,7 @@ export function ProfileEditModal(props: { S: Settings; t: number; i: number; sav
             )}
           </>
         )}
+        {isJoyCon(t) && mouseMode(P.mode) && <GyroMouseOptions t={t} p={P} save={commit} />}
         <DialogButton style={{ marginTop: 12 }} disabled={count <= 1} onClick={del}>
           Delete profile…
         </DialogButton>

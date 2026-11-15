@@ -58,6 +58,39 @@ await page.evaluate(()=>{
 const saved=await page.evaluate(()=>savedBody);
 assert(saved.includes(',d0,0,Imported'));
 assert(saved.includes(',d19,1,Test%20profile'));
+// Gyro mouse (firmware that has it): the pair's options and combinations,
+// stashed and saved as the g-group (Joy-Con types only).
+await page.evaluate(()=>{S.profile_gyro_mouse=true;stashProfile();MAP_CTRL=2;showTab(2);showSub('mouse');renderProfile();});
+assert(await page.locator('#gmouse-update').isHidden());
+assert(await page.locator('#pf-gmouse').isEnabled());
+assert(await page.locator('#pf-gmouse-speed').isDisabled());
+await page.locator('#pf-gmouse').check();
+assert(await page.locator('#pf-gmouse-speed').isEnabled());
+assert(await page.locator('#pf-gmouse-toggle input[data-in="20"]').isChecked());   // C
+assert(await page.locator('#pf-gmouse-toggle input[data-in="13"]').isChecked());   // Capture
+assert.equal(await page.locator('#pf-gmouse-toggle input').count(),23);
+assert((await page.locator('#gmouse-hint').textContent()).includes('left Joy-Con'));
+await page.locator('#pf-gmouse-toggle input[data-in="20"]').uncheck();
+await page.locator('#pf-gmouse-recenter input[data-in="6"]').check();   // ZL
+await page.locator('#pf-gmouse-inv-y').check();
+await page.locator('#pf-gmouse-clicks').uncheck();
+await page.evaluate(()=>stashProfile());
+const gp=await page.evaluate(()=>S.types[2].profiles[0]);
+assert.equal(gp.gyro_mouse,1);assert.equal(gp.gyro_mouse_toggle,1<<13);assert.equal(gp.gyro_mouse_recenter,1<<6);
+assert.equal(gp.gyro_mouse_flags,2|4);
+await page.evaluate(()=>save());
+const gyroBody=await page.evaluate(()=>savedBody);
+assert(gyroBody.includes(`,g1,100,6,${1<<13},${1<<6},Test%20profile`));
+assert(!/prof_0_0=[^&]*,g\d/.test(gyroBody));   // not on the Pro Controller
+// A single (R): only its own buttons.
+await page.evaluate(()=>{stashProfile();MAP_CTRL=4;showTab(4);renderProfile();});
+assert.equal(await page.locator('#pf-gmouse-toggle input').count(),12);
+assert(await page.locator('#pf-gmouse-toggle input[data-in="9"]').isChecked());   // Plus
+await page.evaluate(()=>{S.profile_gyro_mouse=false;renderProfile();});
+assert(await page.locator('#gmouse-update').isVisible());
+assert(await page.locator('#pf-gmouse').isDisabled());
+await page.evaluate(()=>{save();S.profile_gyro_mouse=true;showSub('sticks');});
+assert(!/,g\d+,\d+,/.test(await page.evaluate(()=>savedBody)));
 // Correct controls on single Joy-Con profiles, including a narrow viewport.
 await page.evaluate(()=>{stashProfile();MAP_CTRL=3;showTab(3);renderProfile();});
 assert(await page.locator('#pf-right-deadzone-row').isHidden());
@@ -74,7 +107,9 @@ assert(await page.locator('#pf-deadzone-right').isDisabled());
 await page.evaluate(()=>{
   S.profile_controls=true;
   S.modes.forEach(m=>m.outputs=Array.from({length:32},(_,i)=>'Output '+i));
-  S.types.forEach((T,t)=>{const p=T.profiles[0];T.profiles=Array.from({length:8},()=>({...p,name:'%'.repeat(19),deadzone:40,outer:100,strength:200,rumble_frequency:10,impulse_strength:200,map:Array(23).fill(28)}))});
+  S.profile_gyro_mouse=true;
+  S.types.forEach((T,t)=>{const p=T.profiles[0];T.profiles=Array.from({length:8},()=>({...p,name:'%'.repeat(19),deadzone:40,outer:100,strength:200,rumble_frequency:10,impulse_strength:200,map:Array(23).fill(28),
+    ...(t>=2?{gyro_mouse:1,gyro_mouse_speed:250,gyro_mouse_flags:7,gyro_mouse_toggle:(1<<23)-1,gyro_mouse_recenter:(1<<23)-1}:{})}))});
   $('wifi_pass').value='%'.repeat(63);
   const ssid=document.querySelector('[data-k=wifi_ssid]');if(ssid)ssid.value='%'.repeat(32);
   renderProfile();return save();

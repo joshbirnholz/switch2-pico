@@ -155,6 +155,14 @@ label.check{flex-direction:row;align-items:center;gap:10px;color:var(--fg);font-
 label.check.top{align-items:flex-start}
 label.check input{width:18px;height:18px;margin:0;flex:none;accent-color:var(--acc)}
 label.check.off{color:var(--muted)}
+/* Button combinations (gyro mouse): one chip per button, several can be on. */
+.combo-field{display:flex;flex-direction:column;gap:6px;font-size:14px;color:var(--fg)}
+.combo{display:flex;flex-wrap:wrap;gap:6px}
+.combo label{flex-direction:row;align-items:center;gap:6px;border:1px solid var(--fieldline);border-radius:999px;padding:4px 10px;font-size:13px;color:var(--fg);cursor:pointer}
+.combo label:has(input:checked){border-color:var(--acc);background:color-mix(in srgb,var(--acc) 16%,transparent)}
+.combo label:has(input:disabled){opacity:.5;cursor:default}
+.combo input{width:15px;height:15px;margin:0;accent-color:var(--acc)}
+.panel-h{grid-column:1/-1;margin:6px 0 0;padding-top:16px;border-top:1px solid var(--soft);font-size:15px;color:var(--fg)}
 input,select,button{font:inherit;color:inherit}
 input[type=text],input[type=password],input[type=number],select{background:var(--field);border:1px solid var(--fieldline);border-radius:8px;padding:7px 9px;min-width:0;color:var(--fg);font-size:14px}
 input[type=range]{width:100%;accent-color:var(--acc)}
@@ -306,7 +314,7 @@ body.offline #usb-help{display:flex}
           <span class="slider"><input type="range" min="0" max="40" id="pf-deadzone-right"><b><span id="v-pf-deadzone-right"></span>%</b></span></label>
         <p id="profile-controls-update" class="note" hidden>Independent deadzones and gyro-side selection require firmware 0.20.0 or newer.</p>
         <label id="pf-gyro-side-row">Joy-Con gyro side
-          <select id="pf-gyro-side"><option value="0">Right Joy-Con</option><option value="1">Left Joy-Con</option></select></label>
+          <select id="pf-gyro-side" onchange="if(isJC())mouseFields()"><option value="0">Right Joy-Con</option><option value="1">Left Joy-Con</option></select></label>
         <label>Full deflection at <span class="hint">Reach 100% before the edge</span>
           <span class="slider"><input type="range" min="50" max="100" id="pf-outer"><b><span id="v-pf-outer"></span>%</b></span></label>
         <label class="check"><input type="checkbox" id="pf-swap"><span id="pf-swap-label">Swap left and right sticks</span></label>
@@ -334,6 +342,19 @@ body.offline #usb-help{display:flex}
         <label class="check" style="grid-column:1/-1"><input type="checkbox" id="pf-mouse-inv-v"><span>Invert up / down scrolling</span></label>
         <label class="check" style="grid-column:1/-1"><input type="checkbox" id="pf-mouse-inv-h"><span>Invert left / right scrolling</span></label>
         <p class="note" style="grid-column:1/-1">Lay a Joy-Con 2 on its side on a surface and move it: it's a mouse while it lies there, and each Joy-Con is its own mouse. Its shoulder button clicks, its trigger right-clicks, its stick click middle-clicks and its stick scrolls.</p>
+        <h3 class="panel-h">Gyro mouse</h3>
+        <p class="note" id="gmouse-update" style="grid-column:1/-1" hidden>The gyro mouse requires firmware 0.21.0 or newer.</p>
+        <label class="check top" style="grid-column:1/-1"><input type="checkbox" id="pf-gmouse" onchange="mouseFields()"><span>Gyro mouse<span class="hint" style="display:block" id="gmouse-hint">Turn and tilt the Joy-Con to move the pointer.</span></span></label>
+        <label>Gyro speed
+          <span class="slider"><input type="range" min="10" max="250" step="5" id="pf-gmouse-speed"><b><span id="v-pf-gmouse-speed"></span>%</b></span></label>
+        <label class="check top" style="grid-column:1/-1"><input type="checkbox" id="pf-gmouse-clicks"><span>Mouse buttons on the Joy-Con<span class="hint" style="display:block" id="gmouse-clicks-hint">While the gyro mouse is on, the shoulder button will click, the trigger will right-click and the stick click will middle-click.</span></span></label>
+        <label class="check" style="grid-column:1/-1"><input type="checkbox" id="pf-gmouse-inv-x"><span>Invert left / right</span></label>
+        <label class="check" style="grid-column:1/-1"><input type="checkbox" id="pf-gmouse-inv-y"><span>Invert up / down</span></label>
+        <div class="combo-field" style="grid-column:1/-1"><span>On / off <span class="hint">Press these buttons together to turn the gyro mouse on or off. With none chosen, it will always be on.</span></span>
+          <div class="combo" id="pf-gmouse-toggle" role="group" aria-label="Gyro mouse on / off buttons"></div></div>
+        <div class="combo-field" style="grid-column:1/-1"><span>Recenter <span class="hint">Hold these buttons together to keep the pointer still while you bring the Joy-Con back to center.</span></span>
+          <div class="combo" id="pf-gmouse-recenter" role="group" aria-label="Gyro mouse recenter buttons"></div></div>
+        <p class="note" style="grid-column:1/-1">The controller won't get the on / off and recenter buttons while you press them together.</p>
       </div>
     </section>
 
@@ -927,8 +948,31 @@ function stashProfile(){
   P.threshold=+$('pf-threshold').value;P.rumble=$('pf-rumble').checked?1:0;P.strength=+$('pf-strength').value;
   if(isJC()){
     P.mouse=$('pf-mouse').checked?1:0;P.mouse_speed=+$('pf-mouse-speed').value;P.mouse_flags=($('pf-mouse-hscroll').checked?0:1)|($('pf-mouse-inv-v').checked?2:0)|($('pf-mouse-inv-h').checked?4:0);
+    if(S.profile_gyro_mouse){
+      P.gyro_mouse=$('pf-gmouse').checked?1:0;P.gyro_mouse_speed=+$('pf-gmouse-speed').value;
+      P.gyro_mouse_flags=($('pf-gmouse-inv-x').checked?1:0)|($('pf-gmouse-inv-y').checked?2:0)|($('pf-gmouse-clicks').checked?0:4);
+      P.gyro_mouse_toggle=comboValue('pf-gmouse-toggle');P.gyro_mouse_recenter=comboValue('pf-gmouse-recenter');
+    }
   }
 }
+// Gyro mouse button combinations: one chip per button of the controller
+// type (in_button_t bits).
+const COMBO_LABEL={LStick:'Stick click L',RStick:'Stick click R',Up:'D-pad up',Down:'D-pad down',Left:'D-pad left',Right:'D-pad right'};
+function comboButtons(t){
+  const absent=new Set(JC_ABSENT[t]||[]);
+  return IN.map((n,i)=>({n,i})).filter(({n})=>!absent.has(n)&&(t===2||(n!=='SL_R'&&n!=='SR_R'))).map(({n,i})=>{
+    let label=COMBO_LABEL[n]||n;
+    if(t===2)label={GL:'SL (L)',GR:'SR (L)',SL_R:'SL (R)',SR_R:'SR (R)'}[n]||label;
+    else label={GL:'SL',GR:'SR'}[n]||label;
+    // A single Joy-Con 2's stick (sideways: the face buttons are a D-pad on the (L)).
+    if(t!==2&&(n==='LStick'||n==='RStick'))label='Stick click';
+    return {i,label};
+  });
+}
+function renderCombo(id,bits){
+  $(id).innerHTML=comboButtons(MAP_CTRL).map(({i,label})=>`<label><input type="checkbox" data-in="${i}"${(bits>>>i)&1?' checked':''}>${esc(label)}</label>`).join('');
+}
+function comboValue(id){let v=0;$(id).querySelectorAll('input[data-in]').forEach(el=>{if(el.checked)v|=1<<+el.dataset.in});return v>>>0}
 // Mouse Mode: Xbox 360 and SInput modes only (in the other modes Linux's
 // controller drivers claim the mouse interface too; the firmware ignores it there).
 const mouseMode=m=>m===3||m===5;
@@ -937,6 +981,14 @@ function mouseFields(){
   $('mouse-x360').hidden=x360;
   $('pf-mouse').disabled=!x360;
   ['pf-mouse-speed','pf-mouse-hscroll','pf-mouse-inv-v','pf-mouse-inv-h'].forEach(id=>$(id).disabled=!x360||!$('pf-mouse').checked);
+  const g=x360&&!!S.profile_gyro_mouse;
+  $('gmouse-update').hidden=!!S.profile_gyro_mouse;
+  $('pf-gmouse').disabled=!g;
+  const on=g&&$('pf-gmouse').checked;
+  ['pf-gmouse-speed','pf-gmouse-clicks','pf-gmouse-inv-x','pf-gmouse-inv-y'].forEach(id=>$(id).disabled=!on);
+  document.querySelectorAll('#pf-gmouse-toggle input,#pf-gmouse-recenter input').forEach(el=>el.disabled=!on);
+  // The Joy-Con that moves the pointer: the one whose motion the controller reports.
+  $('gmouse-hint').textContent='Turn and tilt the '+(MAP_CTRL===2?($('pf-gyro-side').value==='1'?'left':'right')+' Joy-Con':'Joy-Con')+' to move the pointer.';
 }
 // Button icons for the profile tiles.
 function btnIcon(key){
@@ -1034,6 +1086,12 @@ function renderProfile(){
     set('pf-mouse-speed',P.mouse_speed||100);
     $('pf-mouse-hscroll').checked=!((P.mouse_flags|0)&1);
     $('pf-mouse-inv-v').checked=!!((P.mouse_flags|0)&2);$('pf-mouse-inv-h').checked=!!((P.mouse_flags|0)&4);
+    const gf=P.gyro_mouse_flags|0;
+    $('pf-gmouse').checked=!!P.gyro_mouse;
+    set('pf-gmouse-speed',P.gyro_mouse_speed||100);
+    $('pf-gmouse-clicks').checked=!(gf&4);$('pf-gmouse-inv-x').checked=!!(gf&1);$('pf-gmouse-inv-y').checked=!!(gf&2);
+    renderCombo('pf-gmouse-toggle',P.gyro_mouse_toggle??gyroMouseToggleDefault(MAP_CTRL));
+    renderCombo('pf-gmouse-recenter',P.gyro_mouse_recenter|0);
     mouseFields();
   }
   renderMap(P.mode);
@@ -1048,6 +1106,10 @@ function profName(v){
 }
 // PROFILE_FILES_BEGIN: pure versioned file format and validation.
 const PROFILE_FILE_FORMAT='switch2-pico-profiles';
+// The gyro mouse's on / off buttons to start with (in_button_t bits, as
+// core/src/profiles.c): C + Capture on a pair, Minus + Capture on a single
+// (L), C + Plus on a single (R).
+function gyroMouseToggleDefault(t){return t===2?(1<<20|1<<13):t===3?(1<<8|1<<13):t===4?(1<<20|1<<9):0}
 function profileNumber(p,k,min,max,fallback){
   const v=p[k]===undefined?fallback:p[k];
   if(!Number.isInteger(v)||v<min||v>max)throw Error(`Invalid ${k}: expected ${min}–${max}.`);
@@ -1065,13 +1127,16 @@ function cleanImportedProfile(p,t,settings){
   });
   const n=(key,lo,hi,def)=>profileNumber(p,key,lo,hi,def);
   const deadzone=n('deadzone',0,40);
-  const mouse=n('mouse',0,1,0),gyro=n('gyro_side',0,1,0);
-  if((t<2&&mouse)||(t!==2&&gyro))throw Error('This profile has Joy-Con options for a different controller type.');
+  const mouse=n('mouse',0,1,0),gyro=n('gyro_side',0,1,0),gmouse=n('gyro_mouse',0,1,0);
+  if((t<2&&(mouse||gmouse))||(t!==2&&gyro))throw Error('This profile has Joy-Con options for a different controller type.');
+  const jc=t>=2,combo=k=>n(k,0,(1<<IN.length)-1,k==='gyro_mouse_toggle'?gyroMouseToggleDefault(t):0);
   return {name:p.name,mode,map,deadzone,deadzone_right:n('deadzone_right',0,40,deadzone),gyro_side:gyro,
     outer:n('outer',50,100),swap:n('swap',0,1),threshold:n('threshold',0,255),rumble:n('rumble',0,1),strength:n('strength',0,200),
     rumble_style:n('rumble_style',0,3,0),rumble_frequency:n('rumble_frequency',0,10,5),
     impulse_flags:n('impulse_flags',0,3,0),impulse_strength:n('impulse_strength',0,200,100),impulse_frequency:n('impulse_frequency',1,10,10),
-    mouse,mouse_speed:n('mouse_speed',t>=2?10:0,250,t>=2?100:0),mouse_flags:n('mouse_flags',0,7,0)};
+    mouse,mouse_speed:n('mouse_speed',t>=2?10:0,250,t>=2?100:0),mouse_flags:n('mouse_flags',0,7,0),
+    ...(jc?{gyro_mouse:gmouse,gyro_mouse_speed:n('gyro_mouse_speed',10,250,100),gyro_mouse_flags:n('gyro_mouse_flags',0,7,0),
+      gyro_mouse_toggle:combo('gyro_mouse_toggle'),gyro_mouse_recenter:combo('gyro_mouse_recenter')}:{})};
 }
 function validateProfileFile(doc,settings){
   if(!doc||doc.format!==PROFILE_FILE_FORMAT||doc.version!==1)throw Error('This is not a supported Switch2-Pico profile file (version 1).');
@@ -1128,7 +1193,8 @@ async function importProfiles(input){
   }catch(e){toast('Import failed: '+e.message)}
 }
 
-function newProfile(m){return {name:SHORT[m],mode:m,deadzone:6,deadzone_right:6,gyro_side:0,outer:95,swap:0,threshold:120,rumble:1,strength:100,rumble_style:m===3?1:0,rumble_frequency:5,impulse_flags:0,impulse_strength:100,impulse_frequency:10,mouse:0,mouse_speed:100,mouse_flags:0,map:TYPE().defaults[m].slice()}}
+function newProfile(m){return {name:SHORT[m],mode:m,deadzone:6,deadzone_right:6,gyro_side:0,outer:95,swap:0,threshold:120,rumble:1,strength:100,rumble_style:m===3?1:0,rumble_frequency:5,impulse_flags:0,impulse_strength:100,impulse_frequency:10,mouse:0,mouse_speed:100,mouse_flags:0,
+  ...(isJC()?{gyro_mouse:0,gyro_mouse_speed:100,gyro_mouse_flags:0,gyro_mouse_toggle:gyroMouseToggleDefault(MAP_CTRL),gyro_mouse_recenter:0}:{}),map:TYPE().defaults[m].slice()}}
 // Emulated Controller: None clears the button; on an empty button a mode makes
 // a profile; another mode starts the mapping over from that mode's defaults.
 function profMode(m){
@@ -1266,7 +1332,8 @@ async function save(){
   const prof=[];
   S.types.forEach((T,t)=>{
     T.profiles.forEach((P,i)=>prof.push(`prof_${t}_${i}=`+(P?[P.mode,P.deadzone,P.outer,P.swap,P.threshold,P.rumble,P.strength,...P.map].join(',')+
-      (S.profile_mouse?`,m${P.mouse?1:0},${P.mouse_speed||100},${(P.mouse_flags|0)&7}`:'')+`,r${P.rumble_style||0},${P.rumble_frequency||5},${P.impulse_flags||0},${P.impulse_strength??100},${P.impulse_frequency||10},`+(S.profile_controls?`d${P.deadzone_right??P.deadzone},${P.gyro_side||0},`:'')+encodeURIComponent(P.name):'')));
+      (S.profile_mouse?`,m${P.mouse?1:0},${P.mouse_speed||100},${(P.mouse_flags|0)&7}`:'')+`,r${P.rumble_style||0},${P.rumble_frequency||5},${P.impulse_flags||0},${P.impulse_strength??100},${P.impulse_frequency||10},`+(S.profile_controls?`d${P.deadzone_right??P.deadzone},${P.gyro_side||0},`:'')+
+      (S.profile_gyro_mouse&&t>=2?`g${P.gyro_mouse?1:0},${P.gyro_mouse_speed||100},${(P.gyro_mouse_flags|0)&7},${(P.gyro_mouse_toggle??gyroMouseToggleDefault(t))>>>0},${(P.gyro_mouse_recenter|0)>>>0},`:'')+encodeURIComponent(P.name):'')));
     p.append(`active_${t}`,T.active);
   });
   document.querySelectorAll('[data-k]').forEach(el=>p.append(el.dataset.k,el.type==='checkbox'?(el.checked?1:0):el.value));

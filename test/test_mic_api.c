@@ -39,6 +39,28 @@ static void profile_compatibility(void) {
     assert(parsed.stick_deadzone_right_pct==0 && parsed.joycon_gyro_side==0 && !strcmp(parsed.name,"New options"));
     strcpy(suffix,"m0,100,0,racing");
     assert(parse_profile(form,&parsed) && !strcmp(parsed.name,"racing") && parsed.rumble_style==1);
+    // Gyro mouse group: kept from the stored profile when left out.
+    old->gyro_mouse=1;old->gyro_mouse_speed_pct=150;old->gyro_mouse_flags=2;
+    settings_combo_set(old->gyro_mouse_toggle,(1u<<IN_C)|(1u<<IN_CAPTURE));
+    strcpy(suffix,"m0,100,0,r3,5,2,80,9,d0,0,Kept");
+    assert(parse_profile(form,&parsed) && !strcmp(parsed.name,"Kept"));
+    assert(parsed.gyro_mouse==1 && parsed.gyro_mouse_speed_pct==150 && parsed.gyro_mouse_flags==2);
+    assert(settings_combo_get(parsed.gyro_mouse_toggle)==((1u<<IN_C)|(1u<<IN_CAPTURE)));
+    snprintf(suffix,sizeof form-pos,"m0,100,0,r3,5,2,80,9,d0,0,g1,80,5,%lu,%lu,Gyro",
+             (unsigned long)(1u<<IN_SR_R),(unsigned long)((1u<<IN_ZL)|(1u<<IN_LSTICK)));
+    assert(parse_profile(form,&parsed) && !strcmp(parsed.name,"Gyro"));
+    assert(parsed.gyro_mouse==1 && parsed.gyro_mouse_speed_pct==80 && parsed.gyro_mouse_flags==5);
+    assert(settings_combo_get(parsed.gyro_mouse_toggle)==(1u<<IN_SR_R));
+    assert(settings_combo_get(parsed.gyro_mouse_recenter)==((1u<<IN_ZL)|(1u<<IN_LSTICK)));
+    // A name that only looks like the group stays a name.
+    strcpy(suffix,"m0,100,0,r3,5,2,80,9,d0,0,gyro fun");
+    assert(parse_profile(form,&parsed) && !strcmp(parsed.name,"gyro fun") && parsed.gyro_mouse==1);
+    // A new profile (nothing stored) without the group: the defaults.
+    old->used=0;s_parse_type=CTRL_JOYCON_PAIR;
+    strcpy(suffix,"m0,100,0,r3,5,2,80,9,d0,0,Fresh");
+    assert(parse_profile(form,&parsed) && !parsed.gyro_mouse && parsed.gyro_mouse_speed_pct==100);
+    assert(settings_combo_get(parsed.gyro_mouse_toggle)==((1u<<IN_C)|(1u<<IN_CAPTURE)));
+    s_parse_type=0;
 }
 int main(void) {
     profile_compatibility();

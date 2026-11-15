@@ -79,6 +79,42 @@ void joycon_mouse_scroll(bool left, float x, float y, uint8_t flags, float *whee
 // count (the caller keeps the remainder).
 void joycon_mouse_apply(const profile_t *p, int32_t dx, int32_t dy, int32_t *ox, int32_t *oy);
 
+// ---- Gyro mouse (see GYRO_MOUSE_FLAG_* in settings.h) ----
+// Pointer counts per degree turned at 100% speed.
+#define GYRO_MOUSE_COUNTS_PER_DEG 20.0f
+
+// Which Joy-Con 2 moves the pointer, as the USB mouse index (0: the (L), 1:
+// the (R)), from what is connected (`has_l`, `has_r`); -1: none. The same
+// one whose motion the controller reports (joycon_merge()).
+int joycon_gyro_mouse_side(ctrl_type_t type, joycon_gyro_side_t gyro_side, bool has_l, bool has_r);
+
+// A button combination, given as in_button_t bits, as raw S2_BTN_* bits.
+uint32_t joycon_combo_raw(uint32_t in_bits);
+// The combination became fully held between `prev` and `raw` (raw S2_BTN_*
+// bits; an empty combination never is).
+static inline bool joycon_combo_pressed(uint32_t combo_raw, uint32_t prev, uint32_t raw) {
+    return combo_raw && (raw & combo_raw) == combo_raw && (prev & combo_raw) != combo_raw;
+}
+static inline bool joycon_combo_held(uint32_t combo_raw, uint32_t raw) {
+    return combo_raw && (raw & combo_raw) == combo_raw;
+}
+
+typedef struct {
+    bool have_up;
+    float up[3];        // smoothed gravity direction (up), in the Joy-Con's own axes
+} joycon_gyro_mouse_t;
+
+void joycon_gyro_mouse_reset(joycon_gyro_mouse_t *g);
+// Pointer movement (counts, right / down positive) for one motion sample of
+// the Joy-Con at USB mouse index `side` (see joycon_gyro_mouse_side()):
+// `gyro_dps` its turn rate and `accel` its raw accelerometer (+-8 g), both in
+// its own axes, over `dt` seconds. Turning around the vertical (from the
+// accelerometer) moves the pointer left / right whichever way the Joy-Con is
+// held; tilting it about its width (a single Joy-Con 2 held sideways: its
+// length) up / down. Small, slow turns (hand tremor) are damped.
+void joycon_gyro_mouse_step(joycon_gyro_mouse_t *g, ctrl_type_t type, int side, const profile_t *p,
+                            const float gyro_dps[3], const int16_t accel[3], float dt, float *dx, float *dy);
+
 #ifdef __cplusplus
 }
 #endif

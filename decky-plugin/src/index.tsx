@@ -10,6 +10,7 @@ import {
   setSettings, UpdateInfo,
 } from "./api";
 import { RumbleOptions } from "./rumble";
+import { GyroMouseOptions } from "./gyro";
 import { InputIcon, OutputIcon, SlotIcon } from "./icons";
 import {
   allButtons, CTRL_GC, CtrlType, Extra, extraButtons, headsetAudio, headsetAudioOn, isJoyCon, MF_INVERT_H, MF_INVERT_V, MF_UP_DOWN_ONLY, MODE_NAMES, mouseMode, PIDS,
@@ -372,6 +373,17 @@ function Content() {
               </PanelSectionRow>
             </>
           )}
+        </PanelSection>
+      )}
+
+      {T && P && isJoyCon(t) && ready.length > 0 && (
+        <PanelSection title="Gyro mouse">
+          <GyroMouseOptions
+            t={t}
+            p={P}
+            save={(np) => { void saveProfile(np); }}
+            wrap={(c, key) => <PanelSectionRow key={key}>{c}</PanelSectionRow>}
+          />
         </PanelSection>
       )}
 

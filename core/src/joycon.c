@@ -149,3 +149,87 @@ void joycon_mouse_apply(const profile_t *p, int32_t dx, int32_t dy, int32_t *ox,
     *ox = dx * sp;
     *oy = dy * sp;
 }
+
+// ---------------------------------------------------------------------------
+// Gyro mouse
+// ---------------------------------------------------------------------------
+int joycon_gyro_mouse_side(ctrl_type_t type, joycon_gyro_side_t gyro_side, bool has_l, bool has_r) {
+    if (type == CTRL_JOYCON_L) has_r = false;
+    if (type == CTRL_JOYCON_R) has_l = false;
+    if (gyro_side == JOYCON_GYRO_LEFT && has_l) return 0;
+    if (has_r) return 1;
+    if (has_l) return 0;
+    return -1;
+}
+
+uint32_t joycon_combo_raw(uint32_t in_bits) {
+    uint32_t raw = 0;
+    for (int i = 0; i < IN_COUNT; i++) {
+        if (in_bits & (1u << i)) raw |= mapping_in_button_s2_bit((in_button_t)i);
+    }
+    return raw;
+}
+
+void joycon_gyro_mouse_reset(joycon_gyro_mouse_t *g) {
+    memset(g, 0, sizeof *g);
+}
+
+#define GYRO_MOUSE_UP_TAU    0.3f   // s: how quickly "up" follows the accelerometer
+#define GYRO_MOUSE_TIGHTEN   1.0f   // deg/s: slower turns are scaled down (tremor)
+
+static float dot3(const float a[3], const float b[3]) {
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+static bool normalize3(float v[3]) {
+    float n = sqrtf(dot3(v, v));
+    if (n < 1e-6f) return false;
+    for (int k = 0; k < 3; k++) v[k] /= n;
+    return true;
+}
+
+void joycon_gyro_mouse_step(joycon_gyro_mouse_t *g, ctrl_type_t type, int side, const profile_t *p,
+                            const float gyro_dps[3], const int16_t accel[3], float dt, float *dx, float *dy) {
+    *dx = *dy = 0.0f;
+    // Up, from gravity: only readings near 1 g count (not while shaken).
+    float a[3] = {accel[0], accel[1], accel[2]};
+    const float one_g = 32767.0f / 8.0f;
+    float g2 = dot3(a, a);
+    if (g2 > 0.49f * one_g * one_g && g2 < 1.69f * one_g * one_g && normalize3(a)) {
+        if (!g->have_up) {
+            memcpy(g->up, a, sizeof g->up);
+            g->have_up = true;
+        } else {
+            float k = dt / (GYRO_MOUSE_UP_TAU + dt);
+            for (int i = 0; i < 3; i++) g->up[i] += (a[i] - g->up[i]) * k;
+            if (!normalize3(g->up)) memcpy(g->up, a, sizeof g->up);
+        }
+    }
+    if (!g->have_up || dt <= 0.0f) return;
+    // Yaw: the turn around the vertical. Pitch: around the axis from the
+    // hand's left to its right, made level: the Joy-Con's width, or its
+    // length on a single one held sideways (an (L)'s top points left, an
+    // (R)'s right).
+    float yaw = dot3(gyro_dps, g->up);
+    float right[3] = {1.0f, 0.0f, 0.0f};
+    if (type == CTRL_JOYCON_L || type == CTRL_JOYCON_R) {
+        right[0] = 0.0f;
+        right[1] = side == 0 ? -1.0f : 1.0f;
+    }
+    float along = dot3(right, g->up);
+    for (int i = 0; i < 3; i++) right[i] -= along * g->up[i];
+    float pitch = normalize3(right) ? dot3(gyro_dps, right) : 0.0f;
+    // Counter-clockwise from above (positive yaw) is a turn to the left; a
+    // positive pitch tilts the top up: pointer left, pointer up.
+    float x = -yaw, y = -pitch;
+    float speed = sqrtf(x * x + y * y);
+    if (speed < GYRO_MOUSE_TIGHTEN) {
+        x *= speed / GYRO_MOUSE_TIGHTEN;
+        y *= speed / GYRO_MOUSE_TIGHTEN;
+    }
+    float scale = GYRO_MOUSE_COUNTS_PER_DEG * (float)(p->gyro_mouse_speed_pct ? p->gyro_mouse_speed_pct : 100) / 100.0f * dt;
+    if (p->gyro_mouse_flags & GYRO_MOUSE_FLAG_INVERT_X) x = -x;
+    if (p->gyro_mouse_flags & GYRO_MOUSE_FLAG_INVERT_Y) y = -y;
+    *dx = x * scale;
+    *dy = y * scale;
+}

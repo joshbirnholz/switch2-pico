@@ -38,7 +38,7 @@ Switch 2 Pro Controller  ──BLE──▶  dongle    ──USB──▶  PC / 
 | Nintendo GameCube Controller | Basic support: buttons, sticks, analog triggers acting as L/R past a threshold, and rumble on its motor (strength by switching it on and off every 12 ms, as SDL does). |
 | Joy-Con 2 | A **Joy-Con 2 (L)** and a **Joy-Con 2 (R)** connected together are one controller, **Joy-Con 2 (L/R)**. A single one is held sideways (SL / SR are its shoulders). Each of the three has its own profiles. **Untested on hardware** (see [Joy-Con 2](#joy-con-2)). |
 | Headphone jack | Pico 2 W, SInput mode: USB headphone output and headset microphone input through a Pro Controller 2's jack (see [Headphones](#headphones-pro-controller-2)). |
-| Mouse | Mouse Mode: a Joy-Con 2's optical sensor as a USB mouse next to the controller (a profile option, Xbox 360 and SInput modes). |
+| Mouse | Mouse Mode: a Joy-Con 2's optical sensor as a USB mouse next to the controller. Gyro mouse: turning and tilting a Joy-Con 2 moves the pointer, with button combinations to turn it on and off and to recenter. Both are profile options (Xbox 360 and SInput modes). |
 | Configuration page | Over **WebUSB** in Chrome/Edge with the dongle plugged in, or (Pico 2 W only) over the dongle's own Wi-Fi from any phone or computer. |
 
 ## Hardware
@@ -178,7 +178,26 @@ Mode on or off (and every other option and mapping) takes effect right
 away; only switching to a profile with another emulated controller restarts
 the dongle.
 
-**Xbox 360 and SInput modes only.** Mouse Mode works only in profiles that
+**Gyro mouse.** Under the Mouse tab, **Gyro mouse** moves the pointer with
+the Joy-Con 2 whose motion the controller reports (a pair's **Joy-Con gyro
+side**, or the single Joy-Con): turning it left / right moves the pointer
+left / right whichever way it's held (the dongle finds the vertical from
+gravity), and tilting it up / down moves it up / down. **On / off** is a
+button combination that turns it on and off when pressed together (by
+default C + Capture on a pair, Minus + Capture on a single (L), C + Plus on
+a single (R); with none chosen it's always on). **Recenter** is a
+combination that, while held, keeps the pointer still so you can bring the
+Joy-Con back to a comfortable position (none by default). The controller
+doesn't get those buttons while they are pressed together. While the gyro
+mouse is on, that Joy-Con's shoulder clicks, its trigger right-clicks and its
+stick click middle-clicks (**Mouse buttons on the Joy-Con**; off: they stay
+the controller's). **Gyro speed**, **Invert left / right** and **Invert up /
+down** tune it; slow movements under about 1°/s are damped so hand tremor
+doesn't shake the pointer. It uses the gyro calibration under Motion, and
+the same USB mice as Mouse Mode (a Joy-Con lying on a surface is the optical
+mouse instead). The Decky plugin has the same options.
+
+**Xbox 360 and SInput modes only.** Mouse Mode and the gyro mouse work only in profiles that
 emulate an Xbox 360 or an SInput controller (no kernel driver claims either
 device as a whole); elsewhere the setting is kept but does nothing (and the
 Joy-Con's buttons all stay the controller's). In the Switch Pro and
@@ -601,7 +620,7 @@ On the page you can:
 
 `decky-plugin/` is a [Decky Loader](https://decky.xyz) plugin with quick
 controls in the Quick Access menu: the profile, button mapping, Joy-Con 2
-Mouse Mode, pairing and paired controllers, reboot and firmware updates, and
+Mouse Mode and gyro mouse, pairing and paired controllers, reboot and firmware updates, and
 a motion (DSU / cemuhook) server that gives emulators the controller's gyro
 under Steam Input. It talks to the dongle over USB like the
 configuration page. See [decky-plugin/README.md](decky-plugin/README.md).
@@ -685,6 +704,7 @@ reconnect, and work with a Switch 1 console and with Steam on SteamOS.
 | IMU axis mapping and units | Medium: derived from SDL's Switch 1 and Switch 2 drivers. Use the gyro settings if an axis feels wrong. |
 | HD rumble **amplitude** | Medium-high |
 | Joy-Con 2: connection, pairing, input, sideways use, pairs | **Untested.** Built from the published report layouts (the same report 0x05 as the Pro Controller, SL / SR bits, the Joy-Con-specific reports and rumble characteristics). |
+| Joy-Con 2 gyro mouse | **Untested.** Axis directions come from the accelerometer / gyro layout the rest of the firmware uses; **Invert left / right** and **Invert up / down** fix a wrong direction. |
 | Joy-Con 2 Mouse Mode | ✅ Works on SteamOS in Xbox 360 mode. The sensor's position (report 0x05, offset 0x10) gives the movement and its distance field (0x16) whether it lies on a surface. |
 | Two Bluetooth connections at once | **Untested** on both boards (nRF52840: two central links; Pico: BTstack with two connections on the CYW43439). |
 | HD rumble **frequency** translation | **Low.** The Switch 2 frequency encoding hasn't been published. It is anchored on the console's idle frame (verified bit-exact in tests) with a scale and a *Fixed* fallback mode in the settings (no longer on the configuration page). |
