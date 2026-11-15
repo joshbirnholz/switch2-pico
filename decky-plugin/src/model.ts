@@ -40,6 +40,12 @@ export interface Profile {
   mouse_speed: number;
   mouse_flags: number;
   map: number[];
+  // Gyro mouse (firmware 0.21.0+, Joy-Con 2 types only; missing otherwise).
+  gyro_mouse?: number;
+  gyro_mouse_speed?: number;
+  gyro_mouse_flags?: number;
+  gyro_mouse_toggle?: number;     // in_button_t bits
+  gyro_mouse_recenter?: number;
 }
 
 export interface CtrlType {
@@ -172,12 +178,31 @@ export const slotLabel = (T: CtrlType, i: number) => (T.numbered ? String(i + 1)
 // MOUSE_FLAG_* (settings.h)
 export const MF_UP_DOWN_ONLY = 1, MF_INVERT_V = 2, MF_INVERT_H = 4;
 
+// GYRO_MOUSE_FLAG_* (settings.h)
+export const GMF_INVERT_X = 1, GMF_INVERT_Y = 2, GMF_NO_CLICKS = 4;
+// The gyro mouse's on / off buttons to start with (core/src/profiles.c):
+// C + Capture on a pair, Minus + Capture on a single (L), C + Plus on a single (R).
+export function gyroToggleDefault(t: number): number {
+  if (t === CTRL_PAIR) return (1 << IN_C) | (1 << IN_CAPTURE);
+  if (t === CTRL_JC_L) return (1 << 8) | (1 << IN_CAPTURE);
+  if (t === CTRL_JC_R) return (1 << IN_C) | (1 << 9);
+  return 0;
+}
+// A combination's buttons, as the panel names them ("None" without any).
+export function comboText(t: number, bits: number): string {
+  const names = allButtons(t).filter((e) => bits & (1 << e.input)).map((e) => (e.side ? `${e.label} (${e.side.slice(-2, -1)})` : e.label));
+  return names.length ? names.join(" + ") : "None";
+}
+
 // One profile as POST /api/settings takes it (see parse_profile()).
 export function profileForm(t: number, i: number, P: Profile): string {
   const nums = [P.mode, P.deadzone, P.outer, P.swap, P.threshold, P.rumble, P.strength, ...P.map].join(",");
   const mouse = `m${P.mouse ? 1 : 0},${P.mouse_speed || 100},${P.mouse_flags & 7}`;
   const options = P.deadzone_right === undefined ? "" : `d${P.deadzone_right},${P.gyro_side || 0},`;
-  return `prof_${t}_${i}=${nums},${mouse},r${P.rumble_style || 0},${P.rumble_frequency || 5},${P.impulse_flags || 0},${P.impulse_strength ?? 100},${P.impulse_frequency || 10},${options}${encodeURIComponent(P.name)}`;
+  // Only to firmware that has the gyro mouse (it sends these fields).
+  const gyro = P.gyro_mouse === undefined || !isJoyCon(t) ? ""
+    : `g${P.gyro_mouse ? 1 : 0},${P.gyro_mouse_speed || 100},${(P.gyro_mouse_flags || 0) & 7},${(P.gyro_mouse_toggle ?? gyroToggleDefault(t)) >>> 0},${(P.gyro_mouse_recenter || 0) >>> 0},`;
+  return `prof_${t}_${i}=${nums},${mouse},r${P.rumble_style || 0},${P.rumble_frequency || 5},${P.impulse_flags || 0},${P.impulse_strength ?? 100},${P.impulse_frequency || 10},${options}${gyro}${encodeURIComponent(P.name)}`;
 }
 
 // An output's name split into a title and, for shortcuts and the like

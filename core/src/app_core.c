@@ -410,14 +410,125 @@ static void mouse_pick(void) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Gyro mouse (settings.h, profile_t.gyro_mouse): the Joy-Con 2 whose motion
+// the controller reports moves its USB mouse as it turns. Its combinations
+// turn it on and off, and hold the pointer still (recenter); the host doesn't
+// see their buttons. While it's on, that Joy-Con's shoulder, trigger and stick
+// click are mouse buttons (unless GYRO_MOUSE_FLAG_NO_CLICKS).
+// ---------------------------------------------------------------------------
+typedef struct {
+    bool on;                    // turned on (always, with no on / off combination)
+    bool recentering;           // the recenter combination is held
+    int side;                   // the USB mouse it moves (0: the (L)'s, 1: the (R)'s), -1: none
+    float pend_x, pend_y;       // hundredths of a count for mouse_one()
+    uint32_t last_ms;           // previous motion sample
+    joycon_gyro_mouse_t motion;
+} gyro_mouse_state_t;
+
+static gyro_mouse_state_t s_gyro = {.side = -1};
+
+static void gyro_mouse_reset(void) {
+    memset(&s_gyro, 0, sizeof s_gyro);
+    s_gyro.side = -1;
+}
+
+// The active profile's gyro mouse, if it has one here (and the USB mice are there).
+static const profile_t *gyro_mouse_profile(ctrl_type_t *type) {
+    ctrl_type_t t = mapping_ctrl_type(s2_link_mapping_ctx());
+    const profile_t *p = settings_active(&g_settings, t);
+    *type = t;
+    return usb_mode_has_mouse() && settings_profile_gyro_mouse(p, t) ? p : NULL;
+}
+
+// The pointer moves (on, not held still) on USB mouse `i`.
+static bool gyro_mouse_on(int i) {
+    ctrl_type_t t;
+    return s_gyro.on && s_gyro.side == i && gyro_mouse_profile(&t) && !s_msel.active && s_mode_switch < 0;
+}
+
+static bool gyro_mouse_clicks(int i) {
+    ctrl_type_t t;
+    const profile_t *p = gyro_mouse_profile(&t);
+    return p && s_gyro.on && s_gyro.side == i && !(p->gyro_mouse_flags & GYRO_MOUSE_FLAG_NO_CLICKS);
+}
+
+// One new controller report: its combinations and motion. `prev` / `raw`:
+// the raw buttons before and now.
+static void gyro_mouse_update(const s2_input_t *in, uint32_t prev, uint32_t raw) {
+    ctrl_type_t t;
+    const profile_t *p = gyro_mouse_profile(&t);
+    uint32_t now = platform_millis();
+    float dt = s_gyro.last_ms ? (float)(now - s_gyro.last_ms) / 1000.0f : 0.0f;
+    if (dt > 0.05f) dt = 0.05f;   // a gap: don't make up for it
+    if (!p) {
+        if (s_gyro.on) LOG("gyro mouse: off (not in this profile)");
+        gyro_mouse_reset();
+        return;
+    }
+    s_gyro.last_ms = now | 1u;
+    if (s_msel.active || s_mode_switch >= 0) {
+        s_gyro.pend_x = s_gyro.pend_y = 0.0f;
+        return;
+    }
+    uint32_t toggle = joycon_combo_raw(settings_combo_get(p->gyro_mouse_toggle));
+    uint32_t recenter = joycon_combo_raw(settings_combo_get(p->gyro_mouse_recenter));
+    if (!toggle) {
+        if (!s_gyro.on) LOG("gyro mouse: on (no on / off combination)");
+        s_gyro.on = true;
+    } else if (joycon_combo_pressed(toggle, prev, raw)) {
+        s_gyro.on = !s_gyro.on;
+        s_swallow |= toggle;
+        LOG("gyro mouse: %s", s_gyro.on ? "on" : "off");
+        s2_link_haptic(S2_HAPTIC_TICK);
+    }
+    bool hold = s_gyro.on && joycon_combo_held(recenter, raw);
+    if (hold && !s_gyro.recentering) s_swallow |= recenter;
+    s_gyro.recentering = hold;
+    s2_input_t side_in;
+    bool has_l = s2_link_side_input(S2_PID_JOYCON2_L, &side_in, NULL);
+    bool has_r = s2_link_side_input(S2_PID_JOYCON2_R, &side_in, NULL);
+    int side = joycon_gyro_mouse_side(t, (joycon_gyro_side_t)p->joycon_gyro_side, has_l, has_r);
+    if (side != s_gyro.side) {
+        joycon_gyro_mouse_reset(&s_gyro.motion);
+        s_gyro.pend_x = s_gyro.pend_y = 0.0f;
+        s_gyro.side = side;
+    }
+    if (side < 0) return;
+    // `in` carries that Joy-Con's motion (joycon_merge()).
+    const mapping_ctx_t *ctx = s2_link_mapping_ctx();
+    float lsb = ctx->gyro_lsb_per_dps > 1.0f ? ctx->gyro_lsb_per_dps : S2_GYRO_LSB_PER_DPS_A;
+    float dps[3];
+    for (int k = 0; k < 3; k++) dps[k] = ((float)in->gyro[k] - g_settings.gyro_bias[k]) / lsb;
+    float dx, dy;
+    // Always, so "up" keeps following the Joy-Con while the pointer doesn't move.
+    joycon_gyro_mouse_step(&s_gyro.motion, t, side, p, dps, in->accel, dt, &dx, &dy);
+    if (s_gyro.on && !hold) {
+        s_gyro.pend_x += dx * 100.0f;
+        s_gyro.pend_y += dy * 100.0f;
+    } else {
+        s_gyro.pend_x = s_gyro.pend_y = 0.0f;
+    }
+    // Not sent yet (endpoint busy, host asleep): never more than a few reports' worth.
+    const float lim = 4 * 127 * 100;
+    if (s_gyro.pend_x > lim) s_gyro.pend_x = lim;
+    if (s_gyro.pend_x < -lim) s_gyro.pend_x = -lim;
+    if (s_gyro.pend_y > lim) s_gyro.pend_y = lim;
+    if (s_gyro.pend_y < -lim) s_gyro.pend_y = -lim;
+}
+
 // What the mice take, the gamepad doesn't get.
 static void mouse_take_from_gamepad(s2_input_t *in) {
     mouse_pick();
     const mapping_ctx_t *c = s2_link_mapping_ctx();
     for (int i = 0; i < USB_MOUSE_COUNT; i++) {
-        if (!s_mouse_down[i]) continue;
         joycon_mouse_buttons_t mb;
         joycon_mouse_buttons(mapping_ctrl_type(c), i == 0, &mb);
+        if (!s_mouse_down[i]) {
+            // The gyro mouse takes only the buttons (its stick stays the controller's).
+            if (gyro_mouse_clicks(i)) in->buttons &= ~(mb.left | mb.right | mb.middle);
+            continue;
+        }
         in->buttons &= ~(mb.left | mb.right | mb.middle);
         if (mb.stick_left) memcpy(in->stick_l, c->cal_l.center, sizeof in->stick_l);
         else memcpy(in->stick_r, c->cal_r.center, sizeof in->stick_r);
@@ -464,6 +575,22 @@ static void mouse_one(int i, mouse_state_t *m, float dt) {
             joycon_mouse_scroll(i == 0, x, y, settings_active(&g_settings, t)->mouse_flags, &wv, &pv);
             if (fabsf(wv) > MOUSE_SCROLL_DEAD) m->acc_wheel += wv * MOUSE_SCROLL_HZ * dt;
             if (fabsf(pv) > MOUSE_SCROLL_DEAD) m->acc_pan += pv * MOUSE_SCROLL_HZ * dt;
+        }
+    } else if (linked && gyro_mouse_on(i)) {
+        // Gyro mouse (see gyro_mouse_update()); the stick stays the controller's.
+        int32_t gx = (int32_t)s_gyro.pend_x, gy = (int32_t)s_gyro.pend_y;
+        s_gyro.pend_x -= (float)gx;
+        s_gyro.pend_y -= (float)gy;
+        m->acc_x += gx;
+        m->acc_y += gy;
+        m->acc_wheel = m->acc_pan = 0.0f;
+        if (gyro_mouse_clicks(i) && !s_msel.active) {
+            joycon_mouse_buttons_t mb;
+            joycon_mouse_buttons(mapping_ctrl_type(s2_link_mapping_ctx()), i == 0, &mb);
+            uint32_t raw = s_raw_buttons & ~s_swallow;   // not the combinations' buttons
+            if (raw & mb.left) buttons |= USB_MOUSE_LEFT;
+            if (raw & mb.right) buttons |= USB_MOUSE_RIGHT;
+            if (raw & mb.middle) buttons |= USB_MOUSE_MIDDLE;
         }
     } else {
         m->acc_x = m->acc_y = 0;
@@ -531,6 +658,7 @@ static void update_input(void) {
         // i.e. within SUSPEND_DISCONNECT_MS) wakes it.
         if ((in.buttons & ~raw_prev) && tud_suspended()) s2_link_hook_controller_seen();
         mode_select_step(in.buttons);
+        gyro_mouse_update(&in, raw_prev, in.buttons);
         // "Quick Access Menu (Decky)": counted on a tap of the controller's
         // own buttons (the host's view hides Home while C is held).
         {
@@ -625,6 +753,7 @@ static void update_input(void) {
         s_raw_buttons = 0;
         host_prev = 0;
         s_swallow = 0;
+        gyro_mouse_reset();
         procon_set_input(NULL, false, 0, false);
         ds5_set_input(NULL, NULL, 0, false);
         x360_set_input(NULL, NULL, 0, false);

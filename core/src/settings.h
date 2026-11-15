@@ -93,13 +93,14 @@ typedef enum {
     MODE_SLOT_COUNT
 } mode_slot_t;
 #define MODE_SLOT_EMPTY 0
-#define SETTINGS_EXT_REV 17  // 1: mode_map; 2: mode_slot; 3: ble_tx_power; 4: idle_*; 5: pair_button;
+#define SETTINGS_EXT_REV 18  // 1: mode_map; 2: mode_slot; 3: ble_tx_power; 4: idle_*; 5: pair_button;
                              // 6: gc_profile; 7: gc_profile sticks / rumble; 8: bonds;
                              // 9: gc_usb_mode, last_ctrl; 10: profiles; 11: one profile per button;
                              // 12: Joy-Con 2 types; 13: single Joy-Con 2 profiles numbered;
                              // 14: maps include IN_SL_R / IN_SR_R; 15: mouse_flags (MOUSE_FLAG_*)
                              // 16: per-profile rumble style and impulse settings (formerly reserved)
                              // 17: independent right deadzone and Joy-Con gyro side (larger profiles)
+                             // 18: Joy-Con 2 gyro mouse (larger profiles)
 
 // Remembered (paired) controllers. Any of them can connect, one at a time
 // (or a Joy-Con 2 (L) together with a Joy-Con 2 (R)); pairing one more when
@@ -145,6 +146,32 @@ typedef enum {
 #define MOUSE_FLAG_INVERT_LEFT_RIGHT   0x04
 #define MOUSE_FLAGS_ALL                0x07
 
+// Gyro mouse (profile_t.gyro_mouse): the Joy-Con 2 whose motion the
+// controller reports (see joycon_gyro_side_t) moves the USB mouse as it
+// turns: left / right around the vertical, up / down by tilting. A button
+// combination (gyro_mouse_toggle, all of it held) turns it on and off (no
+// combination: always on); holding another (gyro_mouse_recenter) holds the
+// pointer still, so the Joy-Con can be brought back to center. Like Mouse
+// Mode, it needs the USB mice (settings_mode_has_mouse()).
+// profile_t.gyro_mouse_flags:
+#define GYRO_MOUSE_FLAG_INVERT_X   0x01   // turning right moves the pointer left
+#define GYRO_MOUSE_FLAG_INVERT_Y   0x02   // tilting up moves the pointer down
+// Off (the default): while it's on, that Joy-Con's shoulder clicks, its
+// trigger right-clicks and its stick click middle-clicks (as in Mouse Mode),
+// and the controller doesn't get them.
+#define GYRO_MOUSE_FLAG_NO_CLICKS  0x04
+#define GYRO_MOUSE_FLAGS_ALL       0x07
+// A button combination: in_button_t bits (1 << IN_*), 3 bytes little-endian.
+#define BUTTON_COMBO_LEN 3
+static inline uint32_t settings_combo_get(const uint8_t c[BUTTON_COMBO_LEN]) {
+    return (uint32_t)c[0] | (uint32_t)c[1] << 8 | (uint32_t)c[2] << 16;
+}
+static inline void settings_combo_set(uint8_t c[BUTTON_COMBO_LEN], uint32_t bits) {
+    c[0] = (uint8_t)bits;
+    c[1] = (uint8_t)(bits >> 8);
+    c[2] = (uint8_t)(bits >> 16);
+}
+
 // Profiles: a USB mode with a button map and the options that go with it.
 // Each controller type has one per shortcut button (p[] is indexed by
 // mode_slot_t: A, B, X, Y, D-pad up / down / left / right); one is in use,
@@ -175,6 +202,12 @@ typedef struct {
     uint8_t impulse_frequency;         // 1..10
     uint8_t stick_deadzone_right_pct;   // independent right stick / C-stick, 0..40
     uint8_t joycon_gyro_side;           // joycon_gyro_side_t; pair only, fallback to available side
+    // Joy-Con 2 types only (zero elsewhere): the gyro mouse (ext_rev 18).
+    uint8_t gyro_mouse;                 // 0 off, 1 on
+    uint8_t gyro_mouse_speed_pct;       // 10..250
+    uint8_t gyro_mouse_flags;           // GYRO_MOUSE_FLAG_*
+    uint8_t gyro_mouse_toggle[BUTTON_COMBO_LEN];    // combination: on / off (none: always on)
+    uint8_t gyro_mouse_recenter[BUTTON_COMBO_LEN];  // combination: hold the pointer still while held
 } profile_t;
 
 typedef struct {
@@ -336,6 +369,11 @@ void settings_profiles_from_v13(const uint8_t *raw, int n, ctrl_profiles_t *out)
 // ext_rev 14..16: profiles before independent deadzones / gyro-side selection.
 #define CTRL_PROFILES_V16_SIZE 484
 void settings_profiles_from_v16(const uint8_t *raw, int n, ctrl_profiles_t *out);
+// ext_rev 17: profiles before the gyro mouse.
+#define CTRL_PROFILES_V17_SIZE 500
+void settings_profiles_from_v17(const uint8_t *raw, int n, ctrl_profiles_t *out);
+// The gyro mouse's starting options for controller type `type` (off).
+void settings_default_gyro_mouse(ctrl_type_t type, profile_t *p);
 #define CTRL_PROFILES_V13_SIZE 468   // sizeof the stored ctrl_profiles_t then
 // ext_rev 10 -> 11: put each profile on the button(s) that selected it,
 // the others on free buttons.
@@ -383,6 +421,9 @@ static inline bool settings_mode_has_mouse(uint8_t usb_mode) {
 }
 static inline bool settings_profile_mouse(const profile_t *p, ctrl_type_t t) {
     return ctrl_is_joycon(t) && p->mouse_src != MOUSE_OFF && settings_mode_has_mouse(p->usb_mode);
+}
+static inline bool settings_profile_gyro_mouse(const profile_t *p, ctrl_type_t t) {
+    return ctrl_is_joycon(t) && p->gyro_mouse && settings_mode_has_mouse(p->usb_mode);
 }
 // Whether the USB mice are there with a profile: Joy-Con 2 types in those
 // modes, whether Mouse Mode is on or off, so turning it on or off applies

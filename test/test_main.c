@@ -1445,6 +1445,122 @@ static void test_separate_deadzones(void) {
     CHECK(out.stick_l[0] > S1_STICK_CENTER && out.stick_r[0] == S1_STICK_CENTER);
 }
 
+static void test_gyro_mouse(void) {
+    // Defaults: off, 100%, an on / off combination per type, no recenter.
+    profile_t p;
+    settings_default_profile_for(CTRL_JOYCON_PAIR, USB_MODE_SINPUT, &p);
+    CHECK(!p.gyro_mouse && p.gyro_mouse_speed_pct == 100 && !p.gyro_mouse_flags);
+    CHECK(settings_combo_get(p.gyro_mouse_toggle) == ((1u << IN_C) | (1u << IN_CAPTURE)));
+    CHECK(settings_combo_get(p.gyro_mouse_recenter) == 0);
+    CHECK(!settings_profile_gyro_mouse(&p, CTRL_JOYCON_PAIR));
+    p.gyro_mouse = 1;
+    CHECK(settings_profile_gyro_mouse(&p, CTRL_JOYCON_PAIR) && !settings_profile_gyro_mouse(&p, CTRL_PRO));
+    p.usb_mode = USB_MODE_SWITCH_PRO;
+    CHECK(!settings_profile_gyro_mouse(&p, CTRL_JOYCON_PAIR));   // no USB mice there
+    settings_default_profile_for(CTRL_JOYCON_L, USB_MODE_XBOX360, &p);
+    CHECK(settings_combo_get(p.gyro_mouse_toggle) == ((1u << IN_MINUS) | (1u << IN_CAPTURE)));
+    settings_default_profile_for(CTRL_JOYCON_R, USB_MODE_XBOX360, &p);
+    CHECK(settings_combo_get(p.gyro_mouse_toggle) == ((1u << IN_C) | (1u << IN_PLUS)));
+    settings_default_profile_for(CTRL_PRO, USB_MODE_XBOX360, &p);
+    CHECK(settings_combo_get(p.gyro_mouse_toggle) == 0);
+
+    // Sanitize: speed range, flag bits, only the controller's own buttons;
+    // cleared on other controller types.
+    ctrl_profiles_t c;
+    settings_default_profiles(CTRL_JOYCON_R, &c);
+    c.p[0].gyro_mouse = 7;
+    c.p[0].gyro_mouse_speed_pct = 0;
+    c.p[0].gyro_mouse_flags = 0xFF;
+    settings_combo_set(c.p[0].gyro_mouse_toggle, (1u << IN_UP) | (1u << IN_ZR));      // Up: the (L)'s
+    settings_combo_set(c.p[0].gyro_mouse_recenter, (1u << IN_R) | (1u << IN_LSTICK));
+    settings_sanitize_profiles(CTRL_JOYCON_R, &c);
+    CHECK(c.p[0].gyro_mouse == 1 && c.p[0].gyro_mouse_speed_pct == 100 && c.p[0].gyro_mouse_flags == GYRO_MOUSE_FLAGS_ALL);
+    CHECK(settings_combo_get(c.p[0].gyro_mouse_toggle) == (1u << IN_ZR));
+    CHECK(settings_combo_get(c.p[0].gyro_mouse_recenter) == (1u << IN_R));
+    settings_default_profiles(CTRL_PRO, &c);
+    c.p[MODE_SLOT_Y].gyro_mouse = 1;
+    settings_combo_set(c.p[MODE_SLOT_Y].gyro_mouse_toggle, 1u << IN_A);
+    settings_sanitize_profiles(CTRL_PRO, &c);
+    CHECK(!c.p[MODE_SLOT_Y].gyro_mouse && !settings_combo_get(c.p[MODE_SLOT_Y].gyro_mouse_toggle));
+
+    // Which Joy-Con moves the pointer: as joycon_merge() picks the motion.
+    CHECK(joycon_gyro_mouse_side(CTRL_JOYCON_PAIR, JOYCON_GYRO_RIGHT, true, true) == 1);
+    CHECK(joycon_gyro_mouse_side(CTRL_JOYCON_PAIR, JOYCON_GYRO_LEFT, true, true) == 0);
+    CHECK(joycon_gyro_mouse_side(CTRL_JOYCON_PAIR, JOYCON_GYRO_RIGHT, true, false) == 0);
+    CHECK(joycon_gyro_mouse_side(CTRL_JOYCON_PAIR, JOYCON_GYRO_LEFT, false, true) == 1);
+    CHECK(joycon_gyro_mouse_side(CTRL_JOYCON_L, JOYCON_GYRO_RIGHT, true, true) == 0);
+    CHECK(joycon_gyro_mouse_side(CTRL_JOYCON_R, JOYCON_GYRO_LEFT, true, true) == 1);
+    CHECK(joycon_gyro_mouse_side(CTRL_JOYCON_R, JOYCON_GYRO_RIGHT, true, false) == -1);
+
+    // Combinations: in_button_t bits as raw bits, fully held on the press
+    // that completes them.
+    uint32_t combo = joycon_combo_raw((1u << IN_C) | (1u << IN_CAPTURE) | (1u << IN_SR_R));
+    CHECK(combo == (S2_BTN_C | S2_BTN_CAPTURE | S2_BTN_SR_R));
+    uint32_t two = S2_BTN_C | S2_BTN_CAPTURE;
+    CHECK(!joycon_combo_pressed(two, 0, S2_BTN_C));
+    CHECK(joycon_combo_pressed(two, S2_BTN_C, two | S2_BTN_A));
+    CHECK(!joycon_combo_pressed(two, two, two));
+    CHECK(!joycon_combo_pressed(0, 0, S2_BTN_A) && !joycon_combo_held(0, S2_BTN_A));
+    CHECK(joycon_combo_held(two, two | S2_BTN_B) && !joycon_combo_held(two, S2_BTN_C));
+
+    // Motion. Held upright (gravity along +Z, its face up): a turn around Z
+    // is a turn left / right, one around its width (X) a tilt.
+    settings_default_profile_for(CTRL_JOYCON_PAIR, USB_MODE_SINPUT, &p);
+    joycon_gyro_mouse_t g;
+    joycon_gyro_mouse_reset(&g);
+    const int16_t flat[3] = {0, 0, 4096};
+    float dx, dy;
+    const float still[3] = {0, 0, 0};
+    joycon_gyro_mouse_step(&g, CTRL_JOYCON_PAIR, 1, &p, still, flat, 0.01f, &dx, &dy);
+    CHECK(g.have_up && dx == 0.0f && dy == 0.0f);
+    const float turn_left[3] = {0, 0, 50};   // 50 deg/s counter-clockwise from above
+    joycon_gyro_mouse_step(&g, CTRL_JOYCON_PAIR, 1, &p, turn_left, flat, 0.01f, &dx, &dy);
+    CHECK(fabsf(dx + 50 * 0.01f * GYRO_MOUSE_COUNTS_PER_DEG) < 0.01f && fabsf(dy) < 0.001f);
+    const float tilt_up[3] = {30, 0, 0};
+    joycon_gyro_mouse_step(&g, CTRL_JOYCON_PAIR, 1, &p, tilt_up, flat, 0.01f, &dx, &dy);
+    CHECK(fabsf(dy + 30 * 0.01f * GYRO_MOUSE_COUNTS_PER_DEG) < 0.01f && fabsf(dx) < 0.001f);
+    // Speed and inverted axes.
+    p.gyro_mouse_speed_pct = 200;
+    p.gyro_mouse_flags = GYRO_MOUSE_FLAG_INVERT_X | GYRO_MOUSE_FLAG_INVERT_Y;
+    joycon_gyro_mouse_step(&g, CTRL_JOYCON_PAIR, 1, &p, turn_left, flat, 0.01f, &dx, &dy);
+    CHECK(fabsf(dx - 2 * 50 * 0.01f * GYRO_MOUSE_COUNTS_PER_DEG) < 0.01f);
+    joycon_gyro_mouse_step(&g, CTRL_JOYCON_PAIR, 1, &p, tilt_up, flat, 0.01f, &dx, &dy);
+    CHECK(dy > 0.0f);
+    p.gyro_mouse_speed_pct = 100;
+    p.gyro_mouse_flags = 0;
+    // Tremor: slow turns are damped (half the threshold: a quarter as far).
+    const float slow[3] = {0, 0, 0.5f};
+    joycon_gyro_mouse_step(&g, CTRL_JOYCON_PAIR, 1, &p, slow, flat, 1.0f, &dx, &dy);
+    CHECK(fabsf(dx + 0.25f * GYRO_MOUSE_COUNTS_PER_DEG) < 0.01f);
+    // Held pointing up (gravity along +Y, its length): the vertical is Y now,
+    // so a turn around Y is the turn left / right; a tilt is still around X.
+    joycon_gyro_mouse_reset(&g);
+    const int16_t up_y[3] = {0, 4096, 0};
+    const float turn_y[3] = {0, 50, 0};
+    joycon_gyro_mouse_step(&g, CTRL_JOYCON_PAIR, 1, &p, turn_y, up_y, 0.01f, &dx, &dy);
+    CHECK(dx < -9.0f && fabsf(dy) < 0.001f);
+    joycon_gyro_mouse_step(&g, CTRL_JOYCON_PAIR, 1, &p, tilt_up, up_y, 0.01f, &dx, &dy);
+    CHECK(dy < -5.0f && fabsf(dx) < 0.001f);
+    // A single (L) held sideways: tilting is around its length, its top
+    // pointing left; the (R)'s pointing right.
+    joycon_gyro_mouse_reset(&g);
+    const float roll_y[3] = {0, 30, 0};
+    joycon_gyro_mouse_step(&g, CTRL_JOYCON_L, 0, &p, roll_y, flat, 0.01f, &dx, &dy);
+    CHECK(dy > 5.0f && fabsf(dx) < 0.001f);
+    joycon_gyro_mouse_reset(&g);
+    joycon_gyro_mouse_step(&g, CTRL_JOYCON_R, 1, &p, roll_y, flat, 0.01f, &dx, &dy);
+    CHECK(dy < -5.0f && fabsf(dx) < 0.001f);
+    // Shaken (far from 1 g): "up" stays where it was.
+    const int16_t shake[3] = {9000, 0, 0};
+    joycon_gyro_mouse_step(&g, CTRL_JOYCON_R, 1, &p, still, shake, 0.01f, &dx, &dy);
+    CHECK(fabsf(g.up[2] - 1.0f) < 0.001f);
+    // No accelerometer reading yet: no movement.
+    joycon_gyro_mouse_reset(&g);
+    const int16_t none[3] = {0, 0, 0};
+    joycon_gyro_mouse_step(&g, CTRL_JOYCON_R, 1, &p, turn_left, none, 0.01f, &dx, &dy);
+    CHECK(!g.have_up && dx == 0.0f && dy == 0.0f);
+}
+
 int main(void) {
     test_s1_rumble_classic();
     test_s1_rumble_packed();
@@ -1471,6 +1587,7 @@ int main(void) {
     test_uuids();
     test_joycon();
     test_joycon_profiles();
+    test_gyro_mouse();
     test_sinput();
     test_rumble_options();
     printf("%d passed, %d failed\n", g_pass, g_fail);

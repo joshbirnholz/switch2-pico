@@ -43,8 +43,8 @@ test_pause_wake: test_pause_wake.c $(SRC)/s2_link.c $(wildcard $(SRC)/*.h)
 test_mic_test: test_mic_test.c $(SRC)/mic_test.c $(SRC)/mic_test.h
 	$(CC) $(CFLAGS) -DS2_HEADSET_MIC=1 -I$(SRC) -o $@ test_mic_test.c $(SRC)/mic_test.c
 
-test_mic_api: test_mic_api.c $(SRC)/web_api.c $(SRC)/mic_test.c $(wildcard $(SRC)/*.h)
-	$(CC) $(CFLAGS) -D_DEFAULT_SOURCE -DS2_HEADSET_MIC=1 -ffunction-sections -fdata-sections -I$(SRC) -Wl,--gc-sections -o $@ test_mic_api.c $(SRC)/mic_test.c
+test_mic_api: test_mic_api.c $(SRC)/web_api.c $(SRC)/mic_test.c $(SRC)/profiles.c $(SRC)/mapping.c $(SRC)/mode_select.c $(wildcard $(SRC)/*.h)
+	$(CC) $(CFLAGS) -D_DEFAULT_SOURCE -DS2_HEADSET_MIC=1 -ffunction-sections -fdata-sections -I$(SRC) -Wl,--gc-sections -o $@ test_mic_api.c $(SRC)/mic_test.c $(SRC)/profiles.c $(SRC)/mapping.c $(SRC)/mode_select.c -lm
 
 clean:
 	rm -f test_runner test_usb_lifecycle test_usb_audio2 test_usb_audio2_speaker test_headset_jack test_pause_wake test_mic_test test_mic_api test_settings_storage

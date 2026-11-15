@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <string.h>
 
+#include "mapping.h"
 #include "settings.h"
 
 static const char *const MODE_PROFILE_NAMES[USB_MODE_COUNT] = {
@@ -43,7 +44,23 @@ void settings_default_profile_for(ctrl_type_t type, usb_mode_t mode, profile_t *
     if (ctrl_is_joycon(type)) {
         // The mouse stays off until chosen; these are its starting options.
         p->mouse_speed_pct = 100;
+        settings_default_gyro_mouse(type, p);
     }
+}
+
+// Off; on / off with buttons that do little else: C + Capture on a pair,
+// Minus + Capture on a single (L), C + Plus on a single (R). No recenter
+// combination until one is chosen.
+void settings_default_gyro_mouse(ctrl_type_t type, profile_t *p) {
+    p->gyro_mouse = 0;
+    p->gyro_mouse_speed_pct = 100;
+    p->gyro_mouse_flags = 0;
+    uint32_t toggle = 0;
+    if (type == CTRL_JOYCON_PAIR) toggle = 1u << IN_C | 1u << IN_CAPTURE;
+    else if (type == CTRL_JOYCON_L) toggle = 1u << IN_MINUS | 1u << IN_CAPTURE;
+    else if (type == CTRL_JOYCON_R) toggle = 1u << IN_C | 1u << IN_PLUS;
+    settings_combo_set(p->gyro_mouse_toggle, toggle);
+    settings_combo_set(p->gyro_mouse_recenter, 0);
 }
 
 // One profile per mode, on the buttons the shortcut used before profiles:
@@ -114,22 +131,35 @@ void settings_profiles_from_v13(const uint8_t *raw, int n, ctrl_profiles_t *out)
     }
 }
 
+// Stored profiles of an older, shorter layout: each a `psize`-byte prefix of
+// today's profile. Keep every byte, then the caller initializes the rest.
+static void profiles_from_prefix(const uint8_t *raw, int n, size_t psize, ctrl_profiles_t *out) {
+    const size_t stored = psize * PROFILE_MAX + 12;   // + slot[], active, reserved[3]
+    for (int t = 0; t < n; t++) {
+        const uint8_t *old = raw + (size_t)t * stored;
+        ctrl_profiles_t *c = &out[t];
+        memset(c, 0, sizeof *c);
+        for (int i = 0; i < PROFILE_MAX; i++) memcpy(&c->p[i], old + i * psize, psize);
+        memcpy(c->slot, old + psize * PROFILE_MAX, MODE_SLOT_COUNT);
+        c->active = old[psize * PROFILE_MAX + MODE_SLOT_COUNT];
+    }
+}
+
 // Stored v14..16 profiles are a 59-byte prefix of today's profile. Keep
 // every byte (including rumble settings), then initialize the new fields.
 _Static_assert(offsetof(profile_t, stick_deadzone_right_pct) == 59, "v16 prefix");
 _Static_assert(CTRL_PROFILES_V16_SIZE == 59 * PROFILE_MAX + 12, "v16 profiles");
 void settings_profiles_from_v16(const uint8_t *raw, int n, ctrl_profiles_t *out) {
-    for (int t = 0; t < n; t++) {
-        const uint8_t *old = raw + (size_t)t * CTRL_PROFILES_V16_SIZE;
-        ctrl_profiles_t *c = &out[t];
-        memset(c, 0, sizeof *c);
-        for (int i = 0; i < PROFILE_MAX; i++) {
-            memcpy(&c->p[i], old + i * 59, 59);
-            c->p[i].stick_deadzone_right_pct = c->p[i].stick_deadzone_pct;
-        }
-        memcpy(c->slot, old + 59 * PROFILE_MAX, MODE_SLOT_COUNT);
-        c->active = old[59 * PROFILE_MAX + MODE_SLOT_COUNT];
-    }
+    profiles_from_prefix(raw, n, 59, out);
+    for (int t = 0; t < n; t++)
+        for (int i = 0; i < PROFILE_MAX; i++) out[t].p[i].stick_deadzone_right_pct = out[t].p[i].stick_deadzone_pct;
+}
+
+// Stored v17 profiles: a 61-byte prefix (everything before the gyro mouse).
+_Static_assert(offsetof(profile_t, gyro_mouse) == 61, "v17 prefix");
+_Static_assert(CTRL_PROFILES_V17_SIZE == 61 * PROFILE_MAX + 12, "v17 profiles");
+void settings_profiles_from_v17(const uint8_t *raw, int n, ctrl_profiles_t *out) {
+    profiles_from_prefix(raw, n, 61, out);
 }
 
 // Numbered profiles (single Joy-Con 2): the first one in use takes over,
@@ -225,8 +255,18 @@ void settings_sanitize_profiles(ctrl_type_t type, ctrl_profiles_t *c) {
             p->mouse_src = p->mouse_src ? MOUSE_ON : MOUSE_OFF;
             p->mouse_speed_pct = clamp(p->mouse_speed_pct ? p->mouse_speed_pct : 100, 10, 250);
             p->mouse_flags &= MOUSE_FLAGS_ALL;
+            p->gyro_mouse = p->gyro_mouse ? 1 : 0;
+            p->gyro_mouse_speed_pct = clamp(p->gyro_mouse_speed_pct ? p->gyro_mouse_speed_pct : 100, 10, 250);
+            p->gyro_mouse_flags &= GYRO_MOUSE_FLAGS_ALL;
+            // Only buttons this controller has.
+            uint32_t has = mapping_type_inputs(type);
+            settings_combo_set(p->gyro_mouse_toggle, settings_combo_get(p->gyro_mouse_toggle) & has);
+            settings_combo_set(p->gyro_mouse_recenter, settings_combo_get(p->gyro_mouse_recenter) & has);
         } else {
             p->mouse_src = p->mouse_speed_pct = p->mouse_flags = 0;
+            p->gyro_mouse = p->gyro_mouse_speed_pct = p->gyro_mouse_flags = 0;
+            memset(p->gyro_mouse_toggle, 0, sizeof p->gyro_mouse_toggle);
+            memset(p->gyro_mouse_recenter, 0, sizeof p->gyro_mouse_recenter);
         }
     }
     if (!used) {

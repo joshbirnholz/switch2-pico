@@ -11,7 +11,7 @@ menu (Decky Loader), on a Steam Deck or any SteamOS / Linux machine with Decky.
   profile's button and emulated controller. Pick one to use it; the pencil
   edits one (name, its button (moving it, or swapping it with the profile
   already there), emulated controller, button mapping, sticks, rumble,
-  Mouse Mode, and Delete, which asks first); **Add a profile** makes a new
+  Mouse Mode, the gyro mouse, and Delete, which asks first); **Add a profile** makes a new
   one on a free button with that controller's defaults. Changes are saved
   right away.
 * **Button mapping** for the connected controller: its extra buttons
@@ -26,6 +26,11 @@ menu (Decky Loader), on a Steam Deck or any SteamOS / Linux machine with Decky.
   for presses every 50 ms, and turns on the dongle's *Show additional Decky
   options* so the configuration page lists this output. Provisional.
 * **Mouse Mode** for Joy-Con 2 (Xbox 360 and SInput profiles): on / off, speed, scrolling.
+* **Gyro mouse** for Joy-Con 2 (Xbox 360 and SInput profiles, firmware
+  0.21.0 or newer): on / off, speed, the buttons that turn it on and off and
+  the ones that recenter it (a list of the controller's buttons; pick any
+  number of them), mouse buttons on the Joy-Con, and inverted axes. Also in
+  the profile editor.
 * **udev rule and waking the PC**: on start the plugin installs the
   repository's `tools/70-switch2-pico.rules` as
   `/etc/udev/rules.d/70-switch2-pico.rules` (replacing an older copy), so

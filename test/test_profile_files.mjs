@@ -45,4 +45,22 @@ assert(validateProfileFile(holes,s).controllers[4].profiles[7]);
 const old=clone(single);delete old.profile.deadzone_right;delete old.profile.gyro_side;
 assert.equal(validateProfileFile(old,s).profile.deadzone_right,7);
 const zero=clone(single);zero.profile.deadzone_right=0;assert.equal(validateProfileFile(zero,s).profile.deadzone_right,0);
+// Gyro mouse: kept on Joy-Con types, defaults for files without it, not
+// allowed elsewhere.
+const gy=fixture();Object.assign(gy.types[4].profiles[0],{gyro_mouse:1,gyro_mouse_speed:150,gyro_mouse_flags:5,gyro_mouse_toggle:1<<9,gyro_mouse_recenter:1<<7});
+const gyLib=validateProfileFile(clone(makeProfileFile(gy,true,0,0)),gy);
+assert.equal(gyLib.controllers[4].profiles[0].gyro_mouse_speed,150);
+assert.equal(gyLib.controllers[4].profiles[0].gyro_mouse_recenter,1<<7);
+assert.equal(gyLib.controllers[0].profiles[0].gyro_mouse,undefined);
+assert.equal(gyLib.controllers[2].profiles[0].gyro_mouse_toggle,1<<20|1<<13);   // the pair's default
+assert.equal(gyLib.controllers[3].profiles[0].gyro_mouse_toggle,1<<8|1<<13);
+for(const mutate of [
+ d=>d.controllers[0].profiles[0].gyro_mouse=1,
+ d=>d.controllers[4].profiles[0].gyro_mouse_speed=5,
+ d=>d.controllers[4].profiles[0].gyro_mouse_toggle=1<<23,
+ d=>d.controllers[4].profiles[0].gyro_mouse_flags=8,
+]){
+ const invalid=clone(makeProfileFile(gy,true,0,0));mutate(invalid);
+ assert.throws(()=>validateProfileFile(invalid,gy));
+}
 console.log('Profile files: single/library round trips, old-field defaults, independent options and atomic rejection passed');

@@ -231,7 +231,7 @@ static void api_settings_get(http_response_t *r) {
     // every mode's default map.
     // Profiles carry the Joy-Con 2 mouse fields (prof_ keys take them; see
     // parse_profile()).
-    jb_printf(&j, "],\"ctrl_type\":%u,\"last_ctrl\":%u,\"profile_max\":%d,\"profile_mouse\":true,\"profile_controls\":true,\"types\":[",
+    jb_printf(&j, "],\"ctrl_type\":%u,\"last_ctrl\":%u,\"profile_max\":%d,\"profile_mouse\":true,\"profile_controls\":true,\"profile_gyro_mouse\":true,\"types\":[",
               s2_link_ctrl_type(), s->last_ctrl, PROFILE_MAX);
     for (int t = 0; t < CTRL_TYPE_COUNT; t++) {
         const ctrl_profiles_t *c = settings_profiles(s, (ctrl_type_t)t);
@@ -255,7 +255,17 @@ static void api_settings_get(http_response_t *r) {
                       p->rumble_enabled, p->stick_deadzone_right_pct, p->joycon_gyro_side, p->rumble_strength_pct, p->mouse_src, p->mouse_speed_pct, p->mouse_flags,
                       p->rumble_style, p->rumble_frequency, p->impulse_flags, p->impulse_strength, p->impulse_frequency);
             for (int k = 0; k < IN_COUNT; k++) jb_printf(&j, "%s%u", k ? "," : "", p->map[k]);
-            jb_printf(&j, "]}");
+            jb_printf(&j, "]");
+            // The gyro mouse: Joy-Con 2 types only (keeps the reply in its
+            // buffer); the combinations are in_button_t bits.
+            if (ctrl_is_joycon((ctrl_type_t)t)) {
+                jb_printf(&j, ",\"gyro_mouse\":%u,\"gyro_mouse_speed\":%u,\"gyro_mouse_flags\":%u,\"gyro_mouse_toggle\":%lu,"
+                              "\"gyro_mouse_recenter\":%lu",
+                          p->gyro_mouse, p->gyro_mouse_speed_pct, p->gyro_mouse_flags,
+                          (unsigned long)settings_combo_get(p->gyro_mouse_toggle),
+                          (unsigned long)settings_combo_get(p->gyro_mouse_recenter));
+            }
+            jb_printf(&j, "}");
         }
         jb_printf(&j, "],\"defaults\":[");
         for (int m = 0; m < USB_MODE_COUNT; m++) {
@@ -328,8 +338,11 @@ typedef struct {
 //   prof_<t>_<i>=<mode>,<deadzone>,<outer>,<swap>,<threshold>,<rumble>,<strength>,<map x IN_COUNT>,
 //                m<mouse>,<mouse speed>,<mouse flags>,
 //                r<style>,<frequency>,<impulse flags>,<impulse strength>,<impulse frequency>,
-//                d<right deadzone>,<gyro side>,<name>
-//                (empty: no profile there; the "m" group, Joy-Con 2 mouse, may be left out)
+//                d<right deadzone>,<gyro side>,
+//                g<gyro mouse>,<speed>,<flags>,<on / off combination>,<recenter combination>,<name>
+//                (empty: no profile there; the "m" group, Joy-Con 2 mouse, may be left out,
+//                and so may the later groups: the profile keeps what it had; the
+//                combinations are in_button_t bits)
 //   active_<t>=<i>        (i: the button, mode_slot_t; a cleared profile in
 //                          use is replaced by another, see profiles.c)
 static int s_parse_type, s_parse_index;   // the profile parse_profile() reads
@@ -435,6 +448,30 @@ static bool parse_profile(const char *v, profile_t *p) {
     } else {
         p->stick_deadzone_right_pct = old->used ? old->stick_deadzone_right_pct : p->stick_deadzone_pct;
         p->joycon_gyro_side = old->used ? old->joycon_gyro_side : JOYCON_GYRO_RIGHT;
+    }
+    // Optional g<on>,<speed>,<flags>,<toggle bits>,<recenter bits>, (the gyro mouse).
+    unsigned long gy[5];
+    w = v; group = *w == 'g'; if (group) w++;
+    for (size_t k = 0; group && k < 5; k++) {
+        if (!isdigit((unsigned char)*w)) { group = false; break; }
+        unsigned long n = strtoul(w, &end, 10);
+        if (*end != ',') { group = false; break; }
+        gy[k] = n; w = end + 1;
+    }
+    if (group) {
+        p->gyro_mouse = gy[0] ? 1 : 0;
+        p->gyro_mouse_speed_pct = (uint8_t)(gy[1] > 255 ? 255 : gy[1]);
+        p->gyro_mouse_flags = (uint8_t)(gy[2] & 0xFF);
+        settings_combo_set(p->gyro_mouse_toggle, (uint32_t)(gy[3] & 0xFFFFFFu));
+        settings_combo_set(p->gyro_mouse_recenter, (uint32_t)(gy[4] & 0xFFFFFFu));
+        v = w;
+    } else if (old->used) {
+        p->gyro_mouse = old->gyro_mouse; p->gyro_mouse_speed_pct = old->gyro_mouse_speed_pct;
+        p->gyro_mouse_flags = old->gyro_mouse_flags;
+        memcpy(p->gyro_mouse_toggle, old->gyro_mouse_toggle, sizeof p->gyro_mouse_toggle);
+        memcpy(p->gyro_mouse_recenter, old->gyro_mouse_recenter, sizeof p->gyro_mouse_recenter);
+    } else {
+        settings_default_gyro_mouse((ctrl_type_t)s_parse_type, p);
     }
     snprintf(p->name, sizeof p->name, "%s", v);
     return true;
