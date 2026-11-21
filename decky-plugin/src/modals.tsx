@@ -101,6 +101,7 @@ export function AllButtonsModal(props: {
   buttons: Extra[];
   map: number[];
   mode: number;
+  xboxSinputLabels: boolean;
   onPick(e: Extra, current: number[], onPicked: (map: number[]) => void): void;
   onSave(map: number[]): void;
   closeModal?(): void;
@@ -139,7 +140,7 @@ export function AllButtonsModal(props: {
               {e.side && <div style={sub}>{e.side}</div>}
             </span>
             <span style={iconBox}>
-              <OutputIcon mode={props.mode} idx={map[e.input]} />
+              <OutputIcon mode={props.mode} idx={map[e.input]} xboxSinputLabels={props.xboxSinputLabels} />
             </span>
           </SoftButton>
         ))}

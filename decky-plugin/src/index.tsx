@@ -230,6 +230,7 @@ function Content() {
         buttons={allButtons(t)}
         map={P.map}
         mode={mode}
+        xboxSinputLabels={!!P.sinput_xbox_labels}
         onPick={(e, current, picked) => pickOutput(S, P, e, current, picked)}
         onSave={(map) => saveProfile({ ...P, map })}
       />,
@@ -306,7 +307,7 @@ function Content() {
                   }
                 >
                   <SoftButton style={small} onActivate={() => pickOutputHere(e, P.map)}>
-                    <OutputIcon mode={mode} idx={o} />
+                    <OutputIcon mode={mode} idx={o} xboxSinputLabels={!!P?.sinput_xbox_labels} />
                   </SoftButton>
                 </Row>
               </PanelSectionRow>

@@ -54,7 +54,7 @@ const DIRS = ["up", "down", "left", "right"];
 
 // The icon of output `idx` (out_button_t in Switch mode, gp_out_t otherwise)
 // in USB mode `mode`.
-export function OutputIcon({ mode, idx }: { mode: number; idx: number }) {
+export function OutputIcon({ mode, idx, xboxSinputLabels = false }: { mode: number; idx: number; xboxSinputLabels?: boolean }) {
   if (idx === 0) return <None />;
   if (idx === deckyQam(mode)) return <K name="steamdeck_button_quickaccess" />;
   if (mode === MODE_SWITCH) {
@@ -72,10 +72,12 @@ export function OutputIcon({ mode, idx }: { mode: number; idx: number }) {
     return <Text text="?" />;
   }
   if (mode === MODE_SINPUT) {
-    // Nintendo labels by position (South B, East A, West Y, North X); Steam
-    // shows the second paddle pair and the extra button as GL, GR and C.
+    // Steam shows the second paddle pair and the extra button as GL, GR and C.
     const names: Record<number, string> = {
-      1: "switch_button_b", 2: "switch_button_a", 3: "switch_button_y", 4: "switch_button_x",
+      1: xboxSinputLabels ? "xbox_button_color_a" : "switch_button_b",
+      2: xboxSinputLabels ? "xbox_button_color_b" : "switch_button_a",
+      3: xboxSinputLabels ? "xbox_button_color_x" : "switch_button_y",
+      4: xboxSinputLabels ? "xbox_button_color_y" : "switch_button_x",
       5: "switch_button_l", 6: "switch_button_r", 7: "switch_button_zl", 8: "switch_button_zr",
       9: "switch_button_minus", 10: "switch_button_plus", 11: "switch_stick_l_press", 12: "switch_stick_r_press",
       13: "switch_button_home",

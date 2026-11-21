@@ -229,9 +229,9 @@ static void api_settings_get(http_response_t *r) {
     // Per controller type: its profiles, one per button in mode_slot_t order
     // (A, B, X, Y, Up, Down, Left, Right; null: none), the one in use and
     // every mode's default map.
-    // Profiles carry the Joy-Con 2 mouse fields (prof_ keys take them; see
-    // parse_profile()).
-    jb_printf(&j, "],\"ctrl_type\":%u,\"last_ctrl\":%u,\"profile_max\":%d,\"profile_mouse\":true,\"profile_controls\":true,\"profile_gyro_mouse\":true,\"types\":[",
+    // Profiles carry the SInput button-label preference and Joy-Con 2 mouse
+    // fields (prof_ keys take them; see parse_profile()).
+    jb_printf(&j, "],\"ctrl_type\":%u,\"last_ctrl\":%u,\"profile_max\":%d,\"profile_mouse\":true,\"profile_controls\":true,\"profile_gyro_mouse\":true,\"profile_sinput_labels\":true,\"types\":[",
               s2_link_ctrl_type(), s->last_ctrl, PROFILE_MAX);
     for (int t = 0; t < CTRL_TYPE_COUNT; t++) {
         const ctrl_profiles_t *c = settings_profiles(s, (ctrl_type_t)t);
@@ -250,10 +250,10 @@ static void api_settings_get(http_response_t *r) {
             jb_printf(&j, "{\"name\":");
             jb_str(&j, p->name);
             jb_printf(&j, ",\"mode\":%u,\"deadzone\":%u,\"outer\":%u,\"swap\":%u,\"threshold\":%u,\"rumble\":%u,"
-                          "\"deadzone_right\":%u,\"gyro_side\":%u,\"strength\":%u,\"mouse\":%u,\"mouse_speed\":%u,\"mouse_flags\":%u,\"rumble_style\":%u,\"rumble_frequency\":%u,\"impulse_flags\":%u,\"impulse_strength\":%u,\"impulse_frequency\":%u,\"map\":[",
+                          "\"deadzone_right\":%u,\"gyro_side\":%u,\"strength\":%u,\"mouse\":%u,\"mouse_speed\":%u,\"mouse_flags\":%u,\"rumble_style\":%u,\"rumble_frequency\":%u,\"impulse_flags\":%u,\"impulse_strength\":%u,\"impulse_frequency\":%u,\"sinput_xbox_labels\":%u,\"map\":[",
                       p->usb_mode, p->stick_deadzone_pct, p->stick_outer_pct, p->swap_sticks, p->trigger_threshold,
                       p->rumble_enabled, p->stick_deadzone_right_pct, p->joycon_gyro_side, p->rumble_strength_pct, p->mouse_src, p->mouse_speed_pct, p->mouse_flags,
-                      p->rumble_style, p->rumble_frequency, p->impulse_flags, p->impulse_strength, p->impulse_frequency);
+                      p->rumble_style, p->rumble_frequency, p->impulse_flags, p->impulse_strength, p->impulse_frequency, p->sinput_xbox_labels);
             for (int k = 0; k < IN_COUNT; k++) jb_printf(&j, "%s%u", k ? "," : "", p->map[k]);
             jb_printf(&j, "]");
             // The gyro mouse: Joy-Con 2 types only (keeps the reply in its
@@ -339,7 +339,8 @@ typedef struct {
 //                m<mouse>,<mouse speed>,<mouse flags>,
 //                r<style>,<frequency>,<impulse flags>,<impulse strength>,<impulse frequency>,
 //                d<right deadzone>,<gyro side>,
-//                g<gyro mouse>,<speed>,<flags>,<on / off combination>,<recenter combination>,<name>
+//                g<gyro mouse>,<speed>,<flags>,<on / off combination>,<recenter combination>,
+//                x<SInput Xbox labels>,<name>
 //                (empty: no profile there; the "m" group, Joy-Con 2 mouse, may be left out,
 //                and so may the later groups: the profile keeps what it had; the
 //                combinations are in_button_t bits)
@@ -348,6 +349,7 @@ typedef struct {
 static int s_parse_type, s_parse_index;   // the profile parse_profile() reads
 
 static bool parse_profile(const char *v, profile_t *p) {
+    profile_t previous = settings_profiles(&g_settings, (ctrl_type_t)s_parse_type)->p[s_parse_index];
     memset(p, 0, sizeof *p);
     if (!*v) return true;   // unused
     // 7 fields and the map: IN_COUNT inputs, or IN_COUNT_V1 from an older page.
@@ -367,7 +369,7 @@ static bool parse_profile(const char *v, profile_t *p) {
         if (!v1_end) return false;
         v = v1_end;
     }
-    const profile_t *old = &settings_profiles(&g_settings, (ctrl_type_t)s_parse_type)->p[s_parse_index];
+    const profile_t *old = &previous;
     p->used = 1;
     p->usb_mode = num[0];
     p->stick_deadzone_pct = num[1];
@@ -473,6 +475,20 @@ static bool parse_profile(const char *v, profile_t *p) {
     } else {
         settings_default_gyro_mouse((ctrl_type_t)s_parse_type, p);
     }
+    // Optional x<on>, group; old pages keep the saved preference.
+    w = v; group = *w == 'x'; if (group) w++;
+    if (group && isdigit((unsigned char)*w)) {
+        long n = strtol(w, &end, 10);
+        if (*end == ',') {
+            p->sinput_xbox_labels = n ? 1 : 0;
+            v = end + 1;
+        } else {
+            group = false;
+        }
+    } else {
+        group = false;
+    }
+    if (!group) p->sinput_xbox_labels = old->used ? old->sinput_xbox_labels : 0;
     snprintf(p->name, sizeof p->name, "%s", v);
     return true;
 }

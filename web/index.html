@@ -298,6 +298,7 @@ body.offline #usb-help{display:flex}
       </div>
       <div class="panel" data-panel="buttons">
         <div class="pad" id="map"></div>
+        <label class="check" id="pf-sinput-xbox-labels-row"><input type="checkbox" id="pf-sinput-xbox-labels"><span>Xbox button labels in Steam</span></label>
         <div class="panel-foot">
           <button id="preset-reset" onclick="presetIdentity()">Reset to labels</button>
           <button id="preset-swap" onclick="presetSwapFace()">Swap A/B and X/Y</button>
@@ -946,6 +947,7 @@ function stashProfile(){
   P.impulse_flags=($('pf-impulse-enabled').checked?0:1)|($('pf-impulse-dynamic').checked?0:2);
   P.impulse_strength=+$('pf-impulse-strength').value;P.impulse_frequency=+$('pf-impulse-frequency').value;
   P.threshold=+$('pf-threshold').value;P.rumble=$('pf-rumble').checked?1:0;P.strength=+$('pf-strength').value;
+  if(S.profile_sinput_labels)P.sinput_xbox_labels=$('pf-sinput-xbox-labels').checked?1:0;
   if(isJC()){
     P.mouse=$('pf-mouse').checked?1:0;P.mouse_speed=+$('pf-mouse-speed').value;P.mouse_flags=($('pf-mouse-hscroll').checked?0:1)|($('pf-mouse-inv-v').checked?2:0)|($('pf-mouse-inv-h').checked?4:0);
     if(S.profile_gyro_mouse){
@@ -1066,6 +1068,8 @@ function renderProfile(){
   // Mouse: Joy-Con 2 types only (a single one can only be its own mouse).
   document.querySelector('[data-sub="mouse"]').hidden=!isJC();
   if(!isJC()&&SUB==='mouse')showSub('buttons');
+  $('pf-sinput-xbox-labels-row').hidden=!P||!S.profile_sinput_labels||P.mode!==5;
+  $('pf-sinput-xbox-labels').checked=!!(P&&P.sinput_xbox_labels);
   if(!P)return;
   const set=(id,v)=>{$(id).value=v;const l=$('v-'+id);if(l)l.textContent=v;$(id).oninput=()=>{if(l)l.textContent=$(id).value}};
   set('pf-rumble-style',P.rumble_style||0);set('pf-rumble-frequency',P.rumble_frequency||5);
@@ -1135,6 +1139,7 @@ function cleanImportedProfile(p,t,settings){
     rumble_style:n('rumble_style',0,3,0),rumble_frequency:n('rumble_frequency',0,10,5),
     impulse_flags:n('impulse_flags',0,3,0),impulse_strength:n('impulse_strength',0,200,100),impulse_frequency:n('impulse_frequency',1,10,10),
     mouse,mouse_speed:n('mouse_speed',t>=2?10:0,250,t>=2?100:0),mouse_flags:n('mouse_flags',0,7,0),
+    sinput_xbox_labels:n('sinput_xbox_labels',0,1,0),
     ...(jc?{gyro_mouse:gmouse,gyro_mouse_speed:n('gyro_mouse_speed',10,250,100),gyro_mouse_flags:n('gyro_mouse_flags',0,7,0),
       gyro_mouse_toggle:combo('gyro_mouse_toggle'),gyro_mouse_recenter:combo('gyro_mouse_recenter')}:{})};
 }
@@ -1333,7 +1338,8 @@ async function save(){
   S.types.forEach((T,t)=>{
     T.profiles.forEach((P,i)=>prof.push(`prof_${t}_${i}=`+(P?[P.mode,P.deadzone,P.outer,P.swap,P.threshold,P.rumble,P.strength,...P.map].join(',')+
       (S.profile_mouse?`,m${P.mouse?1:0},${P.mouse_speed||100},${(P.mouse_flags|0)&7}`:'')+`,r${P.rumble_style||0},${P.rumble_frequency||5},${P.impulse_flags||0},${P.impulse_strength??100},${P.impulse_frequency||10},`+(S.profile_controls?`d${P.deadzone_right??P.deadzone},${P.gyro_side||0},`:'')+
-      (S.profile_gyro_mouse&&t>=2?`g${P.gyro_mouse?1:0},${P.gyro_mouse_speed||100},${(P.gyro_mouse_flags|0)&7},${(P.gyro_mouse_toggle??gyroMouseToggleDefault(t))>>>0},${(P.gyro_mouse_recenter|0)>>>0},`:'')+encodeURIComponent(P.name):'')));
+      (S.profile_gyro_mouse&&t>=2?`g${P.gyro_mouse?1:0},${P.gyro_mouse_speed||100},${(P.gyro_mouse_flags|0)&7},${(P.gyro_mouse_toggle??gyroMouseToggleDefault(t))>>>0},${(P.gyro_mouse_recenter|0)>>>0},`:'')+
+      (S.profile_sinput_labels?`x${P.sinput_xbox_labels?1:0},`:'')+encodeURIComponent(P.name):'')));
     p.append(`active_${t}`,T.active);
   });
   document.querySelectorAll('[data-k]').forEach(el=>p.append(el.dataset.k,el.type==='checkbox'?(el.checked?1:0):el.value));
