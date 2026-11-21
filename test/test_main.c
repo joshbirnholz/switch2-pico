@@ -1303,7 +1303,7 @@ static void test_sinput(void) {
     CHECK(r[0] == 0x02 && r[1] == 0x02 && d[0] == 1 && d[2] == 0xFF &&
           d[4] == 7 && (d[5] >> 5) == 3);  // Switch type and Nintendo face style by default.
     sinput_build_features(mac, masks, true, r);
-    CHECK(d[4] == 2 && (d[5] >> 5) == 1);  // Xbox 360 type and ABXY face style for Steam.
+    CHECK(d[4] == 3 && (d[5] >> 5) == 1);  // Xbox One type and ABXY face style for Steam.
     sinput_build_features(mac, masks, false, r);
     CHECK(le16s(d + 8) == SINPUT_ACCEL_RANGE_G && le16s(d + 10) == SINPUT_GYRO_RANGE_DPS);
     // Pro defaults: both paddle pairs (GL / GR need L4 / R4 with them), Back /
