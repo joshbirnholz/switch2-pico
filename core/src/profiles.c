@@ -162,6 +162,13 @@ void settings_profiles_from_v17(const uint8_t *raw, int n, ctrl_profiles_t *out)
     profiles_from_prefix(raw, n, 61, out);
 }
 
+// Stored v18 profiles: all fields except the appended SInput button-label option.
+_Static_assert(offsetof(profile_t, sinput_xbox_labels) == 70, "v18 profile prefix");
+_Static_assert(CTRL_PROFILES_V18_SIZE == 70 * PROFILE_MAX + 12, "v18 profiles");
+void settings_profiles_from_v18(const uint8_t *raw, int n, ctrl_profiles_t *out) {
+    profiles_from_prefix(raw, n, 70, out);
+}
+
 // Numbered profiles (single Joy-Con 2): the first one in use takes over,
 // and settings_profiles_numbered() packs them from the start.
 void settings_profiles_numbered(ctrl_profiles_t *c) {
@@ -245,6 +252,7 @@ void settings_sanitize_profiles(ctrl_type_t type, ctrl_profiles_t *c) {
         p->swap_sticks = p->swap_sticks ? 1 : 0;
         p->rumble_enabled = p->rumble_enabled ? 1 : 0;
         p->rumble_strength_pct = clamp(p->rumble_strength_pct, 0, 200);
+        p->sinput_xbox_labels = p->sinput_xbox_labels ? 1 : 0;
         if (p->rumble_style > 3) p->rumble_style = 0;
         p->rumble_frequency = clamp(p->rumble_frequency, 0, 10);
         p->impulse_flags &= 3;

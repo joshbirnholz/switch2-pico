@@ -58,7 +58,7 @@ void sinput_build_input(const sinput_state_t *st, uint32_t timestamp_us, uint8_t
 // it will never see. The rest are always there (see sinput.c).
 void sinput_usage_masks(const uint8_t map[IN_COUNT], uint32_t inputs, uint8_t out[4]);
 // The reply to the features command (input report 0x02).
-void sinput_build_features(const uint8_t mac[6], const uint8_t masks[4], uint8_t out[SINPUT_REPORT_LEN]);
+void sinput_build_features(const uint8_t mac[6], const uint8_t masks[4], bool xbox_labels, uint8_t out[SINPUT_REPORT_LEN]);
 
 typedef struct {
     bool features;          // the host asked for the features reply

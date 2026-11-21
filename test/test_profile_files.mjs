@@ -9,12 +9,14 @@ vm.runInContext(logic+';globalThis.files={validateProfileFile,makeProfileFile};'
 const {validateProfileFile,makeProfileFile}=ctx.files;
 export function fixture(){
   const p={name:'Test profile',mode:3,deadzone:7,deadzone_right:19,gyro_side:0,outer:95,swap:0,threshold:120,rumble:1,strength:100,
-    rumble_style:1,rumble_frequency:5,impulse_flags:0,impulse_strength:100,impulse_frequency:10,mouse:0,mouse_speed:100,mouse_flags:0,map:Array(23).fill(0)};
+    rumble_style:1,rumble_frequency:5,impulse_flags:0,impulse_strength:100,impulse_frequency:10,mouse:0,mouse_speed:100,mouse_flags:0,
+    sinput_xbox_labels:0,map:Array(23).fill(0)};
   const settings={profile_max:8,modes:Array.from({length:6},(_,i)=>({family:i===0?'switch':'gp',outputs:['None','A','B',null]})),
     types:Array.from({length:5},(_,i)=>({name:['Pro','GameCube','Joy-Con pair','Joy-Con left','Joy-Con right'][i],numbered:i>=3,active:0,
       defaults:Array.from({length:6},()=>Array(23).fill(0)),profiles:[structuredClone(p),...Array(7).fill(null)]})),
     joycon_single:1,profile_mouse:true,profile_controls:true,last_ctrl:0,ctrl_type:0};
   settings.types[2].profiles[0].gyro_side=1;
+  settings.types[0].profiles[0].sinput_xbox_labels=1;
   return settings;
 }
 const s=fixture(),clone=x=>JSON.parse(JSON.stringify(x));
@@ -22,6 +24,7 @@ const library=makeProfileFile(s,true,0,0);
 const restored=validateProfileFile(clone(library),s);
 assert.equal(restored.controllers[2].profiles[0].gyro_side,1);
 assert.equal(restored.controllers[0].profiles[0].deadzone_right,19);
+assert.equal(restored.controllers[0].profiles[0].sinput_xbox_labels,1);
 const single=makeProfileFile(s,false,2,0);
 assert.equal(validateProfileFile(clone(single),s).type,2);
 assert(!JSON.stringify(library).includes('wifi_pass'));
@@ -45,6 +48,10 @@ assert(validateProfileFile(holes,s).controllers[4].profiles[7]);
 const old=clone(single);delete old.profile.deadzone_right;delete old.profile.gyro_side;
 assert.equal(validateProfileFile(old,s).profile.deadzone_right,7);
 const zero=clone(single);zero.profile.deadzone_right=0;assert.equal(validateProfileFile(zero,s).profile.deadzone_right,0);
+const labels=clone(single);labels.profile.sinput_xbox_labels=1;
+assert.equal(validateProfileFile(labels,s).profile.sinput_xbox_labels,1);
+const oldLabels=clone(single);delete oldLabels.profile.sinput_xbox_labels;
+assert.equal(validateProfileFile(oldLabels,s).profile.sinput_xbox_labels,0);
 // Gyro mouse: kept on Joy-Con types, defaults for files without it, not
 // allowed elsewhere.
 const gy=fixture();Object.assign(gy.types[4].profiles[0],{gyro_mouse:1,gyro_mouse_speed:150,gyro_mouse_flags:5,gyro_mouse_toggle:1<<9,gyro_mouse_recenter:1<<7});

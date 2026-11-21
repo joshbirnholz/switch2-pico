@@ -93,7 +93,7 @@ typedef enum {
     MODE_SLOT_COUNT
 } mode_slot_t;
 #define MODE_SLOT_EMPTY 0
-#define SETTINGS_EXT_REV 18  // 1: mode_map; 2: mode_slot; 3: ble_tx_power; 4: idle_*; 5: pair_button;
+#define SETTINGS_EXT_REV 19  // 1: mode_map; 2: mode_slot; 3: ble_tx_power; 4: idle_*; 5: pair_button;
                              // 6: gc_profile; 7: gc_profile sticks / rumble; 8: bonds;
                              // 9: gc_usb_mode, last_ctrl; 10: profiles; 11: one profile per button;
                              // 12: Joy-Con 2 types; 13: single Joy-Con 2 profiles numbered;
@@ -101,6 +101,7 @@ typedef enum {
                              // 16: per-profile rumble style and impulse settings (formerly reserved)
                              // 17: independent right deadzone and Joy-Con gyro side (larger profiles)
                              // 18: Joy-Con 2 gyro mouse (larger profiles)
+                             // 19: SInput Xbox button labels
 
 // Remembered (paired) controllers. Any of them can connect, one at a time
 // (or a Joy-Con 2 (L) together with a Joy-Con 2 (R)); pairing one more when
@@ -208,6 +209,7 @@ typedef struct {
     uint8_t gyro_mouse_flags;           // GYRO_MOUSE_FLAG_*
     uint8_t gyro_mouse_toggle[BUTTON_COMBO_LEN];    // combination: on / off (none: always on)
     uint8_t gyro_mouse_recenter[BUTTON_COMBO_LEN];  // combination: hold the pointer still while held
+    uint8_t sinput_xbox_labels;          // SInput: report Xbox face-button labels to Steam
 } profile_t;
 
 typedef struct {
@@ -372,6 +374,9 @@ void settings_profiles_from_v16(const uint8_t *raw, int n, ctrl_profiles_t *out)
 // ext_rev 17: profiles before the gyro mouse.
 #define CTRL_PROFILES_V17_SIZE 500
 void settings_profiles_from_v17(const uint8_t *raw, int n, ctrl_profiles_t *out);
+// ext_rev 18: profiles before SInput button labels.
+#define CTRL_PROFILES_V18_SIZE 572
+void settings_profiles_from_v18(const uint8_t *raw, int n, ctrl_profiles_t *out);
 // The gyro mouse's starting options for controller type `type` (off).
 void settings_default_gyro_mouse(ctrl_type_t type, profile_t *p);
 #define CTRL_PROFILES_V13_SIZE 468   // sizeof the stored ctrl_profiles_t then

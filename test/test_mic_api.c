@@ -24,7 +24,7 @@ static void profile_compatibility(void) {
     char *suffix=form+pos;
     profile_t *old=&g_settings.prof[0].p[0], parsed;
     old->stick_deadzone_right_pct=17;old->joycon_gyro_side=1;
-    old->used=1;old->rumble_style=1;old->impulse_strength=130;old->impulse_frequency=7;
+    old->used=1;old->rumble_style=1;old->impulse_strength=130;old->impulse_frequency=7;old->sinput_xbox_labels=1;
     s_parse_type=0;s_parse_index=0;
     strcpy(suffix,"m0,100,0,Old client");
     assert(parse_profile(form,&parsed));
@@ -37,6 +37,7 @@ static void profile_compatibility(void) {
     strcpy(suffix,"m0,100,0,r3,5,2,80,9,d0,0,New options");
     assert(parse_profile(form,&parsed));
     assert(parsed.stick_deadzone_right_pct==0 && parsed.joycon_gyro_side==0 && !strcmp(parsed.name,"New options"));
+    assert(parsed.sinput_xbox_labels==1);  // old clients retain the saved value
     strcpy(suffix,"m0,100,0,racing");
     assert(parse_profile(form,&parsed) && !strcmp(parsed.name,"racing") && parsed.rumble_style==1);
     // Gyro mouse group: kept from the stored profile when left out.
@@ -52,6 +53,13 @@ static void profile_compatibility(void) {
     assert(parsed.gyro_mouse==1 && parsed.gyro_mouse_speed_pct==80 && parsed.gyro_mouse_flags==5);
     assert(settings_combo_get(parsed.gyro_mouse_toggle)==(1u<<IN_SR_R));
     assert(settings_combo_get(parsed.gyro_mouse_recenter)==((1u<<IN_ZL)|(1u<<IN_LSTICK)));
+    strcpy(suffix,"m0,100,0,r3,5,2,80,9,d0,0,g1,80,5,0,0,x0,Switch labels");
+    assert(parse_profile(form,&parsed) && !parsed.sinput_xbox_labels && !strcmp(parsed.name,"Switch labels"));
+    strcpy(suffix,"m0,100,0,r3,5,2,80,9,d0,0,g1,80,5,0,0,x1,Xbox labels");
+    assert(parse_profile(form,&parsed) && parsed.sinput_xbox_labels && !strcmp(parsed.name,"Xbox labels"));
+    old->used=1;old->sinput_xbox_labels=1;
+    strcpy(suffix,"m0,100,0,r3,5,2,80,9,d0,0,Legacy edit");
+    assert(parse_profile(form,old) && old->sinput_xbox_labels && !strcmp(old->name,"Legacy edit"));
     // A name that only looks like the group stays a name.
     strcpy(suffix,"m0,100,0,r3,5,2,80,9,d0,0,gyro fun");
     assert(parse_profile(form,&parsed) && !strcmp(parsed.name,"gyro fun") && parsed.gyro_mouse==1);
@@ -59,6 +67,7 @@ static void profile_compatibility(void) {
     old->used=0;s_parse_type=CTRL_JOYCON_PAIR;
     strcpy(suffix,"m0,100,0,r3,5,2,80,9,d0,0,Fresh");
     assert(parse_profile(form,&parsed) && !parsed.gyro_mouse && parsed.gyro_mouse_speed_pct==100);
+    assert(!parsed.sinput_xbox_labels);
     assert(settings_combo_get(parsed.gyro_mouse_toggle)==((1u<<IN_C)|(1u<<IN_CAPTURE)));
     s_parse_type=0;
 }

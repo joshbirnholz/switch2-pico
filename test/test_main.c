@@ -1298,9 +1298,12 @@ static void test_sinput(void) {
     uint8_t pm[IN_COUNT];
     settings_default_mode_map(CTRL_PRO, USB_MODE_SINPUT, pm);
     sinput_usage_masks(pm, mapping_type_inputs(CTRL_PRO), masks);
-    sinput_build_features(mac, masks, r);
+    sinput_build_features(mac, masks, false, r);
     const uint8_t *d = r + 2;
     CHECK(r[0] == 0x02 && r[1] == 0x02 && d[0] == 1 && d[2] == 0xFF && d[4] == 7 && (d[5] >> 5) == 3);
+    sinput_build_features(mac, masks, true, r);
+    CHECK((r[7] >> 5) == 1);  // Xbox face labels; the Switch Pro device type remains unchanged.
+    sinput_build_features(mac, masks, false, r);
     CHECK(le16s(d + 8) == SINPUT_ACCEL_RANGE_G && le16s(d + 10) == SINPUT_GYRO_RANGE_DPS);
     // Pro defaults: both paddle pairs (GL / GR need L4 / R4 with them), Back /
     // Guide / Capture, C; no digital triggers.

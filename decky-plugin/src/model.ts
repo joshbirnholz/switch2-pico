@@ -36,6 +36,8 @@ export interface Profile {
   impulse_flags?: number;
   impulse_strength?: number;
   impulse_frequency?: number;
+  // SInput face-button presentation.
+  sinput_xbox_labels?: number;
   mouse: number;
   mouse_speed: number;
   mouse_flags: number;
@@ -69,6 +71,7 @@ export interface Settings {
   headset_audio_on?: number;
   mic_test?: boolean;
   audio_mode?: number;
+  profile_sinput_labels?: boolean;
 }
 
 // Controller types (ctrl_type_t).
@@ -202,7 +205,8 @@ export function profileForm(t: number, i: number, P: Profile): string {
   // Only to firmware that has the gyro mouse (it sends these fields).
   const gyro = P.gyro_mouse === undefined || !isJoyCon(t) ? ""
     : `g${P.gyro_mouse ? 1 : 0},${P.gyro_mouse_speed || 100},${(P.gyro_mouse_flags || 0) & 7},${(P.gyro_mouse_toggle ?? gyroToggleDefault(t)) >>> 0},${(P.gyro_mouse_recenter || 0) >>> 0},`;
-  return `prof_${t}_${i}=${nums},${mouse},r${P.rumble_style || 0},${P.rumble_frequency || 5},${P.impulse_flags || 0},${P.impulse_strength ?? 100},${P.impulse_frequency || 10},${options}${gyro}${encodeURIComponent(P.name)}`;
+  const sinput = P.sinput_xbox_labels === undefined ? "" : `x${P.sinput_xbox_labels ? 1 : 0},`;
+  return `prof_${t}_${i}=${nums},${mouse},r${P.rumble_style || 0},${P.rumble_frequency || 5},${P.impulse_flags || 0},${P.impulse_strength ?? 100},${P.impulse_frequency || 10},${options}${gyro}${sinput}${encodeURIComponent(P.name)}`;
 }
 
 // An output's name split into a title and, for shortcuts and the like

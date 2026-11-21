@@ -102,6 +102,20 @@ assert(await page.evaluate(()=>document.documentElement.scrollWidth<=window.inne
 await page.evaluate(()=>{S.profile_controls=false;renderProfile();return save()});
 assert(!await page.evaluate(()=>savedBody.includes(',d')));
 assert(await page.locator('#pf-deadzone-right').isDisabled());
+// SInput's Steam face-button style is editable only when firmware supports it,
+// and is included in the persisted profile form.
+await page.evaluate(()=>{
+  const p=S.types[0].profiles[0];p.mode=5;p.sinput_xbox_labels=0;
+  S.boot_mode=5;S.profile_sinput_labels=false;MAP_CTRL=0;CUR[0]=0;showSub('buttons');renderProfile();
+});
+assert(await page.locator('#pf-sinput-xbox-labels-row').isHidden());
+await page.evaluate(()=>{S.profile_sinput_labels=true;renderProfile();});
+assert(await page.locator('#pf-sinput-xbox-labels-row').isVisible());
+assert(await page.locator('#pf-sinput-xbox-labels').isEnabled());
+assert(!(await page.locator('#pf-sinput-xbox-labels').isChecked()));
+await page.locator('#pf-sinput-xbox-labels').check();
+await page.evaluate(()=>save());
+assert(/x1,Imported/.test(await page.evaluate(()=>savedBody)));
 // The complete 40-profile library, including percent-encoded names, fits the
 // transport limit. This catches accidental regressions to the old 8 KiB cap.
 await page.evaluate(()=>{

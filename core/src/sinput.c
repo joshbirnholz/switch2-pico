@@ -144,9 +144,10 @@ void sinput_build_input(const sinput_state_t *st, uint32_t timestamp_us, uint8_t
 // ---------------------------------------------------------------------------
 #define SINPUT_GAMEPAD_TYPE_SWITCH_PRO 7   // SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_PRO
 #define SINPUT_FACE_STYLE_BAYX         3   // Nintendo labels: B bottom, A right, Y left, X top
+#define SINPUT_FACE_STYLE_XBOX         1   // Xbox labels: A bottom, B right, X left, Y top
 #define SINPUT_SUB_PRODUCT             0
 
-void sinput_build_features(const uint8_t mac[6], const uint8_t masks[4], uint8_t r[SINPUT_REPORT_LEN]) {
+void sinput_build_features(const uint8_t mac[6], const uint8_t masks[4], bool xbox_labels, uint8_t r[SINPUT_REPORT_LEN]) {
     memset(r, 0, SINPUT_REPORT_LEN);
     r[0] = 0x02;
     r[1] = 0x02;                 // the features command
@@ -157,7 +158,8 @@ void sinput_build_features(const uint8_t mac[6], const uint8_t masks[4], uint8_t
     d[2] = 0x01 | 0x02 | 0x04 | 0x08 | 0x10 | 0x20 | 0x40 | 0x80;
     d[3] = 0;                    // no touchpad, no RGB, not a handheld
     d[4] = SINPUT_GAMEPAD_TYPE_SWITCH_PRO;
-    d[5] = (uint8_t)((SINPUT_FACE_STYLE_BAYX << 5) | SINPUT_SUB_PRODUCT);
+    uint8_t face_style = xbox_labels ? SINPUT_FACE_STYLE_XBOX : SINPUT_FACE_STYLE_BAYX;
+    d[5] = (uint8_t)((face_style << 5) | SINPUT_SUB_PRODUCT);
     uint8_t interval = g_settings.usb_report_interval_ms ? g_settings.usb_report_interval_ms : 4;
     put16(d + 6, interval * 1000);   // polling interval, µs
     put16(d + 8, SINPUT_ACCEL_RANGE_G);
@@ -229,6 +231,7 @@ static uint8_t s_mac[6];
 static bool s_features_due;
 static bool s_features_sent;      // the host has the button list in s_sent_masks
 static uint8_t s_sent_masks[4];
+static bool s_sent_xbox_labels;
 static uint8_t s_motor_l, s_motor_r;
 static uint32_t s_rumble_refresh;
 
@@ -314,6 +317,7 @@ void sinput_task(void) {
         s_motor_l = s_motor_r = 0;
         s_features_due = false;
         s_features_sent = false;
+        s_sent_xbox_labels = false;
         s_status.handshake_done = false;
         LOG("sinput: USB %s", mounted ? "mounted" : "unmounted");
     }
@@ -326,21 +330,24 @@ void sinput_task(void) {
     // the one the dongle starts with).
     ctrl_type_t t = s2_link_state() == S2_LINK_READY ? mapping_ctrl_type(s2_link_mapping_ctx())
                                                      : settings_boot_ctrl(&g_settings);
+    const profile_t *profile = settings_active(&g_settings, t);
+    bool xbox_labels = profile && profile->usb_mode == USB_MODE_SINPUT && profile->sinput_xbox_labels;
     uint8_t masks[4];
     sinput_usage_masks(settings_active_map(&g_settings, t), mapping_type_inputs(t), masks);
-    // SDL reads the button list only when the device appears: when the list
-    // itself changes (not just any mapping; see sinput_usage_masks()),
+    // SDL reads the button list and face style only when the device appears:
+    // when either changes (not just any mapping; see sinput_usage_masks()),
     // appear anew.
     // (After a moment: the page's or plugin's request that changed it gets
     // its answer first.)
     static bool changed;
     static uint32_t changed_at;
-    if (mounted && s_features_sent && memcmp(masks, s_sent_masks, sizeof masks) != 0) {
+    if (mounted && s_features_sent &&
+        (memcmp(masks, s_sent_masks, sizeof masks) != 0 || xbox_labels != s_sent_xbox_labels)) {
         if (!changed) {
             changed = true;
             changed_at = platform_deadline_ms(500);
         } else if (platform_time_reached(changed_at)) {
-            LOG("sinput: buttons changed, reconnecting USB");
+            LOG("sinput: features changed, reconnecting USB");
             changed = false;
             s_features_sent = false;
             app_request_usb_reconnect();
@@ -354,11 +361,12 @@ void sinput_task(void) {
     // The features reply goes first: SDL waits for it (100 ms) before it
     // reads any input.
     if (s_features_due) {
-        sinput_build_features(s_mac, masks, r);
+        sinput_build_features(s_mac, masks, xbox_labels, r);
         if (usb_hid_send(r[0], r + 1, SINPUT_REPORT_LEN - 1)) {
             s_features_due = false;
             s_features_sent = true;
             memcpy(s_sent_masks, masks, sizeof masks);
+            s_sent_xbox_labels = xbox_labels;
         }
         return;
     }

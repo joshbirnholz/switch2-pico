@@ -8,7 +8,7 @@ import { GyroMouseOptions } from "./gyro";
 import { OutputIcon, SlotIcon } from "./icons";
 import { AllButtonsModal, confirm, PickerModal, SOFT_CSS, SoftButton } from "./modals";
 import {
-  allButtons, CTRL_GC, Extra, isJoyCon, MODE_NAMES, MODE_SHORT, mouseMode, outputText, Profile, profileForm, Settings,
+  allButtons, CTRL_GC, Extra, isJoyCon, MODE_NAMES, MODE_SHORT, MODE_SINPUT, mouseMode, outputText, Profile, profileForm, Settings,
   slotLabel,
 } from "./model";
 
@@ -315,6 +315,11 @@ export function ProfileEditModal(props: { S: Settings; t: number; i: number; sav
             onChange={(v) => slide({ ...P, strength: v })} />
         )}
         {!!P.rumble && <RumbleOptions p={P} save={commit} />}
+        {P.mode === MODE_SINPUT && S.profile_sinput_labels && (
+          <ToggleField label="Xbox button labels in Steam" description="Steam will show A/B/X/Y instead of Nintendo button labels."
+            checked={!!P.sinput_xbox_labels}
+            onChange={(v) => commit({ ...P, sinput_xbox_labels: v ? 1 : 0 })} />
+        )}
         {isJoyCon(t) && mouseMode(P.mode) && (
           <>
             <ToggleField label="Mouse Mode" description="Lay a Joy-Con on its side to use it as a mouse."

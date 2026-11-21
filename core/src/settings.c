@@ -311,6 +311,20 @@ void settings_init(void) {
             g_settings.headset_low_latency = tail + 2 < end ? raw[tail + 2] : 0;
             g_settings.headset_audio_off = tail + 3 < end ? raw[tail + 3] : 0;
         }
+        if (rev == 18) {
+            const size_t at = offsetof(settings_t, prof);
+            size_t room = stored->size - 4u > at ? stored->size - 4u - at : 0;
+            int n = (int)(room / CTRL_PROFILES_V18_SIZE);
+            if (n > CTRL_TYPE_COUNT) n = CTRL_TYPE_COUNT;
+            for (int t = n; t < CTRL_TYPE_COUNT; t++) settings_default_profiles((ctrl_type_t)t, &g_settings.prof[t]);
+            settings_profiles_from_v18(raw + at, n, g_settings.prof);
+            size_t tail = at + (size_t)n * CTRL_PROFILES_V18_SIZE;
+            size_t end = stored->size - 4u;
+            g_settings.joycon_single = tail < end ? raw[tail] : 0;
+            g_settings.decky_options = tail + 1 < end ? raw[tail + 1] : 0;
+            g_settings.headset_low_latency = tail + 2 < end ? raw[tail + 2] : 0;
+            g_settings.headset_audio_off = tail + 3 < end ? raw[tail + 3] : 0;
+        }
         if (rev < 10) {
             // Profiles: one per mode from that mode's map (after the steps
             // above, which bring the per-mode fields up to date).
@@ -350,6 +364,10 @@ void settings_init(void) {
             // The gyro mouse: off, with its starting options.
             for (int t = 0; t < CTRL_TYPE_COUNT; t++)
                 for (int i = 0; i < PROFILE_MAX; i++) settings_default_gyro_mouse((ctrl_type_t)t, &g_settings.prof[t].p[i]);
+        }
+        if (rev < 19) {
+            for (int t = 0; t < CTRL_TYPE_COUNT; t++)
+                for (int i = 0; i < PROFILE_MAX; i++) g_settings.prof[t].p[i].sinput_xbox_labels = 0;
         }
         g_settings.ext_rev = SETTINGS_EXT_REV;
         settings_sanitize(&g_settings);
