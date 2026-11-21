@@ -142,7 +142,8 @@ void sinput_build_input(const sinput_state_t *st, uint32_t timestamp_us, uint8_t
 // ---------------------------------------------------------------------------
 // Features reply
 // ---------------------------------------------------------------------------
-#define SINPUT_GAMEPAD_TYPE_SWITCH_PRO 7   // SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_PRO
+#define SINPUT_GAMEPAD_TYPE_XBOX360     2   // SDL_GAMEPAD_TYPE_XBOX360
+#define SINPUT_GAMEPAD_TYPE_SWITCH_PRO  7   // SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_PRO
 #define SINPUT_FACE_STYLE_BAYX         3   // Nintendo labels: B bottom, A right, Y left, X top
 #define SINPUT_FACE_STYLE_XBOX         1   // Xbox labels: A bottom, B right, X left, Y top
 #define SINPUT_SUB_PRODUCT             0
@@ -157,7 +158,7 @@ void sinput_build_features(const uint8_t mac[6], const uint8_t masks[4], bool xb
     // Rumble, player LEDs, accelerometer, gyro, both sticks, both analog triggers.
     d[2] = 0x01 | 0x02 | 0x04 | 0x08 | 0x10 | 0x20 | 0x40 | 0x80;
     d[3] = 0;                    // no touchpad, no RGB, not a handheld
-    d[4] = SINPUT_GAMEPAD_TYPE_SWITCH_PRO;
+    d[4] = xbox_labels ? SINPUT_GAMEPAD_TYPE_XBOX360 : SINPUT_GAMEPAD_TYPE_SWITCH_PRO;
     uint8_t face_style = xbox_labels ? SINPUT_FACE_STYLE_XBOX : SINPUT_FACE_STYLE_BAYX;
     d[5] = (uint8_t)((face_style << 5) | SINPUT_SUB_PRODUCT);
     uint8_t interval = g_settings.usb_report_interval_ms ? g_settings.usb_report_interval_ms : 4;
