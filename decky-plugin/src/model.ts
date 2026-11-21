@@ -217,3 +217,10 @@ export function outputText(name: string): { title: string; desc: string } {
   if (m) return { title: m[1], desc: m[2].charAt(0).toUpperCase() + m[2].slice(1) };
   return { title: name, desc: "" };
 }
+
+export function outputLabel(name: string, mode: number, index: number, xboxSinputLabels: boolean): string {
+  if (mode === MODE_SINPUT && xboxSinputLabels && index >= 1 && index <= 4) {
+    return ["A", "B", "X", "Y"][index - 1];
+  }
+  return name;
+}
